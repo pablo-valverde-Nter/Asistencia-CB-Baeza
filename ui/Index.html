@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>CB Baeza — Asistencia</title>
+  <?!= include('ui/styles') ?>
+</head>
+<body>
+
+  <!-- ── Loading overlay ─────────────────────────────────────────────────── -->
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <p id="loading-msg">Cargando…</p>
+  </div>
+
+  <!-- ── Toast ───────────────────────────────────────────────────────────── -->
+  <div id="toast-container"></div>
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header id="app-header">
+    <button id="btn-back" onclick="App.goBack()" title="Volver">&#8592;</button>
+    <h1 id="header-title">CB Baeza</h1>
+    <span id="user-badge">…</span>
+  </header>
+
+  <!-- ── Vistas ──────────────────────────────────────────────────────────── -->
+  <main>
+
+    <!-- DASHBOARD -->
+    <section id="view-dashboard" class="view">
+      <p class="page-title">🏀 Mis equipos</p>
+      <div id="dashboard-equipos"></div>
+    </section>
+
+    <!-- SESIÓN (formulario de asistencia) -->
+    <section id="view-sesion" class="view">
+      <div class="sesion-header" id="sesion-header-info"></div>
+      <button class="btn-guardar-asistencia" onclick="App.views.sesion.guardar()">
+        💾 Guardar asistencia
+      </button>
+
+      <p class="section-label">Jugadores</p>
+      <div id="sesion-jugadores-lista"></div>
+
+      <button class="btn btn-secondary btn-full mt-8" onclick="App.views.sesion.abrirBuscadorJugador()">
+        + Añadir jugador invitado
+      </button>
+
+      <p class="section-label mt-16">Entrenadores</p>
+      <div id="sesion-entrenadores-lista"></div>
+
+      <button class="btn btn-secondary btn-full mt-8" onclick="App.views.sesion.abrirBuscadorEntrenador()">
+        + Añadir entrenador invitado
+      </button>
+
+      <div style="height:16px"></div>
+    </section>
+
+    <!-- EQUIPO (detalle) -->
+    <section id="view-equipo" class="view">
+      <div id="equipo-header-info" class="card" style="background:var(--azul);color:#fff;margin-bottom:12px;"></div>
+
+      <p class="section-label">Próximas sesiones</p>
+      <div id="equipo-sesiones"></div>
+      <div class="flex gap-8 mt-8">
+        <button class="btn btn-primary" style="flex:1" onclick="App.views.equipo.generarSemana()">
+          🗓 Generar semana
+        </button>
+        <button class="btn btn-secondary" style="flex:1" onclick="App.views.equipo.abrirModalSesionExtra()">
+          + Sesión extra
+        </button>
+      </div>
+
+      <p class="section-label mt-16">Jugadores <span id="equipo-jugadores-count" class="text-muted"></span></p>
+      <div id="equipo-jugadores-lista"></div>
+
+      <p class="section-label mt-16">Entrenadores</p>
+      <div id="equipo-entrenadores-lista"></div>
+
+      <div style="height:16px"></div>
+    </section>
+
+    <!-- JUGADORES (admin) -->
+    <section id="view-jugadores" class="view">
+      <p class="page-title">👤 Jugadores del club</p>
+      <input type="search" id="jugadores-search" placeholder="Buscar jugador…"
+             oninput="App.views.jugadores.filtrar(this.value)"
+             style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;margin-bottom:12px;font-size:.95rem">
+      <div id="jugadores-lista"></div>
+    </section>
+
+    <!-- ENTRENADORES (admin) -->
+    <section id="view-entrenadores" class="view">
+      <p class="page-title">🎽 Entrenadores del club</p>
+      <div id="entrenadores-lista"></div>
+    </section>
+
+    <!-- EQUIPOS (admin) -->
+    <section id="view-equipos" class="view">
+      <p class="page-title">🏆 Equipos</p>
+      <div id="equipos-lista"></div>
+    </section>
+
+    <!-- HISTÓRICO -->
+    <section id="view-historico" class="view">
+      <p class="page-title">📋 Histórico de sesiones</p>
+      <div class="card" style="margin-bottom:12px">
+        <div class="form-group" style="margin-bottom:8px">
+          <label>Equipo</label>
+          <select id="historico-equipo-select" onchange="App.views.historico.cargar()">
+            <option value="">— Selecciona un equipo —</option>
+          </select>
+        </div>
+        <div class="flex gap-8">
+          <div class="form-group" style="flex:1;margin-bottom:0">
+            <label>Desde</label>
+            <input type="date" id="historico-desde" onchange="App.views.historico.cargar()">
+          </div>
+          <div class="form-group" style="flex:1;margin-bottom:0">
+            <label>Hasta</label>
+            <input type="date" id="historico-hasta" onchange="App.views.historico.cargar()">
+          </div>
+        </div>
+      </div>
+      <div id="historico-lista"></div>
+    </section>
+
+    <!-- INFORMES -->
+    <section id="view-informes" class="view">
+      <p class="page-title">📊 Informes de asistencia</p>
+      <div class="card" style="margin-bottom:12px">
+        <div class="form-group" style="margin-bottom:8px">
+          <label>Equipo</label>
+          <select id="informes-equipo-select" onchange="App.views.informes.cargar()">
+            <option value="">— Selecciona un equipo —</option>
+          </select>
+        </div>
+      </div>
+      <div id="informes-contenido"></div>
+    </section>
+
+  </main>
+
+  <!-- ── Navegación inferior ──────────────────────────────────────────────── -->
+  <nav id="bottom-nav">
+    <button class="nav-item active" data-view="dashboard" onclick="App.navigate('dashboard')">
+      <span class="nav-icon">🏠</span>
+      <span>Inicio</span>
+    </button>
+    <button class="nav-item" data-view="historico" onclick="App.navigate('historico')">
+      <span class="nav-icon">📋</span>
+      <span>Histórico</span>
+    </button>
+    <button class="nav-item" data-view="informes" onclick="App.navigate('informes')">
+      <span class="nav-icon">📊</span>
+      <span>Informes</span>
+    </button>
+    <button class="nav-item admin-only hidden" data-view="jugadores" onclick="App.navigate('jugadores')">
+      <span class="nav-icon">👤</span>
+      <span>Jugadores</span>
+    </button>
+    <button class="nav-item admin-only hidden" data-view="equipos" onclick="App.navigate('equipos')">
+      <span class="nav-icon">⚙️</span>
+      <span>Gestión</span>
+    </button>
+  </nav>
+
+  <!-- ── FAB (botón flotante contextual) ─────────────────────────────────── -->
+  <button id="fab-btn" class="btn-fab hidden" onclick="App.fabAction()">+</button>
+
+  <!-- ── Modal ───────────────────────────────────────────────────────────── -->
+  <div id="modal-overlay" class="hidden" onclick="App.closeModal(event)">
+    <div id="modal-box" onclick="event.stopPropagation()">
+      <h3 id="modal-title"></h3>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <?!= include('ui/app') ?>
+</body>
+</html>

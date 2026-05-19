@@ -1,0 +1,953 @@
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// App — SPA principal CB Baeza Asistencia
+// ══════════════════════════════════════════════════════════════════════════════
+const App = {
+
+  // ── Estado global ─────────────────────────────────────────────────────────
+  state: {
+    usuario:    null,
+    esAdmin:    false,
+    equipos:    [],
+    currentView: 'dashboard',
+    viewHistory: [],
+    // Datos de la vista activa
+    sesionActual:  null,
+    equipoActual:  null,
+    asistenciaPendiente: { jugadores: [], entrenadores: [] },
+  },
+
+  // ── Inicialización ─────────────────────────────────────────────────────────
+  init() {
+    showLoading('Conectando con el servidor…');
+    server('getContextoUsuario')
+      .then(ctx => {
+        if (!ctx.success) { showToast('Error al cargar usuario: ' + ctx.error, 'error'); return; }
+        App.state.usuario  = ctx.entrenador;
+        App.state.esAdmin  = ctx.esAdmin;
+        App.state.equipos  = ctx.equipos || [];
+
+        // Header user badge
+        const nombre = ctx.entrenador
+          ? `${ctx.entrenador.Nombre} ${ctx.entrenador.Apellidos}`
+          : ctx.esAdmin ? 'Admin' : 'Sin perfil';
+        document.getElementById('user-badge').textContent = nombre;
+
+        // Mostrar opciones admin
+        if (ctx.esAdmin) {
+          document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+        }
+
+        hideLoading();
+        App.navigate('dashboard');
+      })
+      .catch(err => { hideLoading(); showToast('Error de conexión', 'error'); console.error(err); });
+  },
+
+  // ── Router ─────────────────────────────────────────────────────────────────
+  navigate(view, params = {}, pushHistory = true) {
+    if (pushHistory && App.state.currentView !== view) {
+      App.state.viewHistory.push(App.state.currentView);
+    }
+    App.state.currentView = view;
+
+    // Activar/desactivar vistas
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+    document.getElementById(`view-${view}`)?.classList.add('active');
+
+    // Nav inferior
+    document.querySelectorAll('.nav-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.view === view);
+    });
+
+    // Botón back: visible si hay historial y no es vista principal
+    const mainViews = ['dashboard', 'historico', 'informes', 'jugadores', 'equipos', 'entrenadores'];
+    const showBack  = !mainViews.includes(view) && App.state.viewHistory.length > 0;
+    document.getElementById('btn-back').classList.toggle('visible', showBack);
+
+    // FAB contextual
+    App._updateFab(view);
+
+    // Renderizar vista
+    const renderFn = App.views[view]?.render;
+    if (renderFn) renderFn(params);
+  },
+
+  goBack() {
+    const prev = App.state.viewHistory.pop();
+    if (prev) App.navigate(prev, {}, false);
+  },
+
+  _updateFab(view) {
+    const fab = document.getElementById('fab-btn');
+    const fabViews = {
+      jugadores:   { icon: '+', title: 'Nuevo jugador' },
+      entrenadores:{ icon: '+', title: 'Nuevo entrenador' },
+      equipos:     { icon: '+', title: 'Nuevo equipo' },
+    };
+    if (App.state.esAdmin && fabViews[view]) {
+      fab.textContent = fabViews[view].icon;
+      fab.title = fabViews[view].title;
+      fab.classList.remove('hidden');
+    } else {
+      fab.classList.add('hidden');
+    }
+  },
+
+  fabAction() {
+    const fns = {
+      jugadores:    () => App.views.jugadores.abrirModal(),
+      entrenadores: () => App.views.entrenadores.abrirModal(),
+      equipos:      () => App.views.equipos.abrirModal(),
+    };
+    fns[App.state.currentView]?.();
+  },
+
+  // ── Modal ──────────────────────────────────────────────────────────────────
+  openModal(title, bodyHtml) {
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-body').innerHTML = bodyHtml;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+  },
+
+  closeModal(e) {
+    if (!e || e.target === document.getElementById('modal-overlay')) {
+      document.getElementById('modal-overlay').classList.add('hidden');
+    }
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // VISTAS
+  // ══════════════════════════════════════════════════════════════════════════
+  views: {
+
+    // ── DASHBOARD ────────────────────────────────────────────────────────────
+    dashboard: {
+      render() {
+        const container = document.getElementById('dashboard-equipos');
+        const equipos   = App.state.equipos;
+
+        if (!equipos.length) {
+          container.innerHTML = `<div class="empty-state">
+            <div class="empty-icon">🏀</div>
+            <p>No tienes equipos asignados.</p>
+            ${App.state.esAdmin ? '<p class="mt-8"><small>Ve a <strong>Gestión</strong> para crear equipos.</small></p>' : ''}
+          </div>`;
+          return;
+        }
+
+        container.innerHTML = equipos.map(eq => `
+          <div class="equipo-card" onclick="App.navigate('equipo', { id: '${eq.ID}' })">
+            <div class="nombre">${eq.Nombre}</div>
+            <div class="meta">${eq.Categoria} · ${eq.Modalidad}</div>
+          </div>
+        `).join('');
+      }
+    },
+
+    // ── SESIÓN ───────────────────────────────────────────────────────────────
+    sesion: {
+      render({ id }) {
+        if (!id) return;
+        showLoading('Cargando sesión…');
+        server('getAsistenciaSesion', id)
+          .then(res => {
+            hideLoading();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            App.state.sesionActual = res;
+            App.views.sesion._renderSesion(res);
+          })
+          .catch(() => { hideLoading(); showToast('Error al cargar la sesión', 'error'); });
+      },
+
+      _renderSesion({ sesion, jugadores, entrenadores }) {
+        document.getElementById('header-title').textContent =
+          App.state.equipoActual?.Nombre || 'Sesión';
+
+        // Cabecera
+        const fecha = App.formatFecha(sesion.Fecha);
+        document.getElementById('sesion-header-info').innerHTML = `
+          <h2>${fecha.diaNombre}, ${fecha.dia} de ${fecha.mesNombre}</h2>
+          <p>${sesion.HoraInicio}–${sesion.HoraFin}
+             ${sesion.EsExtra === true || sesion.EsExtra === 'TRUE'
+               ? ' · <span class="sesion-extra-badge">Extra</span>' : ''}</p>
+          ${sesion.Notas ? `<p style="margin-top:6px;font-size:.82rem;opacity:.85">${sesion.Notas}</p>` : ''}`;
+
+        // Inicializar estado pendiente
+        App.state.asistenciaPendiente = { jugadores: [], entrenadores: [] };
+
+        // Lista de jugadores
+        const listJug = document.getElementById('sesion-jugadores-lista');
+        if (!jugadores.length) {
+          listJug.innerHTML = `<div class="empty-state"><p>No hay jugadores asignados a este equipo.</p></div>`;
+        } else {
+          listJug.innerHTML = jugadores.map(({ jugador, estado, esInvitado }) => `
+            <div class="jugador-card ${estado ? 'estado-' + estado : ''}"
+                 data-jugador-id="${jugador.ID}"
+                 data-estado="${estado || ''}"
+                 data-es-invitado="${esInvitado}"
+                 onclick="App.views.sesion.toggleEstado(this)">
+              <div class="jugador-dorsal">${jugador.Dorsal || '–'}</div>
+              <div style="flex:1">
+                <div class="jugador-nombre">${jugador.Apellidos}, ${jugador.Nombre}</div>
+                <div class="jugador-sub">
+                  ${jugador.Tipo ? `<span class="badge badge-${(jugador.Tipo||'').toLowerCase()}">${jugador.Tipo}</span>` : ''}
+                </div>
+              </div>
+              <div class="estado-badge">${App.views.sesion._estadoIcono(estado)}</div>
+            </div>`).join('');
+        }
+
+        // Lista de entrenadores
+        const listEnt = document.getElementById('sesion-entrenadores-lista');
+        if (!entrenadores.length) {
+          listEnt.innerHTML = `<div class="empty-state"><p>No hay entrenadores asignados.</p></div>`;
+        } else {
+          listEnt.innerHTML = entrenadores.map(({ entrenador, asistio, esInvitado }) => `
+            <div class="entrenador-asist-card" data-entrenador-id="${entrenador.ID}" data-es-invitado="${esInvitado}">
+              <div style="flex:1">
+                <div class="nombre-ent">${entrenador.Apellidos}, ${entrenador.Nombre}</div>
+                ${esInvitado ? '<span class="badge badge-invitado">Invitado</span>' : ''}
+              </div>
+              <div class="toggle-asist ${asistio === true ? 'on' : ''}"
+                   onclick="this.classList.toggle('on')"
+                   title="Asistencia entrenador"></div>
+            </div>`).join('');
+        }
+      },
+
+      toggleEstado(card) {
+        const ciclo = { '': 'P', 'P': 'A', 'A': 'R', 'R': 'P' };
+        const actual   = card.dataset.estado || '';
+        const siguiente = ciclo[actual];
+        card.dataset.estado = siguiente;
+        card.className = `jugador-card ${siguiente ? 'estado-' + siguiente : ''}`;
+        card.querySelector('.estado-badge').textContent = App.views.sesion._estadoIcono(siguiente);
+      },
+
+      _estadoIcono(estado) {
+        return estado === 'P' ? '✓' : estado === 'A' ? '✗' : estado === 'R' ? '⏱' : '?';
+      },
+
+      guardar() {
+        const sesionId = App.state.sesionActual?.sesion?.ID;
+        if (!sesionId) return;
+
+        // Recoger estados de jugadores
+        const jugadores = [...document.querySelectorAll('#sesion-jugadores-lista .jugador-card')]
+          .filter(card => card.dataset.estado)
+          .map(card => ({
+            jugadorId:  card.dataset.jugadorId,
+            estado:     card.dataset.estado,
+            esInvitado: card.dataset.esInvitado === 'true',
+          }));
+
+        // Recoger estados de entrenadores
+        const entrenadores = [...document.querySelectorAll('#sesion-entrenadores-lista .entrenador-asist-card')]
+          .map(card => ({
+            entrenadorId: card.dataset.entrenadorId,
+            asistio:      card.querySelector('.toggle-asist').classList.contains('on'),
+            esInvitado:   card.dataset.esInvitado === 'true',
+          }));
+
+        showLoading('Guardando asistencia…');
+        server('guardarAsistenciaCompleta', sesionId, { jugadores, entrenadores })
+          .then(res => {
+            hideLoading();
+            if (res.success) {
+              showToast(`Guardado: ${res.jugadoresGuardados} jugadores, ${res.entrenadoresGuardados} entrenadores`, 'success');
+            } else {
+              showToast(res.error || 'Error al guardar', 'error');
+            }
+          })
+          .catch(() => { hideLoading(); showToast('Error de conexión', 'error'); });
+      },
+
+      abrirBuscadorJugador() {
+        showLoading('Cargando jugadores…');
+        server('getJugadores')
+          .then(res => {
+            hideLoading();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            // Excluir los ya presentes
+            const idsPresentes = new Set(
+              [...document.querySelectorAll('#sesion-jugadores-lista .jugador-card')]
+                .map(c => c.dataset.jugadorId)
+            );
+            const jugadores = res.jugadores.filter(j => !idsPresentes.has(j.ID));
+            App.views.sesion._modalBuscador(
+              'Añadir jugador invitado', jugadores,
+              j => `${j.Apellidos}, ${j.Nombre}`,
+              j => `Dorsal ${j.Dorsal || '–'}`,
+              j => App.views.sesion._añadirJugadorInvitado(j)
+            );
+          })
+          .catch(() => { hideLoading(); showToast('Error al cargar jugadores', 'error'); });
+      },
+
+      abrirBuscadorEntrenador() {
+        showLoading('Cargando entrenadores…');
+        server('getEntrenadores')
+          .then(res => {
+            hideLoading();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            const idsPresentes = new Set(
+              [...document.querySelectorAll('#sesion-entrenadores-lista .entrenador-asist-card')]
+                .map(c => c.dataset.entrenadorId)
+            );
+            const entrenadores = res.entrenadores.filter(e => !idsPresentes.has(e.ID));
+            App.views.sesion._modalBuscador(
+              'Añadir entrenador invitado', entrenadores,
+              e => `${e.Apellidos}, ${e.Nombre}`,
+              e => e.Email,
+              e => App.views.sesion._añadirEntrenadorInvitado(e)
+            );
+          })
+          .catch(() => { hideLoading(); showToast('Error al cargar entrenadores', 'error'); });
+      },
+
+      _modalBuscador(title, items, fnNombre, fnSub, fnSelect) {
+        const html = `
+          <input type="search" id="modal-search" placeholder="Buscar…"
+                 oninput="App.views.sesion._filtrarBuscador(this.value)"
+                 style="width:100%;padding:10px;border:1.5px solid #e0e0e0;border-radius:8px;margin-bottom:8px">
+          <div class="search-list" id="modal-search-list">
+            ${items.map(item => `
+              <div class="search-item" onclick='App.views.sesion._selectCallback(${JSON.stringify(item)})'>
+                <div>
+                  <div class="search-item-nombre">${fnNombre(item)}</div>
+                  <div class="search-item-sub">${fnSub(item)}</div>
+                </div>
+              </div>`).join('')}
+          </div>`;
+        App._modalSelectCallback = fnSelect;
+        App._modalItems = items;
+        App._modalFnNombre = fnNombre;
+        App._modalFnSub    = fnSub;
+        App.openModal(title, html);
+      },
+
+      _filtrarBuscador(q) {
+        const items = App._modalItems || [];
+        const lower = q.toLowerCase();
+        const filtered = items.filter(i =>
+          (App._modalFnNombre(i) + App._modalFnSub(i)).toLowerCase().includes(lower)
+        );
+        document.getElementById('modal-search-list').innerHTML = filtered.map(item => `
+          <div class="search-item" onclick='App.views.sesion._selectCallback(${JSON.stringify(item)})'>
+            <div>
+              <div class="search-item-nombre">${App._modalFnNombre(item)}</div>
+              <div class="search-item-sub">${App._modalFnSub(item)}</div>
+            </div>
+          </div>`).join('');
+      },
+
+      _selectCallback(item) {
+        App.closeModal();
+        App._modalSelectCallback?.(item);
+      },
+
+      _añadirJugadorInvitado(jugador) {
+        const lista = document.getElementById('sesion-jugadores-lista');
+        const card  = document.createElement('div');
+        card.className = 'jugador-card';
+        card.dataset.jugadorId  = jugador.ID;
+        card.dataset.estado     = '';
+        card.dataset.esInvitado = 'true';
+        card.onclick = function() { App.views.sesion.toggleEstado(this); };
+        card.innerHTML = `
+          <div class="jugador-dorsal">${jugador.Dorsal || '–'}</div>
+          <div style="flex:1">
+            <div class="jugador-nombre">${jugador.Apellidos}, ${jugador.Nombre}</div>
+            <div class="jugador-sub"><span class="badge badge-invitado">Invitado</span></div>
+          </div>
+          <div class="estado-badge">?</div>`;
+        lista.appendChild(card);
+        showToast(`${jugador.Nombre} añadido como invitado`, 'success');
+      },
+
+      _añadirEntrenadorInvitado(entrenador) {
+        const lista = document.getElementById('sesion-entrenadores-lista');
+        const card  = document.createElement('div');
+        card.className = 'entrenador-asist-card';
+        card.dataset.entrenadorId = entrenador.ID;
+        card.dataset.esInvitado   = 'true';
+        card.innerHTML = `
+          <div style="flex:1">
+            <div class="nombre-ent">${entrenador.Apellidos}, ${entrenador.Nombre}</div>
+            <span class="badge badge-invitado">Invitado</span>
+          </div>
+          <div class="toggle-asist" onclick="this.classList.toggle('on')"></div>`;
+        lista.appendChild(card);
+        showToast(`${entrenador.Nombre} añadido como invitado`, 'success');
+      },
+    },
+
+    // ── EQUIPO (detalle) ─────────────────────────────────────────────────────
+    equipo: {
+      render({ id }) {
+        if (!id) return;
+        showLoading('Cargando equipo…');
+        server('getEquipoById', id)
+          .then(res => {
+            hideLoading();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            App.state.equipoActual = res.equipo;
+            document.getElementById('header-title').textContent = res.equipo.Nombre;
+            App.views.equipo._renderEquipo(res.equipo);
+          })
+          .catch(() => { hideLoading(); showToast('Error al cargar el equipo', 'error'); });
+      },
+
+      _renderEquipo(equipo) {
+        document.getElementById('equipo-header-info').innerHTML = `
+          <div style="font-size:1rem;font-weight:700">${equipo.Nombre}</div>
+          <div style="font-size:.82rem;opacity:.85;margin-top:4px">${equipo.Categoria} · ${equipo.Modalidad}</div>
+          ${equipo.horarios?.length ? `
+            <div style="margin-top:8px;font-size:.8rem;opacity:.8">
+              🕐 ${equipo.horarios.map(h =>
+                `${App.formatDia(h.DiaSemana)} ${h.HoraInicio}–${h.HoraFin}`
+              ).join(' · ')}
+            </div>` : ''}`;
+
+        // Sesiones
+        App.views.equipo._cargarSesiones(equipo.ID);
+
+        // Jugadores
+        const countEl = document.getElementById('equipo-jugadores-count');
+        countEl.textContent = equipo.jugadores?.length ? `(${equipo.jugadores.length})` : '';
+        document.getElementById('equipo-jugadores-lista').innerHTML =
+          (equipo.jugadores || []).map(j => `
+            <div class="card card-row">
+              <div>
+                <div class="card-title">${j.Apellidos}, ${j.Nombre}</div>
+                <div class="card-sub">
+                  Dorsal ${j.Dorsal || '–'}
+                  <span class="badge badge-${(j.Tipo||'').toLowerCase()}" style="margin-left:4px">${j.Tipo||''}</span>
+                </div>
+              </div>
+            </div>`).join('') ||
+          '<div class="empty-state"><p>Sin jugadores asignados.</p></div>';
+
+        // Entrenadores
+        document.getElementById('equipo-entrenadores-lista').innerHTML =
+          (equipo.entrenadores || []).map(e => `
+            <div class="card card-row">
+              <div>
+                <div class="card-title">${e.Apellidos}, ${e.Nombre}</div>
+                <div class="card-sub">${e.Email}</div>
+              </div>
+            </div>`).join('') ||
+          '<div class="empty-state"><p>Sin entrenadores asignados.</p></div>';
+      },
+
+      _cargarSesiones(equipoId) {
+        server('getSesionesByEquipo', equipoId)
+          .then(res => {
+            if (!res.success) return;
+            const proximas = (res.sesiones || [])
+              .filter(s => s.Fecha >= App.hoy())
+              .slice(0, 5);
+            const container = document.getElementById('equipo-sesiones');
+            if (!proximas.length) {
+              container.innerHTML = '<div class="empty-state"><p>No hay sesiones próximas. Genera la semana o añade una sesión extra.</p></div>';
+              return;
+            }
+            container.innerHTML = proximas.map(s => App.views.equipo._sesionCard(s)).join('');
+          });
+      },
+
+      _sesionCard(sesion) {
+        const f = App.formatFecha(sesion.Fecha);
+        return `<div class="sesion-card" onclick="App.navigate('sesion', { id: '${sesion.ID}' })">
+          <div class="sesion-fecha">
+            <div class="dia">${f.dia}</div>
+            <div class="mes">${f.mes}</div>
+          </div>
+          <div class="sesion-info">
+            <div style="font-weight:700">${f.diaNombre}</div>
+            <div class="hora">${sesion.HoraInicio}–${sesion.HoraFin}</div>
+          </div>
+          ${sesion.EsExtra === true || sesion.EsExtra === 'TRUE'
+            ? '<span class="sesion-extra-badge">Extra</span>' : ''}
+        </div>`;
+      },
+
+      generarSemana() {
+        const id = App.state.equipoActual?.ID;
+        if (!id) return;
+        showLoading('Generando sesiones…');
+        server('generarSesionesSemana', id)
+          .then(res => {
+            hideLoading();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            showToast(`Creadas ${res.sesiones.creadas.length} sesiones (${res.sesiones.existentes} ya existían)`, 'success');
+            App.views.equipo._cargarSesiones(id);
+          })
+          .catch(() => { hideLoading(); showToast('Error al generar sesiones', 'error'); });
+      },
+
+      abrirModalSesionExtra() {
+        const id = App.state.equipoActual?.ID;
+        App.openModal('Nueva sesión extra', `
+          <div class="form-group"><label>Fecha</label>
+            <input type="date" id="ext-fecha" value="${App.hoy()}"></div>
+          <div class="flex gap-8">
+            <div class="form-group" style="flex:1"><label>Hora inicio</label>
+              <input type="time" id="ext-inicio" value="18:00"></div>
+            <div class="form-group" style="flex:1"><label>Hora fin</label>
+              <input type="time" id="ext-fin" value="19:30"></div>
+          </div>
+          <div class="form-group"><label>Notas (opcional)</label>
+            <input type="text" id="ext-notas" placeholder="Ej. Partido amistoso…"></div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="App.views.equipo._guardarSesionExtra('${id}')">Crear sesión</button>
+          </div>`);
+      },
+
+      _guardarSesionExtra(equipoId) {
+        const datos = {
+          Fecha:      document.getElementById('ext-fecha').value,
+          HoraInicio: document.getElementById('ext-inicio').value,
+          HoraFin:    document.getElementById('ext-fin').value,
+          Notas:      document.getElementById('ext-notas').value,
+        };
+        if (!datos.Fecha || !datos.HoraInicio || !datos.HoraFin) {
+          showToast('Fecha y horas son obligatorias', 'error'); return;
+        }
+        App.closeModal();
+        showLoading('Creando sesión…');
+        server('crearSesionExtra', equipoId, datos)
+          .then(res => {
+            hideLoading();
+            if (res.success) { showToast('Sesión extra creada', 'success'); App.views.equipo._cargarSesiones(equipoId); }
+            else showToast(res.error, 'error');
+          })
+          .catch(() => { hideLoading(); showToast('Error al crear la sesión', 'error'); });
+      },
+    },
+
+    // ── JUGADORES (admin) ────────────────────────────────────────────────────
+    jugadores: {
+      _todos: [],
+      render() {
+        showLoading();
+        server('getJugadores')
+          .then(res => {
+            hideLoading();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            App.views.jugadores._todos = res.jugadores;
+            App.views.jugadores._renderLista(res.jugadores);
+          })
+          .catch(() => { hideLoading(); showToast('Error al cargar jugadores', 'error'); });
+      },
+
+      _renderLista(jugadores) {
+        const container = document.getElementById('jugadores-lista');
+        if (!jugadores.length) {
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><p>No hay jugadores registrados.</p></div>';
+          return;
+        }
+        container.innerHTML = jugadores.map(j => `
+          <div class="card card-row">
+            <div>
+              <div class="card-title">${j.Apellidos}, ${j.Nombre}</div>
+              <div class="card-sub">Dorsal ${j.Dorsal || '–'} · ${j.FechaNac || ''}</div>
+            </div>
+            <button class="btn-icon" onclick="App.views.jugadores.abrirModal('${j.ID}')">✏️</button>
+          </div>`).join('');
+      },
+
+      filtrar(q) {
+        const lower = q.toLowerCase();
+        const filtrados = App.views.jugadores._todos.filter(j =>
+          `${j.Nombre} ${j.Apellidos} ${j.Dorsal}`.toLowerCase().includes(lower)
+        );
+        App.views.jugadores._renderLista(filtrados);
+      },
+
+      abrirModal(jugadorId) {
+        const jugador = jugadorId ? App.views.jugadores._todos.find(j => j.ID === jugadorId) : null;
+        App.openModal(jugador ? 'Editar jugador' : 'Nuevo jugador', `
+          <div class="form-group"><label>Nombre *</label>
+            <input type="text" id="jug-nombre" value="${jugador?.Nombre || ''}"></div>
+          <div class="form-group"><label>Apellidos *</label>
+            <input type="text" id="jug-apellidos" value="${jugador?.Apellidos || ''}"></div>
+          <div class="flex gap-8">
+            <div class="form-group" style="flex:1"><label>Dorsal</label>
+              <input type="number" id="jug-dorsal" value="${jugador?.Dorsal || ''}" min="0" max="99"></div>
+            <div class="form-group" style="flex:1"><label>Fecha nacimiento</label>
+              <input type="date" id="jug-fechanac" value="${jugador?.FechaNac || ''}"></div>
+          </div>
+          <div class="form-group"><label>Teléfono</label>
+            <input type="tel" id="jug-tel" value="${jugador?.Telefono || ''}"></div>
+          <div class="form-group"><label>Email</label>
+            <input type="email" id="jug-email" value="${jugador?.Email || ''}"></div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="App.views.jugadores._guardar('${jugadorId || ''}')">
+              ${jugador ? 'Guardar cambios' : 'Crear jugador'}
+            </button>
+          </div>`);
+      },
+
+      _guardar(jugadorId) {
+        const datos = {
+          Nombre:    document.getElementById('jug-nombre').value.trim(),
+          Apellidos: document.getElementById('jug-apellidos').value.trim(),
+          Dorsal:    document.getElementById('jug-dorsal').value,
+          FechaNac:  document.getElementById('jug-fechanac').value,
+          Telefono:  document.getElementById('jug-tel').value.trim(),
+          Email:     document.getElementById('jug-email').value.trim(),
+        };
+        if (!datos.Nombre || !datos.Apellidos) { showToast('Nombre y apellidos son obligatorios', 'error'); return; }
+        App.closeModal();
+        showLoading();
+        const fn = jugadorId ? server('actualizarJugador', jugadorId, datos) : server('crearJugador', datos);
+        fn.then(res => {
+          hideLoading();
+          if (res.success) { showToast(jugadorId ? 'Jugador actualizado' : 'Jugador creado', 'success'); App.views.jugadores.render(); }
+          else showToast(res.error, 'error');
+        }).catch(() => { hideLoading(); showToast('Error al guardar', 'error'); });
+      },
+    },
+
+    // ── ENTRENADORES (admin) ─────────────────────────────────────────────────
+    entrenadores: {
+      _todos: [],
+      render() {
+        showLoading();
+        server('getEntrenadores')
+          .then(res => {
+            hideLoading();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            App.views.entrenadores._todos = res.entrenadores;
+            const container = document.getElementById('entrenadores-lista');
+            if (!res.entrenadores.length) {
+              container.innerHTML = '<div class="empty-state"><div class="empty-icon">🎽</div><p>No hay entrenadores registrados.</p></div>';
+              return;
+            }
+            container.innerHTML = res.entrenadores.map(e => `
+              <div class="card card-row">
+                <div>
+                  <div class="card-title">${e.Apellidos}, ${e.Nombre}</div>
+                  <div class="card-sub">${e.Email}</div>
+                </div>
+                <button class="btn-icon" onclick="App.views.entrenadores.abrirModal('${e.ID}')">✏️</button>
+              </div>`).join('');
+          })
+          .catch(() => { hideLoading(); showToast('Error al cargar entrenadores', 'error'); });
+      },
+
+      abrirModal(entrenadorId) {
+        const ent = entrenadorId ? App.views.entrenadores._todos.find(e => e.ID === entrenadorId) : null;
+        App.openModal(ent ? 'Editar entrenador' : 'Nuevo entrenador', `
+          <div class="form-group"><label>Nombre *</label>
+            <input type="text" id="ent-nombre" value="${ent?.Nombre || ''}"></div>
+          <div class="form-group"><label>Apellidos *</label>
+            <input type="text" id="ent-apellidos" value="${ent?.Apellidos || ''}"></div>
+          <div class="form-group"><label>Email Google *</label>
+            <input type="email" id="ent-email" value="${ent?.Email || ''}" ${ent ? 'disabled' : ''}>
+            ${ent ? '<small style="color:var(--texto-sec)">El email no se puede cambiar (clave de acceso)</small>' : ''}
+          </div>
+          <div class="form-group"><label>Teléfono</label>
+            <input type="tel" id="ent-tel" value="${ent?.Telefono || ''}"></div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="App.views.entrenadores._guardar('${entrenadorId || ''}')">
+              ${ent ? 'Guardar cambios' : 'Crear entrenador'}
+            </button>
+          </div>`);
+      },
+
+      _guardar(entrenadorId) {
+        const datos = {
+          Nombre:    document.getElementById('ent-nombre').value.trim(),
+          Apellidos: document.getElementById('ent-apellidos').value.trim(),
+          Email:     document.getElementById('ent-email')?.value?.trim(),
+          Telefono:  document.getElementById('ent-tel').value.trim(),
+        };
+        if (!datos.Nombre || !datos.Apellidos) { showToast('Nombre y apellidos son obligatorios', 'error'); return; }
+        App.closeModal();
+        showLoading();
+        const fn = entrenadorId ? server('actualizarEntrenador', entrenadorId, datos) : server('crearEntrenador', datos);
+        fn.then(res => {
+          hideLoading();
+          if (res.success) { showToast(entrenadorId ? 'Entrenador actualizado' : 'Entrenador creado', 'success'); App.views.entrenadores.render(); }
+          else showToast(res.error, 'error');
+        }).catch(() => { hideLoading(); showToast('Error al guardar', 'error'); });
+      },
+    },
+
+    // ── EQUIPOS (admin) ──────────────────────────────────────────────────────
+    equipos: {
+      render() {
+        showLoading();
+        server('getEquipos')
+          .then(res => {
+            hideLoading();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            const container = document.getElementById('equipos-lista');
+            if (!res.equipos.length) {
+              container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏆</div><p>No hay equipos creados aún.</p></div>';
+              return;
+            }
+            container.innerHTML = res.equipos.map(eq => `
+              <div class="card card-row" style="cursor:pointer" onclick="App.navigate('equipo', { id: '${eq.ID}' })">
+                <div>
+                  <div class="card-title">${eq.Nombre}</div>
+                  <div class="card-sub">${eq.Categoria} · ${eq.Modalidad}</div>
+                </div>
+                <span style="color:var(--texto-sec);font-size:1.2rem">›</span>
+              </div>`).join('');
+          })
+          .catch(() => { hideLoading(); showToast('Error al cargar equipos', 'error'); });
+      },
+
+      abrirModal() {
+        const CATEGORIAS = ['baybasket','pre-minibasket','minibasket','infantil','cadete','junior','senior'];
+        App.openModal('Nuevo equipo', `
+          <div class="form-group"><label>Nombre *</label>
+            <input type="text" id="eq-nombre" placeholder="Ej. Infantil Masculino A"></div>
+          <div class="form-group"><label>Categoría *</label>
+            <select id="eq-categoria">
+              ${CATEGORIAS.map(c => `<option value="${c}">${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label>Modalidad *</label>
+            <select id="eq-modalidad">
+              <option>Masculino</option><option>Femenino</option><option>Mixto</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="App.views.equipos._guardar()">Crear equipo</button>
+          </div>`);
+      },
+
+      _guardar() {
+        const datos = {
+          Nombre:    document.getElementById('eq-nombre').value.trim(),
+          Categoria: document.getElementById('eq-categoria').value,
+          Modalidad: document.getElementById('eq-modalidad').value,
+        };
+        if (!datos.Nombre) { showToast('El nombre es obligatorio', 'error'); return; }
+        App.closeModal();
+        showLoading();
+        server('crearEquipo', datos)
+          .then(res => {
+            hideLoading();
+            if (res.success) { showToast('Equipo creado', 'success'); App.views.equipos.render(); App.state.equipos.push(res.equipo); }
+            else showToast(res.error, 'error');
+          })
+          .catch(() => { hideLoading(); showToast('Error al crear el equipo', 'error'); });
+      },
+    },
+
+    // ── HISTÓRICO ────────────────────────────────────────────────────────────
+    historico: {
+      render() {
+        const sel = document.getElementById('historico-equipo-select');
+        sel.innerHTML = '<option value="">— Selecciona un equipo —</option>' +
+          App.state.equipos.map(eq => `<option value="${eq.ID}">${eq.Nombre}</option>`).join('');
+
+        // Rango por defecto: mes actual
+        const hoy   = App.hoy();
+        const desde = hoy.substring(0, 7) + '-01';
+        document.getElementById('historico-desde').value = desde;
+        document.getElementById('historico-hasta').value = hoy;
+      },
+
+      cargar() {
+        const equipoId = document.getElementById('historico-equipo-select').value;
+        if (!equipoId) { document.getElementById('historico-lista').innerHTML = ''; return; }
+
+        showLoading();
+        server('getSesionesByEquipo', equipoId)
+          .then(res => {
+            hideLoading();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            const desde = document.getElementById('historico-desde').value;
+            const hasta = document.getElementById('historico-hasta').value;
+            const filtradas = res.sesiones
+              .filter(s => (!desde || s.Fecha >= desde) && (!hasta || s.Fecha <= hasta))
+              .sort((a, b) => b.Fecha.localeCompare(a.Fecha));
+
+            const container = document.getElementById('historico-lista');
+            if (!filtradas.length) {
+              container.innerHTML = '<div class="empty-state"><p>No hay sesiones en el periodo seleccionado.</p></div>';
+              return;
+            }
+            container.innerHTML = filtradas.map(s => {
+              const f = App.formatFecha(s.Fecha);
+              return `<div class="sesion-card" onclick="App.navigate('sesion',{ id:'${s.ID}' })">
+                <div class="sesion-fecha">
+                  <div class="dia">${f.dia}</div>
+                  <div class="mes">${f.mes}</div>
+                </div>
+                <div class="sesion-info">
+                  <div style="font-weight:700">${f.diaNombre}</div>
+                  <div class="hora">${s.HoraInicio}–${s.HoraFin}</div>
+                  ${s.Notas ? `<div class="hora">${s.Notas}</div>` : ''}
+                </div>
+                ${s.EsExtra===true||s.EsExtra==='TRUE' ? '<span class="sesion-extra-badge">Extra</span>' : ''}
+              </div>`;
+            }).join('');
+          })
+          .catch(() => { hideLoading(); showToast('Error al cargar sesiones', 'error'); });
+      },
+    },
+
+    // ── INFORMES ─────────────────────────────────────────────────────────────
+    informes: {
+      render() {
+        const sel = document.getElementById('informes-equipo-select');
+        sel.innerHTML = '<option value="">— Selecciona un equipo —</option>' +
+          App.state.equipos.map(eq => `<option value="${eq.ID}">${eq.Nombre}</option>`).join('');
+        document.getElementById('informes-contenido').innerHTML = '';
+      },
+
+      cargar() {
+        const equipoId = document.getElementById('informes-equipo-select').value;
+        if (!equipoId) { document.getElementById('informes-contenido').innerHTML = ''; return; }
+
+        showLoading('Calculando estadísticas…');
+        server('getTemporadaActiva')
+          .then(res => {
+            if (!res.success || !res.temporada) throw new Error('Sin temporada activa');
+            return server('getEstadisticasEquipo', equipoId, res.temporada.ID);
+          })
+          .then(res => {
+            hideLoading();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            App.views.informes._renderStats(res.estadisticas);
+          })
+          .catch(e => { hideLoading(); showToast(e.message || 'Error al cargar informes', 'error'); });
+      },
+
+      _renderStats(stats) {
+        const container = document.getElementById('informes-contenido');
+
+        const resumenChips = `
+          <div class="resumen-chips">
+            <span class="resumen-chip chip-p">✓ ${stats.jugadores.reduce((a,j)=>a+j.presentes,0)} presentes</span>
+            <span class="resumen-chip chip-a">✗ ${stats.jugadores.reduce((a,j)=>a+j.ausentes,0)} ausentes</span>
+            <span class="resumen-chip chip-r">⏱ ${stats.jugadores.reduce((a,j)=>a+j.retrasos,0)} retrasos</span>
+          </div>`;
+
+        const barrasJugadores = stats.jugadores.map(s => {
+          const clase = s.porcentaje >= 80 ? 'alta' : s.porcentaje >= 60 ? 'media' : 'baja';
+          return `<div class="stat-bar-wrap">
+            <div class="stat-bar-label">
+              <span>${s.jugador.Apellidos}, ${s.jugador.Nombre}</span>
+              <strong>${s.porcentaje}%</strong>
+            </div>
+            <div class="stat-bar-track">
+              <div class="stat-bar-fill ${clase}" style="width:${s.porcentaje}%"></div>
+            </div>
+          </div>`;
+        }).join('');
+
+        container.innerHTML = `
+          <div class="card" style="margin-bottom:10px">
+            <div class="card-title">📊 ${stats.equipo.Nombre}</div>
+            <div class="card-sub">${stats.totalSesiones} sesiones en la temporada</div>
+            <hr class="divider">
+            ${resumenChips}
+          </div>
+          <div class="card" style="margin-bottom:10px">
+            <p class="section-label" style="margin-top:0">Asistencia por jugador</p>
+            ${barrasJugadores || '<p class="text-muted">Sin datos</p>'}
+          </div>
+          <button class="btn btn-primary btn-full" onclick="App.views.informes._exportar('${stats.equipo.ID}')">
+            📤 Exportar a Google Sheets
+          </button>
+          <div style="height:16px"></div>`;
+      },
+
+      _exportar(equipoId) {
+        showLoading('Generando informe…');
+        server('getTemporadaActiva')
+          .then(res => server('exportarInformeASheets', equipoId, res.temporada.ID))
+          .then(res => {
+            hideLoading();
+            if (res.success) {
+              showToast('Informe exportado. Abriendo…', 'success');
+              window.open(res.url, '_blank');
+            } else {
+              showToast(res.error, 'error');
+            }
+          })
+          .catch(() => { hideLoading(); showToast('Error al exportar', 'error'); });
+      },
+    },
+  }, // fin views
+
+  // ── Helpers de fecha ────────────────────────────────────────────────────────
+  formatFecha(yyyymmdd) {
+    if (!yyyymmdd) return { dia: '–', mes: '–', diaNombre: '–', mesNombre: '–' };
+    const [y, m, d] = yyyymmdd.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    const dias  = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+    const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    const mesesL= ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    return {
+      dia:      String(d).padStart(2,'0'),
+      mes:      meses[m - 1],
+      diaNombre: dias[date.getDay()],
+      mesNombre: mesesL[m - 1],
+    };
+  },
+
+  formatDia(num) {
+    const dias = {1:'Lun',2:'Mar',3:'Mié',4:'Jue',5:'Vie',6:'Sáb',7:'Dom'};
+    return dias[num] || num;
+  },
+
+  hoy() {
+    const d = new Date();
+    return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
+  },
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Helpers globales
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Wrapper Promise para google.script.run.
+ * Uso: server('funcionGAS', arg1, arg2).then(res => ...).catch(err => ...)
+ */
+function server(fn, ...args) {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(reject)
+      [fn](...args);
+  });
+}
+
+function showLoading(msg = 'Cargando…') {
+  document.getElementById('loading-msg').textContent = msg;
+  document.getElementById('loading-overlay').classList.remove('hidden');
+}
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.add('hidden');
+}
+
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('out');
+    setTimeout(() => toast.remove(), 350);
+  }, 3500);
+}
+
+// ── Arranque ─────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>

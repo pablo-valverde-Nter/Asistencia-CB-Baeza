@@ -1,0 +1,342 @@
+<style>
+  /* ── Variables ─────────────────────────────────────────────────────────────── */
+  :root {
+    --azul:      #1a237e;
+    --azul-claro:#3949ab;
+    --verde:     #43a047;
+    --rojo:      #e53935;
+    --amarillo:  #fb8c00;
+    --gris:      #9e9e9e;
+    --gris-claro:#f5f5f5;
+    --blanco:    #ffffff;
+    --texto:     #212121;
+    --texto-sec: #757575;
+    --sombra:    0 2px 8px rgba(0,0,0,.12);
+    --radio:     10px;
+    --nav-h:     60px;
+  }
+
+  /* ── Reset y base ──────────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--gris-claro);
+    color: var(--texto);
+    min-height: 100vh;
+    padding-bottom: calc(var(--nav-h) + 8px);
+  }
+  button { cursor: pointer; border: none; font-family: inherit; }
+  input, select, textarea { font-family: inherit; font-size: 1rem; }
+  a { text-decoration: none; color: inherit; }
+
+  /* ── Loading overlay ───────────────────────────────────────────────────────── */
+  #loading-overlay {
+    position: fixed; inset: 0; background: rgba(26,35,126,.85);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; flex-direction: column; gap: 16px;
+  }
+  #loading-overlay.hidden { display: none; }
+  .spinner {
+    width: 48px; height: 48px; border: 5px solid rgba(255,255,255,.3);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  #loading-overlay p { color: #fff; font-size: .9rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Header ────────────────────────────────────────────────────────────────── */
+  #app-header {
+    background: var(--azul); color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; height: 56px;
+    position: sticky; top: 0; z-index: 100; box-shadow: var(--sombra);
+  }
+  #app-header h1 { font-size: 1.1rem; font-weight: 700; }
+  #btn-back {
+    background: none; color: #fff; font-size: 1.4rem;
+    padding: 4px 8px; border-radius: 6px; display: none;
+  }
+  #btn-back.visible { display: block; }
+  #user-badge {
+    font-size: .75rem; background: rgba(255,255,255,.2);
+    padding: 4px 10px; border-radius: 20px; max-width: 160px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ── Navegación inferior ───────────────────────────────────────────────────── */
+  #bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0; height: var(--nav-h);
+    background: var(--blanco); border-top: 1px solid #e0e0e0;
+    display: flex; z-index: 100; box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+  }
+  .nav-item {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 3px;
+    background: none; color: var(--gris); font-size: .65rem;
+    padding: 4px 0; border-top: 3px solid transparent;
+    transition: color .2s, border-color .2s;
+  }
+  .nav-item .nav-icon { font-size: 1.3rem; }
+  .nav-item.active { color: var(--azul); border-top-color: var(--azul); }
+
+  /* ── Vistas ────────────────────────────────────────────────────────────────── */
+  .view { display: none; padding: 12px 12px 0; animation: fadeIn .2s; }
+  .view.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+
+  /* ── Títulos de sección ────────────────────────────────────────────────────── */
+  .page-title {
+    font-size: 1.15rem; font-weight: 700; color: var(--azul);
+    margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .section-label {
+    font-size: .75rem; font-weight: 700; text-transform: uppercase;
+    color: var(--texto-sec); letter-spacing: .06em; margin: 16px 0 8px;
+  }
+
+  /* ── Cards genéricas ───────────────────────────────────────────────────────── */
+  .card {
+    background: var(--blanco); border-radius: var(--radio);
+    box-shadow: var(--sombra); padding: 14px 16px; margin-bottom: 10px;
+  }
+  .card-title { font-weight: 700; font-size: 1rem; }
+  .card-sub   { font-size: .8rem; color: var(--texto-sec); margin-top: 2px; }
+  .card-row   { display: flex; align-items: center; justify-content: space-between; }
+
+  /* ── Tarjeta de equipo (dashboard) ────────────────────────────────────────── */
+  .equipo-card {
+    background: var(--azul); color: #fff;
+    border-radius: var(--radio); padding: 16px;
+    margin-bottom: 10px; cursor: pointer;
+    box-shadow: var(--sombra); transition: transform .15s;
+  }
+  .equipo-card:active { transform: scale(.98); }
+  .equipo-card .nombre { font-size: 1rem; font-weight: 700; }
+  .equipo-card .meta   { font-size: .8rem; opacity: .8; margin-top: 4px; }
+  .equipo-card .sesion-proxima {
+    margin-top: 10px; background: rgba(255,255,255,.15);
+    border-radius: 6px; padding: 8px 10px; font-size: .82rem;
+  }
+
+  /* ── Cards de sesión (histórico, dashboard) ────────────────────────────────── */
+  .sesion-card {
+    background: var(--blanco); border-radius: var(--radio);
+    box-shadow: var(--sombra); padding: 12px 14px; margin-bottom: 8px;
+    cursor: pointer; transition: transform .15s;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .sesion-card:active { transform: scale(.98); }
+  .sesion-fecha {
+    background: var(--azul); color: #fff;
+    border-radius: 8px; padding: 6px 10px; text-align: center;
+    min-width: 48px;
+  }
+  .sesion-fecha .dia  { font-size: 1.2rem; font-weight: 700; line-height: 1; }
+  .sesion-fecha .mes  { font-size: .65rem; text-transform: uppercase; }
+  .sesion-info        { flex: 1; }
+  .sesion-info .hora  { font-size: .8rem; color: var(--texto-sec); }
+  .sesion-extra-badge {
+    font-size: .65rem; background: var(--amarillo); color: #fff;
+    padding: 2px 6px; border-radius: 10px; font-weight: 700;
+  }
+
+  /* ── Formulario de asistencia ──────────────────────────────────────────────── */
+  #view-sesion .sesion-header {
+    background: var(--azul); color: #fff;
+    border-radius: var(--radio); padding: 14px 16px; margin-bottom: 12px;
+  }
+  #view-sesion .sesion-header h2 { font-size: 1rem; }
+  #view-sesion .sesion-header p  { font-size: .82rem; opacity: .85; margin-top: 4px; }
+
+  .btn-guardar-asistencia {
+    width: 100%; padding: 14px; font-size: 1rem; font-weight: 700;
+    background: var(--verde); color: #fff; border-radius: var(--radio);
+    margin-bottom: 12px; letter-spacing: .03em;
+    box-shadow: 0 3px 8px rgba(67,160,71,.4);
+  }
+
+  /* Tarjeta de jugador en formulario de asistencia */
+  .jugador-card {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--blanco); border-radius: var(--radio);
+    box-shadow: var(--sombra); padding: 10px 14px; margin-bottom: 8px;
+    cursor: pointer; transition: transform .12s, background .15s;
+    user-select: none; -webkit-tap-highlight-color: transparent;
+    border-left: 5px solid var(--gris);
+  }
+  .jugador-card:active { transform: scale(.97); }
+  .jugador-card.estado-P { border-left-color: var(--verde);    background: #f1f8e9; }
+  .jugador-card.estado-A { border-left-color: var(--rojo);     background: #fce4e4; }
+  .jugador-card.estado-R { border-left-color: var(--amarillo);  background: #fff8e1; }
+
+  .jugador-dorsal {
+    min-width: 34px; height: 34px; border-radius: 50%;
+    background: var(--gris-claro); color: var(--texto-sec);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: .85rem;
+  }
+  .jugador-card.estado-P .jugador-dorsal { background: var(--verde);   color: #fff; }
+  .jugador-card.estado-A .jugador-dorsal { background: var(--rojo);    color: #fff; }
+  .jugador-card.estado-R .jugador-dorsal { background: var(--amarillo); color: #fff; }
+
+  .jugador-nombre { flex: 1; font-size: .92rem; font-weight: 600; }
+  .jugador-sub    { font-size: .72rem; color: var(--texto-sec); }
+
+  .estado-badge {
+    min-width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: .9rem; color: var(--gris);
+    background: var(--gris-claro);
+  }
+  .jugador-card.estado-P .estado-badge { background: var(--verde);   color: #fff; }
+  .jugador-card.estado-A .estado-badge { background: var(--rojo);    color: #fff; }
+  .jugador-card.estado-R .estado-badge { background: var(--amarillo); color: #fff; }
+
+  /* Tarjeta de entrenador en formulario */
+  .entrenador-asist-card {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--blanco); border-radius: var(--radio);
+    box-shadow: var(--sombra); padding: 10px 14px; margin-bottom: 8px;
+  }
+  .entrenador-asist-card .nombre-ent { flex: 1; font-size: .9rem; font-weight: 600; }
+  .toggle-asist {
+    width: 52px; height: 28px; border-radius: 14px;
+    background: var(--gris); position: relative; cursor: pointer;
+    transition: background .2s;
+  }
+  .toggle-asist::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 22px; height: 22px; border-radius: 50%; background: #fff;
+    transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  .toggle-asist.on { background: var(--verde); }
+  .toggle-asist.on::after { left: 27px; }
+
+  /* ── Botones genéricos ─────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px; padding: 10px 18px; border-radius: 8px;
+    font-size: .9rem; font-weight: 600; transition: opacity .15s;
+  }
+  .btn:active { opacity: .8; }
+  .btn-primary   { background: var(--azul);   color: #fff; }
+  .btn-success   { background: var(--verde);  color: #fff; }
+  .btn-danger    { background: var(--rojo);   color: #fff; }
+  .btn-secondary { background: #e0e0e0;       color: var(--texto); }
+  .btn-fab {
+    position: fixed; bottom: calc(var(--nav-h) + 16px); right: 16px;
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--azul); color: #fff; font-size: 1.6rem;
+    box-shadow: 0 4px 12px rgba(26,35,126,.4); z-index: 50;
+  }
+  .btn-icon { background: none; color: var(--texto-sec); padding: 6px; font-size: 1.1rem; }
+  .btn-full { width: 100%; }
+
+  /* ── Formularios ───────────────────────────────────────────────────────────── */
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: .8rem; font-weight: 700; color: var(--texto-sec); margin-bottom: 5px; }
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    width: 100%; padding: 10px 12px; border: 1.5px solid #e0e0e0;
+    border-radius: 8px; background: var(--blanco); font-size: .95rem;
+    transition: border-color .2s;
+  }
+  .form-group input:focus,
+  .form-group select:focus { outline: none; border-color: var(--azul); }
+
+  /* ── Modal ─────────────────────────────────────────────────────────────────── */
+  #modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 200; display: flex; align-items: flex-end; justify-content: center;
+  }
+  #modal-overlay.hidden { display: none; }
+  #modal-box {
+    background: var(--blanco); border-radius: 16px 16px 0 0;
+    width: 100%; max-width: 560px; max-height: 90vh;
+    overflow-y: auto; padding: 20px 16px 32px; animation: slideUp .25s;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  #modal-box h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; color: var(--azul); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-actions .btn { flex: 1; padding: 12px; }
+
+  /* ── Lista de búsqueda (buscador de jugadores/entrenadores) ────────────────── */
+  .search-list { max-height: 280px; overflow-y: auto; margin-top: 8px; }
+  .search-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background .1s;
+  }
+  .search-item:active { background: var(--gris-claro); }
+  .search-item-nombre { font-size: .9rem; font-weight: 600; }
+  .search-item-sub    { font-size: .75rem; color: var(--texto-sec); }
+
+  /* ── Chips de horario ──────────────────────────────────────────────────────── */
+  .horario-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .dia-chip {
+    padding: 6px 12px; border-radius: 20px; font-size: .8rem; font-weight: 700;
+    border: 2px solid #e0e0e0; background: var(--blanco); color: var(--texto-sec);
+    cursor: pointer; transition: all .15s;
+  }
+  .dia-chip.selected { border-color: var(--azul); background: var(--azul); color: #fff; }
+
+  /* ── Estadísticas / Informes ───────────────────────────────────────────────── */
+  .stat-bar-wrap { margin-bottom: 10px; }
+  .stat-bar-label { display: flex; justify-content: space-between; font-size: .82rem; margin-bottom: 4px; }
+  .stat-bar-track { height: 10px; background: #e0e0e0; border-radius: 5px; overflow: hidden; }
+  .stat-bar-fill  { height: 100%; border-radius: 5px; transition: width .5s; }
+  .stat-bar-fill.alta   { background: var(--verde);   }
+  .stat-bar-fill.media  { background: var(--amarillo); }
+  .stat-bar-fill.baja   { background: var(--rojo);    }
+
+  .resumen-chips { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .resumen-chip  {
+    padding: 6px 14px; border-radius: 20px; font-size: .8rem; font-weight: 700;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .chip-p { background: #e8f5e9; color: var(--verde); }
+  .chip-a { background: #fce4e4; color: var(--rojo);  }
+  .chip-r { background: #fff8e1; color: var(--amarillo); }
+
+  /* ── Toast ─────────────────────────────────────────────────────────────────── */
+  #toast-container {
+    position: fixed; bottom: calc(var(--nav-h) + 12px); left: 50%;
+    transform: translateX(-50%); z-index: 500; display: flex;
+    flex-direction: column; gap: 8px; pointer-events: none;
+    width: min(calc(100% - 32px), 400px);
+  }
+  .toast {
+    padding: 12px 18px; border-radius: 10px; font-size: .88rem; font-weight: 600;
+    color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+    animation: toastIn .3s forwards; pointer-events: all;
+  }
+  .toast.success { background: var(--verde);   }
+  .toast.error   { background: var(--rojo);    }
+  .toast.info    { background: var(--azul-claro); }
+  .toast.out     { animation: toastOut .3s forwards; }
+  @keyframes toastIn  { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes toastOut { from { opacity:1; } to { opacity:0; transform:translateY(20px); } }
+
+  /* ── Utilidades ────────────────────────────────────────────────────────────── */
+  .hidden  { display: none !important; }
+  .mt-8    { margin-top: 8px; }
+  .mt-16   { margin-top: 16px; }
+  .flex    { display: flex; }
+  .gap-8   { gap: 8px; }
+  .w-full  { width: 100%; }
+  .text-center { text-align: center; }
+  .text-muted  { color: var(--texto-sec); font-size: .85rem; }
+  .divider { border: none; border-top: 1px solid #e0e0e0; margin: 12px 0; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: .7rem; font-weight: 700;
+  }
+  .badge-principal { background: #e3f2fd; color: #1565c0; }
+  .badge-secundario { background: #f3e5f5; color: #6a1b9a; }
+  .badge-invitado   { background: #fff8e1; color: #e65100; }
+  .empty-state {
+    text-align: center; padding: 40px 20px; color: var(--texto-sec);
+  }
+  .empty-state .empty-icon { font-size: 3rem; margin-bottom: 10px; }
+</style>
