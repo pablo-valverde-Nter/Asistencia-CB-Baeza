@@ -1,513 +1,552 @@
 <script>
-// ══════════════════════════════════════════════════════════════════════════════
-// App — SPA principal CB Baeza Asistencia
-// ══════════════════════════════════════════════════════════════════════════════
+// ================================================================
+// CB Baeza -- SPA principal
+// ================================================================
 const App = {
 
-  // ── Estado global ─────────────────────────────────────────────────────────
   state: {
-    usuario:    null,
-    esAdmin:    false,
-    equipos:    [],
-    currentView: 'dashboard',
+    auth:      null,
+    usuario:   null,
+    esAdmin:   false,
+    equipos:   [],
+    currentView: 'equipos',
     viewHistory: [],
-    // Datos de la vista activa
-    sesionActual:  null,
-    equipoActual:  null,
-    asistenciaPendiente: { jugadores: [], entrenadores: [] },
+    equipoSesionesId: null,
+    _equipoNombre:    null,
+    sesionId:         null,
+    // Form equipo
+    formEquipoId:      null,
+    formEntrenadores:  [],
+    formJugadores:     [],
+    formDias:          {},
+    formEntOriginales: [],
+    formJugOriginales: [],
+    // Form jugador / entrenador
+    formJugadorId:     null,
+    formEntrenadorId:  null,
+    _volverAEquipoFormDespues: false,
+    // Cache
+    _todosJugadores:    [],
+    _todosEntrenadores: [],
+    _buscadorItems:     [],
+    _buscadorTipo:      null,
+    _jugadorPendiente:  null,
+    _tipoJugSelec:      'Principal',
+    _formIsDirty:       false,
+    _sesionAutoSaveTimer: null,
+    // Vistas detalle
+    detalleJugadorId:    null,
+    detalleEntrenadorId: null,
+    detalleEquipoId:     null,
   },
 
-  // ── Inicialización ─────────────────────────────────────────────────────────
+  // ── Cache en memoria: cargado una vez al inicio, actualizado tras cada escritura ──
+  cache: {
+    jugadores:           [],
+    entrenadores:        [],
+    equipos:             [],
+    jugadoresEquipos:    [],
+    entrenadoresEquipos: [],
+    horarios:            [],
+    sesiones:            [],
+    temporadas:          [],
+    asistencias:         {},  // sesionId → objeto asistencia (se invalida al guardar)
+    asistJugadores:      [],  // todos los registros de Asist_Jugadores
+    asistEntrenadores:   [],  // todos los registros de Asist_Entrenadores
+
+    getJugadorById(id)     { return this.jugadores.find(function(j)  { return j.ID === id; }) || null; },
+    getEntrenadorById(id)  { return this.entrenadores.find(function(e){ return e.ID === id; }) || null; },
+    getEquipoById(id)      { return this.equipos.find(function(e)     { return e.ID === id; }) || null; },
+
+    getJugadoresByEquipo(equipoId) {
+      var self = this;
+      return this.jugadoresEquipos
+        .filter(function(r) { return r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'); })
+        .map(function(r) { var j = self.getJugadorById(r.ID_Jugador); return j ? Object.assign({}, j, { Tipo: r.Tipo }) : null; })
+        .filter(Boolean);
+    },
+
+    getEntrenadoresByEquipo(equipoId) {
+      var self = this;
+      return this.entrenadoresEquipos
+        .filter(function(r) { return r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'); })
+        .map(function(r) { return self.getEntrenadorById(r.ID_Entrenador); })
+        .filter(Boolean);
+    },
+
+    getHorariosByEquipo(equipoId) {
+      return this.horarios.filter(function(h) { return h.ID_Equipo === equipoId; });
+    },
+
+    getSesionesByEquipo(equipoId) {
+      return this.sesiones
+        .filter(function(s) { return s.ID_Equipo === equipoId; })
+        .sort(function(a, b) { return a.Fecha < b.Fecha ? -1 : 1; });
+    },
+
+    upsert(key, record) {
+      if (!Array.isArray(this[key])) return;
+      var found = false;
+      for (var i = 0; i < this[key].length; i++) {
+        if (this[key][i].ID === record.ID) { this[key][i] = Object.assign({}, this[key][i], record); found = true; break; }
+      }
+      if (!found) this[key].push(record);
+    },
+
+    remove(key, id) {
+      if (!Array.isArray(this[key])) return;
+      this[key] = this[key].filter(function(r) { return r.ID !== id; });
+    },
+
+    // Reemplaza las relaciones de un equipo en cache con el estado actual del formulario
+    _setRelacionesEquipo(equipoId, jugadores, entrenadores) {
+      App.cache.jugadoresEquipos   = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
+      App.cache.entrenadoresEquipos= App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
+      jugadores.forEach(function(j) {
+        App.cache.jugadoresEquipos.push({ ID: 'je_'+j.ID+'_'+equipoId, ID_Equipo: equipoId, ID_Jugador: j.ID, Tipo: j.Tipo, Activo: true });
+      });
+      entrenadores.forEach(function(e) {
+        App.cache.entrenadoresEquipos.push({ ID: 'ee_'+e.ID+'_'+equipoId, ID_Equipo: equipoId, ID_Entrenador: e.ID, Activo: true });
+      });
+    },
+  },
+
   init() {
-    showLoading('Conectando con el servidor…');
-    server('getContextoUsuario')
-      .then(ctx => {
-        if (!ctx.success) { showToast('Error al cargar usuario: ' + ctx.error, 'error'); return; }
-        App.state.usuario  = ctx.entrenador;
-        App.state.esAdmin  = ctx.esAdmin;
-        App.state.equipos  = ctx.equipos || [];
-
-        // Header user badge
-        const nombre = ctx.entrenador
-          ? `${ctx.entrenador.Nombre} ${ctx.entrenador.Apellidos}`
-          : ctx.esAdmin ? 'Admin' : 'Sin perfil';
-        document.getElementById('user-badge').textContent = nombre;
-
-        // Mostrar opciones admin
-        if (ctx.esAdmin) {
-          document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+    _clientLog('init_start', { hasAuthMem: !!App.state.auth });
+    if (!App.state.auth) {
+      var stored = _getStoredAuth();
+      _clientLog('init_read_storage', { hasStored: !!stored });
+      if (stored) {
+        try {
+          App.state.auth = JSON.parse(stored);
+          _clientLog('init_storage_parse_ok', { email: App.state.auth && App.state.auth.email ? App.state.auth.email : null });
+        } catch (e) {
+          App.state.auth = null;
+          _clearStoredAuth();
+          _clientLog('init_storage_parse_error', { error: e.message });
         }
+      }
+    }
 
+    if (!App.state.auth) {
+      _clientLog('init_no_auth_navigate_login', {});
+      hideLoading();
+      App.navigate('login');
+      return;
+    }
+
+    showLoading('Cargando...');
+    server('cargarDatos')
+      .then(function(res) {
         hideLoading();
-        App.navigate('dashboard');
+        if (!res.success) { 
+          _clientLog('init_cargarDatos_fail', { stage: res.stage || null, traceId: res.traceId || null, error: res.error || null });
+          showToast(_formatDiagError(res.error || 'Sesión no válida', res, 'init_cargarDatos'), 'error'); 
+          App.cerrarSesion('init_cargarDatos_fail');
+          return; 
+        }
+        App._applyBootstrapData(res);
+        _clientLog('init_cargarDatos_ok', { traceId: res.traceId || null, currentView: App.state.currentView });
+        
+        if (App.state.currentView === 'login') {
+          _clientLog('init_navigate_equipos_from_login', {});
+          App.navigate('equipos');
+        } else {
+          _clientLog('init_navigate_current', { view: App.state.currentView });
+          App.navigate(App.state.currentView);
+        }
       })
-      .catch(err => { hideLoading(); showToast('Error de conexión', 'error'); console.error(err); });
+      .catch(function(err) { 
+        hideLoading(); 
+        _clientLog('init_cargarDatos_network_error', { error: (err && err.message) || null });
+        showToast(_formatDiagError((err && err.message) || 'Error de conexión', null, 'init_network'), 'error'); 
+        App.cerrarSesion('init_network_error');
+      });
   },
 
-  // ── Router ─────────────────────────────────────────────────────────────────
-  navigate(view, params = {}, pushHistory = true) {
-    if (pushHistory && App.state.currentView !== view) {
+  iniciarSesion() {
+    var email = document.getElementById('login-email').value.trim();
+    var pin = document.getElementById('login-pin').value.trim();
+    _clientLog('login_submit', { email: email || null, pinLen: pin ? String(pin).length : 0 });
+
+    if (!email || !pin) {
+      showToast('Introduce tu email y el PIN', 'error');
+      return;
+    }
+
+    showLoading('Iniciando sesión...');
+    server('iniciarSesion', email, pin)
+      .then(function(res) {
+        hideLoading();
+        if (res && res.success) {
+          _clientLog('login_success', { traceId: res.traceId || null });
+          App.state.auth = { email: email, pin: pin };
+          _setStoredAuth(JSON.stringify(App.state.auth));
+          App._applyBootstrapData(res);
+          showToast('Sesión iniciada correctamente', 'success');
+          
+          document.getElementById('login-email').value = '';
+          document.getElementById('login-pin').value = '';
+
+          _clientLog('login_navigate_equipos', {});
+          App.navigate('equipos');
+        } else {
+          _clientLog('login_fail', { stage: res && res.stage ? res.stage : null, traceId: res && res.traceId ? res.traceId : null, error: res && res.error ? res.error : null });
+          showToast(_formatDiagError((res && res.error) || 'Credenciales incorrectas', res, 'login_auth'), 'error');
+        }
+      })
+      .catch(function(err) {
+        hideLoading();
+        _clientLog('login_network_error', { error: (err && err.message) || null });
+        showToast(_formatDiagError((err && err.message) || 'Error al conectar con el servidor', null, 'login_network'), 'error');
+      });
+  },
+
+  confirmarCerrarSesion() {
+    App.openModal('Cerrar Sesión',
+      '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
+      '<div class="modal-confirm-icon">&#x26A0;</div>' +
+      '<div class="modal-confirm-msg">¿Seguro que quieres cerrar sesión?<br><br>Tendrás que introducir tu PIN de nuevo para acceder.</div>' +
+      '<div style="display:flex;gap:8px;margin-top:20px">' +
+      '<button class="btn btn-secondary" style="flex:1" onclick="App.closeModal()">Cancelar</button>' +
+      '<button class="btn btn-destructive" style="flex:1" onclick="App.closeModal();App.cerrarSesion()">Cerrar Sesión</button>' +
+      '</div></div>'
+    );
+  },
+
+  cerrarSesion(reason) {
+    _clientLog('cerrarSesion', { reason: reason || 'manual_or_unknown', view: App.state.currentView || null });
+    App.state.auth = null;
+    _clearStoredAuth();
+    App.state.usuario = null;
+    App.state.esAdmin = false;
+    App.state.equipos = [];
+    document.getElementById('user-badge').textContent = '...';
+    
+    // Limpiar caché
+    App.cache.jugadores           = [];
+    App.cache.entrenadores        = [];
+    App.cache.equipos             = [];
+    App.cache.jugadoresEquipos    = [];
+    App.cache.entrenadoresEquipos = [];
+    App.cache.horarios            = [];
+    App.cache.sesiones            = [];
+    App.cache.temporadas          = [];
+    App.cache.asistJugadores      = [];
+    App.cache.asistEntrenadores   = [];
+    App.cache.asistencias         = {};
+
+    App.navigate('login');
+  },
+
+  _applyBootstrapData(res) {
+    App.cache.jugadores           = res.jugadores           || [];
+    App.cache.entrenadores        = res.entrenadores        || [];
+    App.cache.equipos             = res.equipos             || [];
+    App.cache.jugadoresEquipos    = res.jugadoresEquipos    || [];
+    App.cache.entrenadoresEquipos = res.entrenadoresEquipos || [];
+    App.cache.horarios            = res.horarios            || [];
+    App.cache.sesiones            = res.sesiones            || [];
+    App.cache.temporadas          = res.temporadas          || [];
+    App.cache.asistJugadores      = res.asistJugadores      || [];
+    App.cache.asistEntrenadores   = res.asistEntrenadores   || [];
+
+    var ctx = res.contexto || {};
+    App.state.usuario = ctx.entrenador || null;
+    App.state.esAdmin = !!ctx.esAdmin;
+    App.state.equipos = ctx.equipos || [];
+
+    var nombre = ctx.entrenador
+      ? (ctx.entrenador.Nombre + ' ' + ctx.entrenador.Apellidos)
+      : (ctx.esAdmin ? 'Admin' : '-');
+    document.getElementById('user-badge').textContent = nombre;
+  },
+
+  navigate(view, params, push) {
+    if (App.state.currentView === 'sesion' && view !== 'sesion') App.views.sesion._stopAutoSave();
+    if (push === undefined) push = true;
+    if (view === 'login') {
+      App.state.viewHistory = [];
+    }
+    if (push && App.state.currentView !== view && view !== 'login') {
       App.state.viewHistory.push(App.state.currentView);
     }
     App.state.currentView = view;
 
-    // Activar/desactivar vistas
-    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-    document.getElementById(`view-${view}`)?.classList.add('active');
+    document.querySelectorAll('.view').forEach(function(el) { el.classList.remove('active'); });
+    var el = document.getElementById('view-' + view);
+    if (el) el.classList.add('active');
 
-    // Nav inferior
-    document.querySelectorAll('.nav-item').forEach(el => {
-      el.classList.toggle('active', el.dataset.view === view);
+    // Ocultar header y nav inferior si es la pantalla de Login
+    var isLogin = (view === 'login');
+    document.getElementById('app-header').classList.toggle('hidden', isLogin);
+    document.getElementById('bottom-nav').classList.toggle('hidden', isLogin);
+
+    document.querySelectorAll('.nav-tab').forEach(function(tab) {
+      tab.classList.toggle('active', tab.dataset.view === view);
     });
 
-    // Botón back: visible si hay historial y no es vista principal
-    const mainViews = ['dashboard', 'historico', 'informes', 'jugadores', 'equipos', 'entrenadores'];
-    const showBack  = !mainViews.includes(view) && App.state.viewHistory.length > 0;
+    var mainViews = ['equipos', 'gestion'];
+    var showBack = !mainViews.includes(view) && App.state.viewHistory.length > 0;
     document.getElementById('btn-back').classList.toggle('visible', showBack);
 
-    // FAB contextual
-    App._updateFab(view);
+    var titulos = {
+      'equipos':           'CB Baeza',
+      'gestion':           'Gestion',
+      'sesiones':          App.state._equipoNombre || 'Equipo',
+      'sesion':            'Asistencia',
+      'equipos-admin':     'Equipos',
+      'equipo-form':       App.state.formEquipoId ? 'Editar equipo' : 'Nuevo equipo',
+      'jugadores-admin':   'Jugadores',
+      'jugador-form':      App.state.formJugadorId ? 'Editar jugador' : 'Nuevo jugador',
+      'entrenadores-admin':'Entrenadores',
+      'entrenador-form':   App.state.formEntrenadorId ? 'Editar entrenador' : 'Nuevo entrenador',
+      'historial-equipo':  'Historial',
+      'jugador-detalle':   'Perfil',
+      'entrenador-detalle':'Perfil',
+      'equipo-detalle':    'Equipo',
+    };
+    document.getElementById('header-title').textContent = titulos[view] || 'CB Baeza';
 
-    // Renderizar vista
-    const renderFn = App.views[view]?.render;
-    if (renderFn) renderFn(params);
+    var fabViews = {'equipos-admin':true,'jugadores-admin':true,'entrenadores-admin':true};
+    var fab = document.getElementById('fab-btn');
+    if (fabViews[view]) fab.classList.remove('hidden');
+    else fab.classList.add('hidden');
+
+    var _editViews = {'jugador-detalle':true,'entrenador-detalle':true,'equipo-detalle':true};
+    var _btnEdit   = document.getElementById('btn-edit');
+    var _userBadge = document.getElementById('user-badge');
+    if (_editViews[view]) { _btnEdit.classList.remove('hidden'); _userBadge.classList.add('hidden'); }
+    else                  { _btnEdit.classList.add('hidden');    _userBadge.classList.remove('hidden'); }
+
+    if (App.views[view] && App.views[view].render) App.views[view].render(params || {});
   },
 
   goBack() {
-    const prev = App.state.viewHistory.pop();
+    var _dirtyViews = ['equipo-form', 'jugador-form', 'entrenador-form', 'sesion'];
+    if (_dirtyViews.indexOf(App.state.currentView) >= 0 && App.state._formIsDirty) {
+      App.openModal('Cambios sin guardar',
+        '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
+        '<div class="modal-confirm-icon">&#x26A0;</div>' +
+        '<div class="modal-confirm-msg">¿Salir sin guardar?<br><br>Los cambios realizados se perderán.</div>' +
+        '<div style="display:flex;gap:8px;margin-top:20px">' +
+        '<button class="btn btn-secondary" style="flex:1" onclick="App.closeModal()">Seguir editando</button>' +
+        '<button class="btn btn-destructive" style="flex:1" onclick="App.state._formIsDirty=false;App.closeModal();App._goBackReal()">Salir sin guardar</button>' +
+        '</div></div>'
+      );
+      return;
+    }
+    App._goBackReal();
+  },
+
+  _goBackReal() {
+    var prev = App.state.viewHistory.pop();
     if (prev) App.navigate(prev, {}, false);
   },
 
-  _updateFab(view) {
-    const fab = document.getElementById('fab-btn');
-    const fabViews = {
-      jugadores:   { icon: '+', title: 'Nuevo jugador' },
-      entrenadores:{ icon: '+', title: 'Nuevo entrenador' },
-      equipos:     { icon: '+', title: 'Nuevo equipo' },
-    };
-    if (App.state.esAdmin && fabViews[view]) {
-      fab.textContent = fabViews[view].icon;
-      fab.title = fabViews[view].title;
-      fab.classList.remove('hidden');
-    } else {
-      fab.classList.add('hidden');
-    }
+  editarDetalle() {
+    var v = App.state.currentView;
+    if      (v === 'jugador-detalle')    App.views['jugador-form'].cargar(App.state.detalleJugadorId);
+    else if (v === 'entrenador-detalle') App.views['entrenador-form'].cargar(App.state.detalleEntrenadorId);
+    else if (v === 'equipo-detalle')     App.views['equipo-form'].cargar(App.state.detalleEquipoId);
   },
 
   fabAction() {
-    const fns = {
-      jugadores:    () => App.views.jugadores.abrirModal(),
-      entrenadores: () => App.views.entrenadores.abrirModal(),
-      equipos:      () => App.views.equipos.abrirModal(),
+    var acciones = {
+      // Para equipo nuevo: resetear estado ANTES de navegar para que render()
+      // no mezcle datos de una edición anterior.
+      'equipos-admin':      function() { App.state.formEquipoId = null; App.views['equipo-form']._reset(); App.navigate('equipo-form'); },
+      'jugadores-admin':    function() { App.state.formJugadorId = null; App.navigate('jugador-form'); },
+      'entrenadores-admin': function() { App.state.formEntrenadorId = null; App.navigate('entrenador-form'); },
     };
-    fns[App.state.currentView]?.();
+    if (acciones[App.state.currentView]) acciones[App.state.currentView]();
   },
 
-  // ── Modal ──────────────────────────────────────────────────────────────────
   openModal(title, bodyHtml) {
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-body').innerHTML = bodyHtml;
-    document.getElementById('modal-overlay').classList.remove('hidden');
+    document.getElementById('modal-overlay').classList.add('open');
   },
 
   closeModal(e) {
     if (!e || e.target === document.getElementById('modal-overlay')) {
-      document.getElementById('modal-overlay').classList.add('hidden');
+      document.getElementById('modal-overlay').classList.remove('open');
     }
   },
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // VISTAS
-  // ══════════════════════════════════════════════════════════════════════════
+  // ==============================================================
   views: {
 
-    // ── DASHBOARD ────────────────────────────────────────────────────────────
-    dashboard: {
-      render() {
-        const container = document.getElementById('dashboard-equipos');
-        const equipos   = App.state.equipos;
-
+    // -- Tab Equipos ----------------------------------------
+    equipos: {
+      render: function() {
+        var lista = document.getElementById('equipos-lista');
+        // Admin: lista completa y fresca del caché (incluye equipos recién creados)
+        // Entrenador: solo los equipos asignados (del contexto inicial del servidor)
+        var equipos = App.state.esAdmin
+          ? App.cache.equipos
+          : App.state.equipos;
         if (!equipos.length) {
-          container.innerHTML = `<div class="empty-state">
-            <div class="empty-icon">🏀</div>
-            <p>No tienes equipos asignados.</p>
-            ${App.state.esAdmin ? '<p class="mt-8"><small>Ve a <strong>Gestión</strong> para crear equipos.</small></p>' : ''}
-          </div>`;
+          lista.innerHTML = '<div class="empty-state"><div class="ei">&#x1F3C0;</div><p>No tienes equipos asignados.</p></div>';
           return;
         }
-
-        container.innerHTML = equipos.map(eq => `
-          <div class="equipo-card" onclick="App.navigate('equipo', { id: '${eq.ID}' })">
-            <div class="nombre">${eq.Nombre}</div>
-            <div class="meta">${eq.Categoria} · ${eq.Modalidad}</div>
-          </div>
-        `).join('');
-      }
-    },
-
-    // ── SESIÓN ───────────────────────────────────────────────────────────────
-    sesion: {
-      render({ id }) {
-        if (!id) return;
-        showLoading('Cargando sesión…');
-        server('getAsistenciaSesion', id)
-          .then(res => {
-            hideLoading();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            App.state.sesionActual = res;
-            App.views.sesion._renderSesion(res);
-          })
-          .catch(() => { hideLoading(); showToast('Error al cargar la sesión', 'error'); });
+        lista.innerHTML = equipos.map(function(eq) {
+          return '<div class="equipo-card" onclick="App.views.equipos.abrirEquipo(\'' + eq.ID + '\',\'' + _esc(eq.Nombre) + '\')">' +
+            '<div class="eq-icon">&#x1F3C0;</div>' +
+            '<div><div class="eq-nombre">' + eq.Nombre + '</div>' +
+            '<div class="eq-meta">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div></div>' +
+            '<div class="eq-arrow">&#x203A;</div></div>';
+        }).join('');
       },
-
-      _renderSesion({ sesion, jugadores, entrenadores }) {
-        document.getElementById('header-title').textContent =
-          App.state.equipoActual?.Nombre || 'Sesión';
-
-        // Cabecera
-        const fecha = App.formatFecha(sesion.Fecha);
-        document.getElementById('sesion-header-info').innerHTML = `
-          <h2>${fecha.diaNombre}, ${fecha.dia} de ${fecha.mesNombre}</h2>
-          <p>${sesion.HoraInicio}–${sesion.HoraFin}
-             ${sesion.EsExtra === true || sesion.EsExtra === 'TRUE'
-               ? ' · <span class="sesion-extra-badge">Extra</span>' : ''}</p>
-          ${sesion.Notas ? `<p style="margin-top:6px;font-size:.82rem;opacity:.85">${sesion.Notas}</p>` : ''}`;
-
-        // Inicializar estado pendiente
-        App.state.asistenciaPendiente = { jugadores: [], entrenadores: [] };
-
-        // Lista de jugadores
-        const listJug = document.getElementById('sesion-jugadores-lista');
-        if (!jugadores.length) {
-          listJug.innerHTML = `<div class="empty-state"><p>No hay jugadores asignados a este equipo.</p></div>`;
-        } else {
-          listJug.innerHTML = jugadores.map(({ jugador, estado, esInvitado }) => `
-            <div class="jugador-card ${estado ? 'estado-' + estado : ''}"
-                 data-jugador-id="${jugador.ID}"
-                 data-estado="${estado || ''}"
-                 data-es-invitado="${esInvitado}"
-                 onclick="App.views.sesion.toggleEstado(this)">
-              <div class="jugador-dorsal">${jugador.Dorsal || '–'}</div>
-              <div style="flex:1">
-                <div class="jugador-nombre">${jugador.Apellidos}, ${jugador.Nombre}</div>
-                <div class="jugador-sub">
-                  ${jugador.Tipo ? `<span class="badge badge-${(jugador.Tipo||'').toLowerCase()}">${jugador.Tipo}</span>` : ''}
-                </div>
-              </div>
-              <div class="estado-badge">${App.views.sesion._estadoIcono(estado)}</div>
-            </div>`).join('');
-        }
-
-        // Lista de entrenadores
-        const listEnt = document.getElementById('sesion-entrenadores-lista');
-        if (!entrenadores.length) {
-          listEnt.innerHTML = `<div class="empty-state"><p>No hay entrenadores asignados.</p></div>`;
-        } else {
-          listEnt.innerHTML = entrenadores.map(({ entrenador, asistio, esInvitado }) => `
-            <div class="entrenador-asist-card" data-entrenador-id="${entrenador.ID}" data-es-invitado="${esInvitado}">
-              <div style="flex:1">
-                <div class="nombre-ent">${entrenador.Apellidos}, ${entrenador.Nombre}</div>
-                ${esInvitado ? '<span class="badge badge-invitado">Invitado</span>' : ''}
-              </div>
-              <div class="toggle-asist ${asistio === true ? 'on' : ''}"
-                   onclick="this.classList.toggle('on')"
-                   title="Asistencia entrenador"></div>
-            </div>`).join('');
-        }
-      },
-
-      toggleEstado(card) {
-        const ciclo = { '': 'P', 'P': 'A', 'A': 'R', 'R': 'P' };
-        const actual   = card.dataset.estado || '';
-        const siguiente = ciclo[actual];
-        card.dataset.estado = siguiente;
-        card.className = `jugador-card ${siguiente ? 'estado-' + siguiente : ''}`;
-        card.querySelector('.estado-badge').textContent = App.views.sesion._estadoIcono(siguiente);
-      },
-
-      _estadoIcono(estado) {
-        return estado === 'P' ? '✓' : estado === 'A' ? '✗' : estado === 'R' ? '⏱' : '?';
-      },
-
-      guardar() {
-        const sesionId = App.state.sesionActual?.sesion?.ID;
-        if (!sesionId) return;
-
-        // Recoger estados de jugadores
-        const jugadores = [...document.querySelectorAll('#sesion-jugadores-lista .jugador-card')]
-          .filter(card => card.dataset.estado)
-          .map(card => ({
-            jugadorId:  card.dataset.jugadorId,
-            estado:     card.dataset.estado,
-            esInvitado: card.dataset.esInvitado === 'true',
-          }));
-
-        // Recoger estados de entrenadores
-        const entrenadores = [...document.querySelectorAll('#sesion-entrenadores-lista .entrenador-asist-card')]
-          .map(card => ({
-            entrenadorId: card.dataset.entrenadorId,
-            asistio:      card.querySelector('.toggle-asist').classList.contains('on'),
-            esInvitado:   card.dataset.esInvitado === 'true',
-          }));
-
-        showLoading('Guardando asistencia…');
-        server('guardarAsistenciaCompleta', sesionId, { jugadores, entrenadores })
-          .then(res => {
-            hideLoading();
-            if (res.success) {
-              showToast(`Guardado: ${res.jugadoresGuardados} jugadores, ${res.entrenadoresGuardados} entrenadores`, 'success');
-            } else {
-              showToast(res.error || 'Error al guardar', 'error');
-            }
-          })
-          .catch(() => { hideLoading(); showToast('Error de conexión', 'error'); });
-      },
-
-      abrirBuscadorJugador() {
-        showLoading('Cargando jugadores…');
-        server('getJugadores')
-          .then(res => {
-            hideLoading();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            // Excluir los ya presentes
-            const idsPresentes = new Set(
-              [...document.querySelectorAll('#sesion-jugadores-lista .jugador-card')]
-                .map(c => c.dataset.jugadorId)
-            );
-            const jugadores = res.jugadores.filter(j => !idsPresentes.has(j.ID));
-            App.views.sesion._modalBuscador(
-              'Añadir jugador invitado', jugadores,
-              j => `${j.Apellidos}, ${j.Nombre}`,
-              j => `Dorsal ${j.Dorsal || '–'}`,
-              j => App.views.sesion._añadirJugadorInvitado(j)
-            );
-          })
-          .catch(() => { hideLoading(); showToast('Error al cargar jugadores', 'error'); });
-      },
-
-      abrirBuscadorEntrenador() {
-        showLoading('Cargando entrenadores…');
-        server('getEntrenadores')
-          .then(res => {
-            hideLoading();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            const idsPresentes = new Set(
-              [...document.querySelectorAll('#sesion-entrenadores-lista .entrenador-asist-card')]
-                .map(c => c.dataset.entrenadorId)
-            );
-            const entrenadores = res.entrenadores.filter(e => !idsPresentes.has(e.ID));
-            App.views.sesion._modalBuscador(
-              'Añadir entrenador invitado', entrenadores,
-              e => `${e.Apellidos}, ${e.Nombre}`,
-              e => e.Email,
-              e => App.views.sesion._añadirEntrenadorInvitado(e)
-            );
-          })
-          .catch(() => { hideLoading(); showToast('Error al cargar entrenadores', 'error'); });
-      },
-
-      _modalBuscador(title, items, fnNombre, fnSub, fnSelect) {
-        const html = `
-          <input type="search" id="modal-search" placeholder="Buscar…"
-                 oninput="App.views.sesion._filtrarBuscador(this.value)"
-                 style="width:100%;padding:10px;border:1.5px solid #e0e0e0;border-radius:8px;margin-bottom:8px">
-          <div class="search-list" id="modal-search-list">
-            ${items.map(item => `
-              <div class="search-item" onclick='App.views.sesion._selectCallback(${JSON.stringify(item)})'>
-                <div>
-                  <div class="search-item-nombre">${fnNombre(item)}</div>
-                  <div class="search-item-sub">${fnSub(item)}</div>
-                </div>
-              </div>`).join('')}
-          </div>`;
-        App._modalSelectCallback = fnSelect;
-        App._modalItems = items;
-        App._modalFnNombre = fnNombre;
-        App._modalFnSub    = fnSub;
-        App.openModal(title, html);
-      },
-
-      _filtrarBuscador(q) {
-        const items = App._modalItems || [];
-        const lower = q.toLowerCase();
-        const filtered = items.filter(i =>
-          (App._modalFnNombre(i) + App._modalFnSub(i)).toLowerCase().includes(lower)
-        );
-        document.getElementById('modal-search-list').innerHTML = filtered.map(item => `
-          <div class="search-item" onclick='App.views.sesion._selectCallback(${JSON.stringify(item)})'>
-            <div>
-              <div class="search-item-nombre">${App._modalFnNombre(item)}</div>
-              <div class="search-item-sub">${App._modalFnSub(item)}</div>
-            </div>
-          </div>`).join('');
-      },
-
-      _selectCallback(item) {
-        App.closeModal();
-        App._modalSelectCallback?.(item);
-      },
-
-      _añadirJugadorInvitado(jugador) {
-        const lista = document.getElementById('sesion-jugadores-lista');
-        const card  = document.createElement('div');
-        card.className = 'jugador-card';
-        card.dataset.jugadorId  = jugador.ID;
-        card.dataset.estado     = '';
-        card.dataset.esInvitado = 'true';
-        card.onclick = function() { App.views.sesion.toggleEstado(this); };
-        card.innerHTML = `
-          <div class="jugador-dorsal">${jugador.Dorsal || '–'}</div>
-          <div style="flex:1">
-            <div class="jugador-nombre">${jugador.Apellidos}, ${jugador.Nombre}</div>
-            <div class="jugador-sub"><span class="badge badge-invitado">Invitado</span></div>
-          </div>
-          <div class="estado-badge">?</div>`;
-        lista.appendChild(card);
-        showToast(`${jugador.Nombre} añadido como invitado`, 'success');
-      },
-
-      _añadirEntrenadorInvitado(entrenador) {
-        const lista = document.getElementById('sesion-entrenadores-lista');
-        const card  = document.createElement('div');
-        card.className = 'entrenador-asist-card';
-        card.dataset.entrenadorId = entrenador.ID;
-        card.dataset.esInvitado   = 'true';
-        card.innerHTML = `
-          <div style="flex:1">
-            <div class="nombre-ent">${entrenador.Apellidos}, ${entrenador.Nombre}</div>
-            <span class="badge badge-invitado">Invitado</span>
-          </div>
-          <div class="toggle-asist" onclick="this.classList.toggle('on')"></div>`;
-        lista.appendChild(card);
-        showToast(`${entrenador.Nombre} añadido como invitado`, 'success');
+      abrirEquipo: function(id, nombre) {
+        App.state.equipoSesionesId = id;
+        App.state._equipoNombre = nombre;
+        App.navigate('sesiones');
       },
     },
 
-    // ── EQUIPO (detalle) ─────────────────────────────────────────────────────
-    equipo: {
-      render({ id }) {
+    // -- Sesiones de equipo ---------------------------------
+    sesiones: {
+      render: function() {
+        var id = App.state.equipoSesionesId;
         if (!id) return;
-        showLoading('Cargando equipo…');
-        server('getEquipoById', id)
-          .then(res => {
-            hideLoading();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            App.state.equipoActual = res.equipo;
-            document.getElementById('header-title').textContent = res.equipo.Nombre;
-            App.views.equipo._renderEquipo(res.equipo);
-          })
-          .catch(() => { hideLoading(); showToast('Error al cargar el equipo', 'error'); });
+        document.getElementById('sesiones-equipo-hdr').innerHTML =
+          '<h2>' + (App.state._equipoNombre || 'Equipo') + '</h2>';
+        App.views.sesiones._renderListas(App.cache.getSesionesByEquipo(id));
       },
 
-      _renderEquipo(equipo) {
-        document.getElementById('equipo-header-info').innerHTML = `
-          <div style="font-size:1rem;font-weight:700">${equipo.Nombre}</div>
-          <div style="font-size:.82rem;opacity:.85;margin-top:4px">${equipo.Categoria} · ${equipo.Modalidad}</div>
-          ${equipo.horarios?.length ? `
-            <div style="margin-top:8px;font-size:.8rem;opacity:.8">
-              🕐 ${equipo.horarios.map(h =>
-                `${App.formatDia(h.DiaSemana)} ${h.HoraInicio}–${h.HoraFin}`
-              ).join(' · ')}
-            </div>` : ''}`;
+      _renderListas: function(sesiones) {
+        var hoy = _hoy();
+        var prox        = sesiones.filter(function(s) { return s.Fecha >= hoy; }).reverse();
+        var todasPasadas = sesiones.filter(function(s) { return s.Fecha < hoy; });
+        var pasadas      = todasPasadas.slice(-10).reverse();
 
-        // Sesiones
-        App.views.equipo._cargarSesiones(equipo.ID);
-
-        // Jugadores
-        const countEl = document.getElementById('equipo-jugadores-count');
-        countEl.textContent = equipo.jugadores?.length ? `(${equipo.jugadores.length})` : '';
-        document.getElementById('equipo-jugadores-lista').innerHTML =
-          (equipo.jugadores || []).map(j => `
-            <div class="card card-row">
-              <div>
-                <div class="card-title">${j.Apellidos}, ${j.Nombre}</div>
-                <div class="card-sub">
-                  Dorsal ${j.Dorsal || '–'}
-                  <span class="badge badge-${(j.Tipo||'').toLowerCase()}" style="margin-left:4px">${j.Tipo||''}</span>
-                </div>
-              </div>
-            </div>`).join('') ||
-          '<div class="empty-state"><p>Sin jugadores asignados.</p></div>';
-
-        // Entrenadores
-        document.getElementById('equipo-entrenadores-lista').innerHTML =
-          (equipo.entrenadores || []).map(e => `
-            <div class="card card-row">
-              <div>
-                <div class="card-title">${e.Apellidos}, ${e.Nombre}</div>
-                <div class="card-sub">${e.Email}</div>
-              </div>
-            </div>`).join('') ||
-          '<div class="empty-state"><p>Sin entrenadores asignados.</p></div>';
-      },
-
-      _cargarSesiones(equipoId) {
-        server('getSesionesByEquipo', equipoId)
-          .then(res => {
-            if (!res.success) return;
-            const proximas = (res.sesiones || [])
-              .filter(s => s.Fecha >= App.hoy())
-              .slice(0, 5);
-            const container = document.getElementById('equipo-sesiones');
-            if (!proximas.length) {
-              container.innerHTML = '<div class="empty-state"><p>No hay sesiones próximas. Genera la semana o añade una sesión extra.</p></div>';
-              return;
+        // Pre-computar stats desde caché para sesiones ya guardadas
+        sesiones.forEach(function(s) {
+          var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE';
+          if (guardada && !s._statsJug) {
+            var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === s.ID; });
+            if (rs.length) {
+              s._statsJug = {
+                P: rs.filter(function(r) { return r.Estado === 'P'; }).length,
+                A: rs.filter(function(r) { return r.Estado === 'A'; }).length,
+                R: rs.filter(function(r) { return r.Estado === 'R'; }).length
+              };
             }
-            container.innerHTML = proximas.map(s => App.views.equipo._sesionCard(s)).join('');
+          }
+        });
+
+        function htmlSesion(s) {
+          // Tarjeta placeholder mientras se crea la sesión en el servidor
+          if (s._loading) {
+            var fl = _fmtFecha(s.Fecha);
+            return '<div class="sesion-card" style="opacity:0.5;pointer-events:none">' +
+              '<div class="sc-fecha"><div class="dia">' + fl.d + '</div><div class="mes">' + fl.m + '</div></div>' +
+              '<div class="sc-info" style="flex:1"><div class="dia-n">' + fl.dn + '</div>' +
+              '<div class="hora">' + s.HoraInicio + '&ndash;' + s.HoraFin + '</div></div>' +
+              '<span class="sc-status-badge" style="background:var(--texto-sec);animation:pulse 1.2s ease-in-out infinite alternate">Creando\u2026</span>' +
+              '</div>';
+          }
+          var f = _fmtFecha(s.Fecha);
+          var extra = (s.EsExtra === true || s.EsExtra === 'TRUE') ? '<span class="badge-extra">Extra</span>' : '';
+          var badgeHtml = '';
+          var statsHtml = '';
+          var sinRegistrar = '';
+          var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada;
+          if (guardada) {
+            badgeHtml = '<span class="sc-status-badge registrada">Registrada</span>';
+            if (s._statsJug) {
+              statsHtml = '<div class="sc-stats">&#10003;' + s._statsJug.P + ' &middot; &#10007;' + s._statsJug.A +
+                (s._statsJug.R ? ' &middot; &#8987;' + s._statsJug.R : '') + '</div>';
+            }
+          } else if (s.Fecha < hoy) {
+            badgeHtml = '<span class="sc-status-badge pendiente">!</span>';
+            sinRegistrar = ' sin-registrar';
+          }
+          return '<div class="sesion-card' + sinRegistrar + '" onclick="App.views.sesiones.abrirSesion(\'' + s.ID + '\')">' +
+            '<div class="sc-fecha"><div class="dia">' + f.d + '</div><div class="mes">' + f.m + '</div></div>' +
+            '<div class="sc-info" style="flex:1"><div class="dia-n">' + f.dn + '</div>' +
+            '<div class="hora">' + s.HoraInicio + '&ndash;' + s.HoraFin + '</div>' +
+            statsHtml + '</div>' +
+            badgeHtml + extra + '</div>';
+        }
+
+        document.getElementById('sesiones-proximas').innerHTML = prox.length
+          ? prox.map(htmlSesion).join('')
+          : '<div class="empty-state" style="padding:24px"><p>Sin sesiones proximas. Pulsa &quot;+ Semana&quot;.</p></div>';
+
+        var pasadasHtml = pasadas.length
+          ? pasadas.map(htmlSesion).join('')
+          : '<div style="padding:12px 16px;font-size:.8rem;color:var(--texto-sec)">Sin sesiones anteriores</div>';
+        if (todasPasadas.length > 10) {
+          pasadasHtml += '<button class="btn btn-secondary btn-full btn-sm" style="margin:12px 16px;width:calc(100% - 32px)" onclick="App.navigate(\'historial-equipo\')">Ver historial completo \u2192</button>';
+        }
+        document.getElementById('sesiones-pasadas').innerHTML = pasadasHtml;
+      },
+
+      abrirSesion: function(sesionId) {
+        App.state.sesionId = sesionId;
+        App.navigate('sesion');
+      },
+
+      generarSemana: function() {
+        var id = App.state.equipoSesionesId;
+        var horarios = App.cache.getHorariosByEquipo(id);
+        if (!horarios.length) { showToast('El equipo no tiene horario configurado', 'error'); return; }
+
+        // Calcular lunes de la semana actual (local, mismo criterio que _hoy())
+        var hoyDate = new Date();
+        var dow = hoyDate.getDay(); // 0=Dom, 1=Lun … 6=Sab
+        var diffToLunes = (dow === 0) ? -6 : 1 - dow;
+        var lunesDate = new Date(hoyDate.getFullYear(), hoyDate.getMonth(), hoyDate.getDate() + diffToLunes);
+
+        // Añadir placeholders para cada entrada del horario
+        var tempIds = [];
+        horarios.forEach(function(h) {
+          var sesDate = new Date(lunesDate.getFullYear(), lunesDate.getMonth(), lunesDate.getDate() + Number(h.DiaSemana) - 1);
+          var fechaStr = sesDate.getFullYear() + '-' + String(sesDate.getMonth()+1).padStart(2,'0') + '-' + String(sesDate.getDate()).padStart(2,'0');
+          var yaExiste = App.cache.sesiones.some(function(s) { return s.ID_Equipo === id && s.Fecha === fechaStr && s.HoraInicio === h.HoraInicio; });
+          if (!yaExiste) {
+            var tempId = '__tmp_sem_' + h.DiaSemana;
+            tempIds.push(tempId);
+            App.cache.sesiones.push({ ID: tempId, ID_Equipo: id, Fecha: fechaStr, HoraInicio: h.HoraInicio, HoraFin: h.HoraFin, EsExtra: false, _loading: true });
+          }
+        });
+        App.views.sesiones.render();
+
+        server('generarSesionesSemana', id)
+          .then(function(res) {
+            App.cache.sesiones = App.cache.sesiones.filter(function(s) { return tempIds.indexOf(s.ID) < 0; });
+            if (!res.success) { showToast(res.error, 'error'); App.views.sesiones.render(); return; }
+            var creadas = res.sesiones && res.sesiones.creadas ? res.sesiones.creadas : [];
+            creadas.forEach(function(s) { App.cache.upsert('sesiones', s); });
+            showToast('Creadas ' + creadas.length + ' sesiones', 'success');
+            App.views.sesiones.render();
+          })
+          .catch(function() {
+            App.cache.sesiones = App.cache.sesiones.filter(function(s) { return tempIds.indexOf(s.ID) < 0; });
+            showToast('Error al generar sesiones', 'error');
+            App.views.sesiones.render();
           });
       },
 
-      _sesionCard(sesion) {
-        const f = App.formatFecha(sesion.Fecha);
-        return `<div class="sesion-card" onclick="App.navigate('sesion', { id: '${sesion.ID}' })">
-          <div class="sesion-fecha">
-            <div class="dia">${f.dia}</div>
-            <div class="mes">${f.mes}</div>
-          </div>
-          <div class="sesion-info">
-            <div style="font-weight:700">${f.diaNombre}</div>
-            <div class="hora">${sesion.HoraInicio}–${sesion.HoraFin}</div>
-          </div>
-          ${sesion.EsExtra === true || sesion.EsExtra === 'TRUE'
-            ? '<span class="sesion-extra-badge">Extra</span>' : ''}
-        </div>`;
+      abrirExtra: function() {
+        App.openModal('Nueva sesion extra',
+          '<div style="padding:16px">' +
+          '<div class="form-group"><label>Fecha</label><input type="date" id="ext-fecha" value="' + _hoy() + '"></div>' +
+          '<div class="form-row">' +
+          '<div class="form-group"><label>Inicio</label><input type="time" id="ext-inicio" value="18:00"></div>' +
+          '<div class="form-group"><label>Fin</label><input type="time" id="ext-fin" value="19:30"></div>' +
+          '</div>' +
+          '<div class="form-group"><label>Notas</label><input type="text" id="ext-notas" placeholder="Opcional..."></div>' +
+          '<div style="display:flex;gap:8px;margin-top:8px">' +
+          '<button class="btn btn-secondary" style="flex:1" onclick="App.closeModal()">Cancelar</button>' +
+          '<button class="btn btn-primary" style="flex:1" onclick="App.views.sesiones._guardarExtra()">Crear</button>' +
+          '</div></div>');
       },
 
-      generarSemana() {
-        const id = App.state.equipoActual?.ID;
-        if (!id) return;
-        showLoading('Generando sesiones…');
-        server('generarSesionesSemana', id)
-          .then(res => {
-            hideLoading();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            showToast(`Creadas ${res.sesiones.creadas.length} sesiones (${res.sesiones.existentes} ya existían)`, 'success');
-            App.views.equipo._cargarSesiones(id);
-          })
-          .catch(() => { hideLoading(); showToast('Error al generar sesiones', 'error'); });
-      },
-
-      abrirModalSesionExtra() {
-        const id = App.state.equipoActual?.ID;
-        App.openModal('Nueva sesión extra', `
-          <div class="form-group"><label>Fecha</label>
-            <input type="date" id="ext-fecha" value="${App.hoy()}"></div>
-          <div class="flex gap-8">
-            <div class="form-group" style="flex:1"><label>Hora inicio</label>
-              <input type="time" id="ext-inicio" value="18:00"></div>
-            <div class="form-group" style="flex:1"><label>Hora fin</label>
-              <input type="time" id="ext-fin" value="19:30"></div>
-          </div>
-          <div class="form-group"><label>Notas (opcional)</label>
-            <input type="text" id="ext-notas" placeholder="Ej. Partido amistoso…"></div>
-          <div class="modal-actions">
-            <button class="btn btn-secondary" onclick="App.closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="App.views.equipo._guardarSesionExtra('${id}')">Crear sesión</button>
-          </div>`);
-      },
-
-      _guardarSesionExtra(equipoId) {
-        const datos = {
+      _guardarExtra: function() {
+        var datos = {
           Fecha:      document.getElementById('ext-fecha').value,
           HoraInicio: document.getElementById('ext-inicio').value,
           HoraFin:    document.getElementById('ext-fin').value,
@@ -517,84 +556,864 @@ const App = {
           showToast('Fecha y horas son obligatorias', 'error'); return;
         }
         App.closeModal();
-        showLoading('Creando sesión…');
-        server('crearSesionExtra', equipoId, datos)
-          .then(res => {
-            hideLoading();
-            if (res.success) { showToast('Sesión extra creada', 'success'); App.views.equipo._cargarSesiones(equipoId); }
-            else showToast(res.error, 'error');
-          })
-          .catch(() => { hideLoading(); showToast('Error al crear la sesión', 'error'); });
+
+        // Añadir tarjeta placeholder al listado inmediatamente
+        var tempId = '__tmp_' + Date.now();
+        App.cache.sesiones.push({
+          ID: tempId,
+          ID_Equipo: App.state.equipoSesionesId,
+          Fecha: datos.Fecha,
+          HoraInicio: datos.HoraInicio,
+          HoraFin: datos.HoraFin,
+          Notas: datos.Notas || '',
+          EsExtra: true,
+          _loading: true,
+        });
+        App.views.sesiones.render();
+
+        App.sync.run('crearSesionExtra', [App.state.equipoSesionesId, datos], function() {
+          // Rollback: eliminar placeholder
+          App.cache.sesiones = App.cache.sesiones.filter(function(s) { return s.ID !== tempId; });
+          App.views.sesiones.render();
+        }).then(function(res) {
+          App.cache.sesiones = App.cache.sesiones.filter(function(s) { return s.ID !== tempId; });
+          if (res && res.success && res.sesion) {
+            App.cache.upsert('sesiones', res.sesion);
+            showToast('Sesión creada', 'success');
+          }
+          App.views.sesiones.render();
+        });
       },
     },
 
-    // ── JUGADORES (admin) ────────────────────────────────────────────────────
-    jugadores: {
-      _todos: [],
-      render() {
-        showLoading();
-        server('getJugadores')
-          .then(res => {
-            hideLoading();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            App.views.jugadores._todos = res.jugadores;
-            App.views.jugadores._renderLista(res.jugadores);
-          })
-          .catch(() => { hideLoading(); showToast('Error al cargar jugadores', 'error'); });
+    // -- Asistencia de sesion -------------------------------
+    sesion: {
+      render: function() {
+        var id = App.state.sesionId;
+        if (!id) return;
+        // Construir 100% desde cache — sin llamada al servidor
+        var sesion = App.cache.sesiones.find(function(s) { return s.ID === id; });
+        if (!sesion) { showToast('Sesión no encontrada', 'error'); return; }
+        App.views.sesion._render(App.views.sesion._buildFromCache(sesion));
       },
 
-      _renderLista(jugadores) {
-        const container = document.getElementById('jugadores-lista');
-        if (!jugadores.length) {
-          container.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><p>No hay jugadores registrados.</p></div>';
+      // Construye el objeto asistencia completo desde App.cache sin tocar el servidor.
+      _buildFromCache: function(sesion) {
+        var sesionId = sesion.ID;
+
+        // ── Jugadores ────────────────────────────────────────────────────────
+        var jugEquipo    = App.cache.getJugadoresByEquipo(sesion.ID_Equipo);
+        var registrosJug = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === sesionId; });
+        var mapaJug = {};
+        registrosJug.forEach(function(r) { mapaJug[r.ID_Jugador] = r; });
+        var idsEquipo = new Set(jugEquipo.map(function(j) { return j.ID; }));
+        var invitadosJug = registrosJug
+          .filter(function(r) { return (r.EsInvitado === true || r.EsInvitado === 'TRUE') && !idsEquipo.has(r.ID_Jugador); })
+          .map(function(r) { return App.cache.jugadores.find(function(j) { return j.ID === r.ID_Jugador; }) || null; })
+          .filter(Boolean);
+        var jugConEstado = jugEquipo.concat(invitadosJug).map(function(j) {
+          var reg = mapaJug[j.ID];
+          return { jugador: j, estado: reg ? reg.Estado : null, esInvitado: !!reg && (reg.EsInvitado === true || reg.EsInvitado === 'TRUE') };
+        });
+
+        // ── Entrenadores ─────────────────────────────────────────────────────
+        var entEquipo    = App.cache.getEntrenadoresByEquipo(sesion.ID_Equipo);
+        var registrosEnt = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion === sesionId; });
+        var mapaEnt = {};
+        registrosEnt.forEach(function(r) { mapaEnt[r.ID_Entrenador] = r; });
+        var idsEntEquipo = new Set(entEquipo.map(function(e) { return e.ID; }));
+        var invitadosEnt = registrosEnt
+          .filter(function(r) { return (r.EsInvitado === true || r.EsInvitado === 'TRUE') && !idsEntEquipo.has(r.ID_Entrenador); })
+          .map(function(r) { return App.cache.entrenadores.find(function(e) { return e.ID === r.ID_Entrenador; }) || null; })
+          .filter(Boolean);
+        var entConEstado = entEquipo.concat(invitadosEnt).map(function(e) {
+          var reg = mapaEnt[e.ID];
+          return { entrenador: e, asistio: reg ? (reg.Asistio === true || reg.Asistio === 'TRUE') : null, esInvitado: !!reg && (reg.EsInvitado === true || reg.EsInvitado === 'TRUE') };
+        });
+
+        return { sesion: sesion, jugadores: jugConEstado, entrenadores: entConEstado };
+      },
+
+      _render: function(asistencia) {
+        var sesion = asistencia.sesion;
+        var jugadores = asistencia.jugadores || [];
+        var entrenadores = asistencia.entrenadores || [];
+
+        var f = _fmtFecha(sesion.Fecha);
+        var extra = (sesion.EsExtra === true || sesion.EsExtra === 'TRUE') ? ' &middot; <strong>Extra</strong>' : '';
+        document.getElementById('sesion-hdr').innerHTML =
+          '<h2>' + f.dn + ', ' + f.d + ' de ' + f.ml + '</h2>' +
+          '<div class="vh-sub">' + sesion.HoraInicio + '&ndash;' + sesion.HoraFin + extra + '</div>' +
+          (sesion.Notas ? '<div class="vh-horario">' + sesion.Notas + '</div>' : '');
+
+        document.getElementById('sesion-jugs').innerHTML = jugadores.length
+          ? jugadores.map(function(item) {
+              var j = item.jugador; var estado = item.estado || ''; var inv = item.esInvitado;
+              return '<div class="jug-card ' + estado + '" data-id="' + j.ID + '" data-estado="' + estado + '" data-inv="' + inv + '" onclick="App.views.sesion.toggleEstado(this)">' +
+                '<div class="jug-dorsal">' + (j.Dorsal || '-') + '</div>' +
+                '<div><div class="jug-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
+                '<div class="jug-tipo">' + (inv ? 'Invitado' : (j.Tipo || '')) + '</div></div>' +
+                '<div class="estado-chip">' + _iconEstado(estado) + '</div></div>';
+            }).join('')
+          : '<div class="empty-state" style="padding:20px"><p>Sin jugadores asignados</p></div>';
+
+        document.getElementById('sesion-ents').innerHTML = entrenadores.length
+          ? entrenadores.map(function(item) {
+              var e = item.entrenador; var asistio = item.asistio; var inv = item.esInvitado;
+              return '<div class="ent-row" data-id="' + e.ID + '" data-inv="' + inv + '">' +
+                '<div><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
+                '<div class="ent-sub">' + (inv ? 'Invitado' : '') + '</div></div>' +
+                '<label class="toggle-sw"><input type="checkbox" ' + (asistio ? 'checked' : '') + ' onchange="App.state._formIsDirty=true">' +
+                '<div class="toggle-sl"></div></label></div>';
+            }).join('')
+          : '<div class="empty-state" style="padding:20px"><p>Sin entrenadores asignados</p></div>';
+        App.state._formIsDirty = false;
+        App.views.sesion._startAutoSave();
+      },
+
+      toggleEstado: function(card) {
+        var ciclo = {'':'P','P':'A','A':'R','R':'P'};
+        var sig = ciclo[card.dataset.estado || ''];
+        card.dataset.estado = sig;
+        card.className = 'jug-card ' + sig;
+        card.querySelector('.estado-chip').textContent = _iconEstado(sig);
+        App.state._formIsDirty = true;
+      },
+
+      guardar: function() {
+        var sesionId = App.state.sesionId;
+        var jugadores = [];
+        document.querySelectorAll('#sesion-jugs .jug-card').forEach(function(c) {
+          if (c.dataset.estado) jugadores.push({jugadorId:c.dataset.id, estado:c.dataset.estado, esInvitado:c.dataset.inv==='true'});
+        });
+        var entrenadores = [];
+        document.querySelectorAll('#sesion-ents .ent-row').forEach(function(c) {
+          entrenadores.push({entrenadorId:c.dataset.id, asistio:c.querySelector('input[type="checkbox"]').checked, esInvitado:c.dataset.inv==='true'});
+        });
+
+        var hayEntAsistido = entrenadores.some(function(e) { return e.asistio; });
+        if (!hayEntAsistido) {
+          showToast('Debe haber al menos un entrenador con asistencia registrada', 'error');
           return;
         }
-        container.innerHTML = jugadores.map(j => `
-          <div class="card card-row">
-            <div>
-              <div class="card-title">${j.Apellidos}, ${j.Nombre}</div>
-              <div class="card-sub">Dorsal ${j.Dorsal || '–'} · ${j.FechaNac || ''}</div>
-            </div>
-            <button class="btn-icon" onclick="App.views.jugadores.abrirModal('${j.ID}')">✏️</button>
-          </div>`).join('');
+
+        // Backup para rollback si el servidor falla
+        var jugBackup = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === sesionId; });
+        var entBackup = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion === sesionId; });
+        var sesionObj = App.cache.sesiones.find(function(s) { return s.ID === sesionId; });
+        var sesionBackup = sesionObj ? Object.assign({}, sesionObj) : null;
+
+        // Actualizar caché de forma optimista
+        App.cache.asistJugadores = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
+        jugadores.forEach(function(j) {
+          if (j.estado) App.cache.asistJugadores.push({ ID_Sesion: sesionId, ID_Jugador: j.jugadorId, Estado: j.estado, EsInvitado: j.esInvitado });
+        });
+        App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
+        entrenadores.forEach(function(e) {
+          App.cache.asistEntrenadores.push({ ID_Sesion: sesionId, ID_Entrenador: e.entrenadorId, Asistio: e.asistio, EsInvitado: e.esInvitado });
+        });
+        if (sesionObj) {
+          var countP = 0, countA = 0, countR = 0;
+          jugadores.forEach(function(j) {
+            if (j.estado === 'P') countP++;
+            else if (j.estado === 'A') countA++;
+            else if (j.estado === 'R') countR++;
+          });
+          sesionObj.AsistenciaGuardada = true;
+          sesionObj._asistRegistrada = true;
+          sesionObj._statsJug = { P: countP, A: countA, R: countR };
+          sesionObj._statsEnt = entrenadores.filter(function(e) { return e.asistio; }).length;
+        }
+
+        // Navegar al listado inmediatamente, sin esperar al servidor
+        App.state._formIsDirty = false;
+        App.state.sesionId = null;
+        App.views.sesion._stopAutoSave();
+        showToast('Asistencia guardada', 'success');
+        var _hIdx = App.state.viewHistory.lastIndexOf('sesiones');
+        App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'sesion'; });
+        App.navigate('sesiones', null, false);
+
+        // Sincronizar con el servidor en segundo plano
+        App.sync.run('guardarAsistenciaCompleta', [sesionId, {jugadores:jugadores, entrenadores:entrenadores}], function() {
+          // Rollback si el servidor falla
+          App.cache.asistJugadores = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
+          jugBackup.forEach(function(r) { App.cache.asistJugadores.push(r); });
+          App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
+          entBackup.forEach(function(r) { App.cache.asistEntrenadores.push(r); });
+          if (sesionObj && sesionBackup) Object.assign(sesionObj, sesionBackup);
+        });
       },
 
-      filtrar(q) {
-        const lower = q.toLowerCase();
-        const filtrados = App.views.jugadores._todos.filter(j =>
-          `${j.Nombre} ${j.Apellidos} ${j.Dorsal}`.toLowerCase().includes(lower)
+      _startAutoSave: function() {
+        App.views.sesion._stopAutoSave();
+        App.state._sesionAutoSaveTimer = setInterval(function() {
+          if (App.state.currentView === 'sesion' && App.state._formIsDirty) {
+            App.views.sesion._autoGuardar();
+          }
+        }, 5000);
+      },
+      _stopAutoSave: function() {
+        if (App.state._sesionAutoSaveTimer) {
+          clearInterval(App.state._sesionAutoSaveTimer);
+          App.state._sesionAutoSaveTimer = null;
+        }
+      },
+      _actualizarTs: function() {
+        var ts = document.getElementById('sesion-autosave-ts');
+        if (!ts) return;
+        var n = new Date();
+        ts.textContent = 'Guardado a las ' + n.getHours() + ':' + String(n.getMinutes()).padStart(2, '0');
+        ts.style.display = 'block';
+      },
+      _autoGuardar: function() {
+        var sesionId = App.state.sesionId;
+        if (!sesionId || App.state.currentView !== 'sesion') return;
+        var jugadores = [];
+        document.querySelectorAll('#sesion-jugs .jug-card').forEach(function(c) {
+          if (c.dataset.estado) jugadores.push({jugadorId:c.dataset.id, estado:c.dataset.estado, esInvitado:c.dataset.inv==='true'});
+        });
+        var entrenadores = [];
+        document.querySelectorAll('#sesion-ents .ent-row').forEach(function(c) {
+          entrenadores.push({entrenadorId:c.dataset.id, asistio:c.querySelector('input[type="checkbox"]').checked, esInvitado:c.dataset.inv==='true'});
+        });
+        if (!entrenadores.some(function(e) { return e.asistio; })) return;
+        App.sync.run('guardarAsistenciaCompleta', [sesionId, {jugadores:jugadores, entrenadores:entrenadores}])
+          .then(function(res) {
+            if (!res || !res.success) return;
+            App.cache.asistJugadores = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
+            jugadores.forEach(function(j) {
+              if (j.estado) App.cache.asistJugadores.push({ ID_Sesion: sesionId, ID_Jugador: j.jugadorId, Estado: j.estado, EsInvitado: j.esInvitado });
+            });
+            App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
+            entrenadores.forEach(function(e) {
+              App.cache.asistEntrenadores.push({ ID_Sesion: sesionId, ID_Entrenador: e.entrenadorId, Asistio: e.asistio, EsInvitado: e.esInvitado });
+            });
+            var countP = 0, countA = 0, countR = 0;
+            jugadores.forEach(function(j) {
+              if (j.estado === 'P') countP++;
+              else if (j.estado === 'A') countA++;
+              else if (j.estado === 'R') countR++;
+            });
+            var sesionObj = App.cache.sesiones.find(function(s) { return s.ID === sesionId; });
+            if (sesionObj) {
+              sesionObj.AsistenciaGuardada = true;
+              sesionObj._asistRegistrada = true;
+              sesionObj._statsJug = { P: countP, A: countA, R: countR };
+              sesionObj._statsEnt = entrenadores.filter(function(e) { return e.asistio; }).length;
+            }
+            App.state._formIsDirty = false;
+            App.views.sesion._actualizarTs();
+          });
+      },
+
+      buscarInvitadoJug: function() { App.views.sesion._abrirBuscador('jugador'); },
+      buscarInvitadoEnt: function() { App.views.sesion._abrirBuscador('entrenador'); },
+
+      _abrirBuscador: function(tipo) {
+        var items = tipo === 'jugador' ? App.cache.jugadores : App.cache.entrenadores;
+        var selector = tipo === 'jugador' ? '#sesion-jugs .jug-card' : '#sesion-ents .ent-row';
+        var idsActuales = new Set([].slice.call(document.querySelectorAll(selector)).map(function(c) { return c.dataset.id; }));
+        var disponibles = items.filter(function(i) { return !idsActuales.has(i.ID); });
+        App.state._buscadorTipo = tipo;
+        App.state._buscadorItems = disponibles;
+        App.openModal('Anadir ' + tipo + ' invitado', App.views.sesion._htmlBuscador(disponibles));
+      },
+
+      _htmlBuscador: function(items) {
+        return '<div class="search-wrap"><input type="search" placeholder="Buscar..." oninput="App.views.sesion._filtrarBuscador(this.value)"></div>' +
+          '<div id="buscador-lista">' + items.map(function(i) { return App.views.sesion._htmlBuscadorItem(i); }).join('') + '</div>';
+      },
+
+      _htmlBuscadorItem: function(i) {
+        var ini = (i.Nombre ? i.Nombre[0] : '') + (i.Apellidos ? i.Apellidos[0] : '');
+        var sub = i.Dorsal ? 'Dorsal ' + i.Dorsal : (i.Email || '');
+        return '<div class="sr-item" onclick=\'App.views.sesion._seleccionar(' + JSON.stringify(i) + ')\'>' +
+          '<div class="sr-avatar">' + ini + '</div>' +
+          '<div><div class="sr-name">' + i.Apellidos + ', ' + i.Nombre + '</div>' +
+          '<div class="sr-sub">' + sub + '</div></div></div>';
+      },
+
+      _filtrarBuscador: function(q) {
+        var lower = q.toLowerCase();
+        var filtrados = (App.state._buscadorItems || []).filter(function(i) {
+          return (i.Nombre + ' ' + i.Apellidos).toLowerCase().indexOf(lower) >= 0;
+        });
+        document.getElementById('buscador-lista').innerHTML =
+          filtrados.map(function(i) { return App.views.sesion._htmlBuscadorItem(i); }).join('');
+      },
+
+      _seleccionar: function(item) {
+        App.closeModal();
+        var tipo = App.state._buscadorTipo;
+        if (tipo === 'jugador') {
+          var div = document.createElement('div');
+          div.className = 'jug-card';
+          div.dataset.id = item.ID;
+          div.dataset.estado = '';
+          div.dataset.inv = 'true';
+          div.onclick = function() { App.views.sesion.toggleEstado(this); };
+          div.innerHTML = '<div class="jug-dorsal">' + (item.Dorsal || '-') + '</div>' +
+            '<div><div class="jug-nombre">' + item.Apellidos + ', ' + item.Nombre + '</div>' +
+            '<div class="jug-tipo">Invitado</div></div>' +
+            '<div class="estado-chip">?</div>';
+          document.getElementById('sesion-jugs').appendChild(div);
+        } else {
+          var div2 = document.createElement('div');
+          div2.className = 'ent-row';
+          div2.dataset.id = item.ID;
+          div2.dataset.inv = 'true';
+          div2.innerHTML = '<div><div class="ent-nombre">' + item.Apellidos + ', ' + item.Nombre + '</div>' +
+            '<div class="ent-sub">Invitado</div></div>' +
+            '<label class="toggle-sw"><input type="checkbox"><div class="toggle-sl"></div></label>';
+          document.getElementById('sesion-ents').appendChild(div2);
+        }
+        App.state._formIsDirty = true;
+        showToast(item.Nombre + ' anadido como invitado', 'success');
+      },
+
+      eliminar: function() {
+        var sesionId = App.state.sesionId;
+        if (!sesionId) return;
+        var sesion = App.cache.sesiones.find(function(s) { return s.ID === sesionId; });
+        var fecha = sesion ? sesion.Fecha : sesionId;
+        App.openModal('Eliminar sesi\u00f3n',
+          _htmlConfirmModal('danger',
+            '\u00bfSeguro que quieres eliminar la sesi\u00f3n del <strong>' + fecha + '</strong>?',
+            'Se eliminar\u00e1n todas las asistencias de esta sesi\u00f3n.',
+            "App.views.sesion._confirmarEliminar()"
+          )
         );
-        App.views.jugadores._renderLista(filtrados);
+      },
+      _confirmarEliminar: function() {
+        var sesionId = App.state.sesionId;
+        App.closeModal();
+        // OPTIMISTA: guardar backup para rollback
+        var sesionBackup = Object.assign({}, App.cache.sesiones.find(function(s) { return s.ID === sesionId; }));
+        var asistJugBackup = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === sesionId; });
+        var asistEntBackup = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion === sesionId; });
+        // Limpiar cache y navegar inmediatamente
+        App.cache.remove('sesiones', sesionId);
+        App.cache.asistJugadores   = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
+        App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
+        App.state._formIsDirty = false;
+        App.state.sesionId = null;
+        App.views.sesion._stopAutoSave();
+        showToast('Sesión eliminada', 'success');
+        var _hIdx = App.state.viewHistory.lastIndexOf('sesiones');
+        App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'sesion'; });
+        App.navigate('sesiones', null, false);
+        // Eliminar en servidor en segundo plano con rollback si falla
+        App.sync.run('eliminarSesion', [sesionId], function() {
+          if (sesionBackup && sesionBackup.ID) App.cache.upsert('sesiones', sesionBackup);
+          asistJugBackup.forEach(function(r) { App.cache.asistJugadores.push(r); });
+          asistEntBackup.forEach(function(r) { App.cache.asistEntrenadores.push(r); });
+        });
+      },
+    },
+
+    // -- Tab Gestion ----------------------------------------
+    gestion: { render: function() {} },
+
+    // -- Lista equipos (admin) ------------------------------
+    'equipos-admin': {
+      render: function() {
+        var lista = document.getElementById('equipos-admin-lista');
+        var equipos = App.cache.equipos;
+        if (!equipos.length) {
+          lista.innerHTML = '<div class="empty-state"><div class="ei">&#x1F3C6;</div><p>Sin equipos. Pulsa + para crear uno.</p></div>';
+          return;
+        }
+        lista.innerHTML = equipos.map(function(eq) {
+          return '<div class="list-item" onclick="App.views[\'equipo-detalle\'].cargar(\'' + eq.ID + '\')">' +
+            '<div class="li-avatar">' + (eq.Nombre ? eq.Nombre[0] : '?') + '</div>' +
+            '<div style="flex:1"><div class="li-name">' + eq.Nombre + '</div>' +
+            '<div class="li-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div></div>' +
+            '<div class="li-arrow">&#x203A;</div></div>';
+        }).join('');
+      },
+    },
+
+    // -- Form equipo ----------------------------------------
+    'equipo-form': {
+      render: function() {
+        var delZone = document.getElementById('equipo-delete-zone');
+        if (delZone) delZone.style.display = App.state.formEquipoId ? '' : 'none';
+        // NO llamar _reset() aquí: cuando volvemos desde crear un jugador/entrenador
+        // nuevo (goBack), el estado de formJugadores/formEntrenadores debe preservarse.
+        // _reset() se llama explícitamente en fabAction() al crear un equipo nuevo.
+        App.views['equipo-form']._renderDias();
+        App.views['equipo-form']._renderListas();
+        // isDirty: attach listeners (asignar oninput garantiza un único listener activo)
+        var setDirty = function() { App.state._formIsDirty = true; };
+        document.getElementById('eq-nombre').oninput    = setDirty;
+        document.getElementById('eq-categoria').onchange = setDirty;
+        document.getElementById('eq-modalidad').onchange = setDirty;
       },
 
-      abrirModal(jugadorId) {
-        const jugador = jugadorId ? App.views.jugadores._todos.find(j => j.ID === jugadorId) : null;
-        App.openModal(jugador ? 'Editar jugador' : 'Nuevo jugador', `
-          <div class="form-group"><label>Nombre *</label>
-            <input type="text" id="jug-nombre" value="${jugador?.Nombre || ''}"></div>
-          <div class="form-group"><label>Apellidos *</label>
-            <input type="text" id="jug-apellidos" value="${jugador?.Apellidos || ''}"></div>
-          <div class="flex gap-8">
-            <div class="form-group" style="flex:1"><label>Dorsal</label>
-              <input type="number" id="jug-dorsal" value="${jugador?.Dorsal || ''}" min="0" max="99"></div>
-            <div class="form-group" style="flex:1"><label>Fecha nacimiento</label>
-              <input type="date" id="jug-fechanac" value="${jugador?.FechaNac || ''}"></div>
-          </div>
-          <div class="form-group"><label>Teléfono</label>
-            <input type="tel" id="jug-tel" value="${jugador?.Telefono || ''}"></div>
-          <div class="form-group"><label>Email</label>
-            <input type="email" id="jug-email" value="${jugador?.Email || ''}"></div>
-          <div class="modal-actions">
-            <button class="btn btn-secondary" onclick="App.closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="App.views.jugadores._guardar('${jugadorId || ''}')">
-              ${jugador ? 'Guardar cambios' : 'Crear jugador'}
-            </button>
-          </div>`);
+      cargar: function(equipoId) {
+        App.state.formEquipoId = equipoId;
+        App.state._formIsDirty = false;
+        var eq = App.cache.getEquipoById(equipoId);
+        App.navigate('equipo-form');
+        if (eq) {
+          document.getElementById('eq-nombre').value    = eq.Nombre    || '';
+          document.getElementById('eq-categoria').value = eq.Categoria || 'infantil';
+          document.getElementById('eq-modalidad').value = eq.Modalidad || 'Masculino';
+          App.state.formDias = {};
+          App.cache.getHorariosByEquipo(equipoId).forEach(function(h) {
+            App.state.formDias[h.DiaSemana] = { inicio: h.HoraInicio, fin: h.HoraFin };
+          });
+          App.views['equipo-form']._renderDias();
+          App.state.formEntrenadores = App.cache.getEntrenadoresByEquipo(equipoId)
+            .map(function(e) { return { ID: e.ID, Nombre: e.Nombre, Apellidos: e.Apellidos }; });
+          App.state.formJugadores = App.cache.getJugadoresByEquipo(equipoId)
+            .map(function(j) { return { ID: j.ID, Nombre: j.Nombre, Apellidos: j.Apellidos, Dorsal: j.Dorsal, Tipo: j.Tipo }; });
+          App.state.formEntOriginales = App.state.formEntrenadores.map(function(e) { return e.ID; });
+          App.state.formJugOriginales = App.state.formJugadores.map(function(j) { return j.ID; });
+          App.views['equipo-form']._renderListas();
+        }
       },
 
-      _guardar(jugadorId) {
-        const datos = {
-          Nombre:    document.getElementById('jug-nombre').value.trim(),
+      _reset: function() {
+        App.state.formEquipoId      = null;
+        App.state._formIsDirty      = false;
+        App.state.formEntrenadores  = [];
+        App.state.formJugadores     = [];
+        App.state.formDias          = {};
+        App.state.formEntOriginales = [];
+        App.state.formJugOriginales = [];
+        document.getElementById('eq-nombre').value = '';
+        document.getElementById('eq-categoria').value = 'infantil';
+        document.getElementById('eq-modalidad').value = 'Masculino';
+        document.querySelectorAll('.dia-chip').forEach(function(c) { c.classList.remove('sel'); });
+        document.getElementById('horarios-rows').innerHTML = '';
+        App.views['equipo-form']._renderListas();
+      },
+
+      toggleDia: function(chip) {
+        var dia = Number(chip.dataset.dia);
+        if (chip.classList.contains('sel')) {
+          chip.classList.remove('sel');
+          delete App.state.formDias[dia];
+        } else {
+          chip.classList.add('sel');
+          App.state.formDias[dia] = { inicio: '18:00', fin: '19:30' };
+        }
+        App.views['equipo-form']._renderDias();
+        App.state._formIsDirty = true;
+      },
+
+      _renderDias: function() {
+        document.querySelectorAll('.dia-chip').forEach(function(chip) {
+          chip.classList.toggle('sel', !!App.state.formDias[Number(chip.dataset.dia)]);
+        });
+        var labels = {1:'Lun',2:'Mar',3:'Mie',4:'Jue',5:'Vie',6:'Sab',7:'Dom'};
+        var dias = Object.keys(App.state.formDias).map(Number).sort(function(a,b){return a-b;});
+        document.getElementById('horarios-rows').innerHTML = dias.map(function(d) {
+          var h = App.state.formDias[d];
+          return '<div class="horario-row"><div class="horario-dia">' + labels[d] + '</div>' +
+            '<input type="time" value="' + h.inicio + '" onchange="App.views[\'equipo-form\']._setHora(' + d + ',\'inicio\',this.value);App.state._formIsDirty=true">' +
+            '<span style="color:var(--texto-sec);font-size:.8rem">&ndash;</span>' +
+            '<input type="time" value="' + h.fin + '" onchange="App.views[\'equipo-form\']._setHora(' + d + ',\'fin\',this.value);App.state._formIsDirty=true">' +
+            '</div>';
+        }).join('');
+      },
+
+      _setHora: function(dia, campo, valor) {
+        if (App.state.formDias[dia]) App.state.formDias[dia][campo] = valor;
+      },
+
+      _renderListas: function() {
+        document.getElementById('eq-ents-lista').innerHTML = App.state.formEntrenadores.length
+          ? App.state.formEntrenadores.map(function(e) {
+              return '<div class="asig-item"><div class="asig-info">' +
+                '<div class="asig-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div></div>' +
+                '<div class="btn-rm" onclick="App.views[\'equipo-form\']._quitarEnt(\'' + e.ID + '\')">&#x2715;</div></div>';
+            }).join('')
+          : '<div style="color:var(--texto-sec);font-size:.82rem;padding:4px 0">Ninguno asignado</div>';
+
+        document.getElementById('eq-jugs-lista').innerHTML = App.state.formJugadores.length
+          ? App.state.formJugadores.map(function(j) {
+              return '<div class="asig-item"><div class="asig-info">' +
+                '<div class="asig-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
+                '<div class="asig-sub">Dorsal ' + (j.Dorsal || '-') + ' &middot; ' + (j.Tipo || 'Principal') + '</div></div>' +
+                '<div class="btn-rm" onclick="App.views[\'equipo-form\']._quitarJug(\'' + j.ID + '\')">&#x2715;</div></div>';
+            }).join('')
+          : '<div style="color:var(--texto-sec);font-size:.82rem;padding:4px 0">Ninguno asignado</div>';
+      },
+
+      _quitarEnt: function(id) {
+        App.state.formEntrenadores = App.state.formEntrenadores.filter(function(e) { return e.ID !== id; });
+        App.state._formIsDirty = true;
+        App.views['equipo-form']._renderListas();
+      },
+      _quitarJug: function(id) {
+        App.state.formJugadores = App.state.formJugadores.filter(function(j) { return j.ID !== id; });
+        App.state._formIsDirty = true;
+        App.views['equipo-form']._renderListas();
+      },
+
+      buscarEntrenador: function() {
+        var asigIds = new Set(App.state.formEntrenadores.map(function(e) { return e.ID; }));
+        var disponibles = App.cache.entrenadores.filter(function(e) { return !asigIds.has(e.ID); });
+        App.state._buscadorItems = disponibles;
+        App.openModal('Anadir entrenador',
+          '<div class="search-wrap"><input type="search" placeholder="Buscar..." oninput="App.views[\'equipo-form\']._filtrar(this.value,\'ent\')"></div>' +
+          '<div id="buscador-lista">' + disponibles.map(function(e) { return App.views['equipo-form']._htmlItem(e,'ent'); }).join('') + '</div>' +
+          '<div class="sr-create" onclick="App.views[\'equipo-form\']._crearNuevo(\'ent\')">&#xFF0B; Crear nuevo entrenador</div>');
+      },
+
+      buscarJugador: function() {
+        var asigIds = new Set(App.state.formJugadores.map(function(j) { return j.ID; }));
+        var disponibles = App.cache.jugadores.filter(function(j) { return !asigIds.has(j.ID); });
+        App.state._buscadorItems = disponibles;
+        App.openModal('Anadir jugador',
+          '<div class="search-wrap"><input type="search" placeholder="Buscar..." oninput="App.views[\'equipo-form\']._filtrar(this.value,\'jug\')"></div>' +
+          '<div id="buscador-lista">' + disponibles.map(function(j) { return App.views['equipo-form']._htmlItem(j,'jug'); }).join('') + '</div>' +
+          '<div class="sr-create" onclick="App.views[\'equipo-form\']._crearNuevo(\'jug\')">&#xFF0B; Crear nuevo jugador</div>');
+      },
+
+      _htmlItem: function(i, tipo) {
+        var ini = (i.Nombre ? i.Nombre[0] : '') + (i.Apellidos ? i.Apellidos[0] : '');
+        var sub = tipo === 'jug' ? 'Dorsal ' + (i.Dorsal || '-') : (i.Email || '');
+        return '<div class="sr-item" onclick=\'App.views["equipo-form"]._elegir(' + JSON.stringify(i) + ',"' + tipo + '")\'>' +
+          '<div class="sr-avatar">' + ini + '</div>' +
+          '<div><div class="sr-name">' + i.Apellidos + ', ' + i.Nombre + '</div>' +
+          '<div class="sr-sub">' + sub + '</div></div></div>';
+      },
+
+      _filtrar: function(q, tipo) {
+        var lower = q.toLowerCase();
+        var filtrados = (App.state._buscadorItems || []).filter(function(i) {
+          return (i.Nombre + ' ' + i.Apellidos).toLowerCase().indexOf(lower) >= 0;
+        });
+        document.getElementById('buscador-lista').innerHTML =
+          filtrados.map(function(i) { return App.views['equipo-form']._htmlItem(i, tipo); }).join('');
+      },
+
+      _elegir: function(item, tipo) {
+        if (tipo === 'ent') {
+          App.state.formEntrenadores.push({ID:item.ID,Nombre:item.Nombre,Apellidos:item.Apellidos});
+          App.state._formIsDirty = true;
+          App.closeModal();
+          App.views['equipo-form']._renderListas();
+          showToast(item.Nombre + ' anadido', 'success');
+        } else {
+          App.state._jugadorPendiente = item;
+          App.state._tipoJugSelec = 'Principal';
+          document.getElementById('modal-body').innerHTML =
+            '<div style="padding:20px 16px">' +
+            '<p style="font-weight:600;margin-bottom:12px">Tipo de asignacion para ' + item.Nombre + '</p>' +
+            '<div class="tipo-selector">' +
+            '<div class="tipo-opt sel" id="tipo-principal" onclick="App.views[\'equipo-form\']._selTipo(\'Principal\')">Principal</div>' +
+            '<div class="tipo-opt" id="tipo-secundario" onclick="App.views[\'equipo-form\']._selTipo(\'Secundario\')">Secundario</div>' +
+            '</div>' +
+            '<button class="btn btn-primary btn-full" style="margin-top:16px" onclick="App.views[\'equipo-form\']._confirmarJug()">Anadir</button>' +
+            '</div>';
+        }
+      },
+
+      _selTipo: function(tipo) {
+        App.state._tipoJugSelec = tipo;
+        document.getElementById('tipo-principal').classList.toggle('sel', tipo === 'Principal');
+        document.getElementById('tipo-secundario').classList.toggle('sel', tipo === 'Secundario');
+      },
+
+      _confirmarJug: function() {
+        var j = App.state._jugadorPendiente;
+        App.state.formJugadores.push({ID:j.ID,Nombre:j.Nombre,Apellidos:j.Apellidos,Dorsal:j.Dorsal,Tipo:App.state._tipoJugSelec});
+        App.state._formIsDirty = true;
+        App.closeModal();
+        App.views['equipo-form']._renderListas();
+        showToast(j.Nombre + ' anadido', 'success');
+      },
+
+      _crearNuevo: function(tipo) {
+        App.closeModal();
+        App.state._volverAEquipoFormDespues = true;
+        if (tipo === 'ent') {
+          App.state.formEntrenadorId = null;
+          App.navigate('entrenador-form');
+        } else {
+          App.state.formJugadorId = null;
+          App.navigate('jugador-form');
+        }
+      },
+
+      guardar: function(force) {
+        var nombreEl = document.getElementById('eq-nombre');
+        if (!nombreEl) { showToast('Error: recarga la página (formulario no encontrado)', 'error'); return; }
+        var nombre    = nombreEl.value.trim();
+        var categoria = document.getElementById('eq-categoria').value;
+        var modalidad = document.getElementById('eq-modalidad').value;
+        if (!nombre) { showToast('El nombre es obligatorio', 'error'); return; }
+        if (App.state.formEntrenadores.length === 0) { showToast('Debes asignar al menos un entrenador al equipo', 'error'); return; }
+
+        var horarios = Object.keys(App.state.formDias).map(function(dia) {
+          var h = App.state.formDias[dia];
+          return {DiaSemana: Number(dia), HoraInicio: h.inicio, HoraFin: h.fin};
+        });
+
+        // Validar que hora inicio < hora fin en cada día de entrenamiento
+        var horarioInvalido = horarios.find(function(h) { return h.HoraInicio >= h.HoraFin; });
+        if (horarioInvalido) { showToast('La hora de inicio debe ser anterior a la hora de fin', 'error'); return; }
+
+        var equipoId = App.state.formEquipoId;
+        if (!force) {
+          var dup = App.cache.equipos.find(function(eq) {
+            return eq.ID !== equipoId && eq.Nombre.toLowerCase() === nombre.toLowerCase();
+          });
+          if (dup) {
+            App.openModal('Equipo duplicado',
+              _htmlWarnModal('Ya existe un equipo llamado <strong>' + nombre + '</strong>.',
+                '¿Deseas guardarlo igualmente?', 'Guardar igualmente', "App.closeModal();App.views['equipo-form'].guardar(true)")
+            );
+            return;
+          }
+        }
+
+        if (equipoId) {
+          // ── EDICIÓN OPTIMISTA ─────────────────────────────────────────────
+          // Capturar backup para posible rollback
+          var eqAntes = Object.assign({}, App.cache.equipos.find(function(e) { return e.ID === equipoId; }));
+          var horAntes = App.cache.horarios.filter(function(h) { return h.ID_Equipo === equipoId; }).map(function(h) { return Object.assign({}, h); });
+          var jugRelAntes = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo === equipoId; }).map(function(r) { return Object.assign({}, r); });
+          var entRelAntes = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo === equipoId; }).map(function(r) { return Object.assign({}, r); });
+
+          // Actualizar cache inmediatamente
+          App.cache.upsert('equipos', { ID: equipoId, Nombre: nombre, Categoria: categoria, Modalidad: modalidad });
+          for (var i = 0; i < App.state.equipos.length; i++) {
+            if (App.state.equipos[i].ID === equipoId) {
+              App.state.equipos[i] = Object.assign({}, App.state.equipos[i], { Nombre: nombre, Categoria: categoria, Modalidad: modalidad });
+              break;
+            }
+          }
+          App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== equipoId; });
+          horarios.forEach(function(h) {
+            App.cache.horarios.push({ ID: 'h_' + equipoId + '_' + h.DiaSemana, ID_Equipo: equipoId, DiaSemana: h.DiaSemana, HoraInicio: h.HoraInicio, HoraFin: h.HoraFin });
+          });
+          App.cache._setRelacionesEquipo(equipoId, App.state.formJugadores, App.state.formEntrenadores);
+
+          showToast('Equipo guardado', 'success');
+          App.state._formIsDirty = false;
+          var _hIdx = App.state.viewHistory.lastIndexOf('equipos-admin');
+          App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'equipo-form' && v !== 'equipo-detalle'; });
+          App.navigate('equipos-admin', null, false);
+
+          // Sincronizar en segundo plano con rollback si falla
+          App.sync.start();
+          server('actualizarEquipo', equipoId, { Nombre: nombre, Categoria: categoria, Modalidad: modalidad })
+            .then(function(res) {
+              if (!res.success) throw new Error(res.error);
+              return Promise.all([
+                server('setHorariosEquipo', equipoId, horarios),
+                App.views['equipo-form']._sincronizarPersonas(equipoId),
+              ]);
+            })
+            .then(function() { App.sync.done(); })
+            .catch(function(e) {
+              App.sync.done();
+              showToast((e && e.message) || 'Error al sincronizar equipo', 'error');
+              // Rollback
+              if (eqAntes && eqAntes.ID) App.cache.upsert('equipos', eqAntes);
+              App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== equipoId; });
+              horAntes.forEach(function(h) { App.cache.horarios.push(h); });
+              App.cache.jugadoresEquipos   = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
+              App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
+              jugRelAntes.forEach(function(r) { App.cache.jugadoresEquipos.push(r); });
+              entRelAntes.forEach(function(r) { App.cache.entrenadoresEquipos.push(r); });
+            });
+
+        } else {
+          // ── CREACIÓN: esperar solo el ID, luego navegar ───────────────────
+          App.sync.start();
+          server('crearEquipo', { Nombre: nombre, Categoria: categoria, Modalidad: modalidad })
+            .then(function(res) {
+              if (!res.success) { App.sync.done(); showToast(res.error || 'Error al crear equipo', 'error'); return; }
+              var nuevoId = res.equipo.ID;
+              App.state.formEquipoId = nuevoId;
+              App.cache.upsert('equipos', res.equipo);
+              App.state.equipos.push(res.equipo);
+              showToast('Equipo creado', 'success');
+              App.state._formIsDirty = false;
+              App.state.formEquipoId = null;
+              var _hIdx = App.state.viewHistory.lastIndexOf('equipos-admin');
+              App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'equipo-form'; });
+              App.navigate('equipos-admin', null, false);
+              // Completar horarios y personas en segundo plano
+              Promise.all([
+                server('setHorariosEquipo', nuevoId, horarios),
+                App.views['equipo-form']._sincronizarPersonas(nuevoId),
+              ]).then(function() {
+                App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== nuevoId; });
+                horarios.forEach(function(h) {
+                  App.cache.horarios.push({ ID: 'h_' + nuevoId + '_' + h.DiaSemana, ID_Equipo: nuevoId, DiaSemana: h.DiaSemana, HoraInicio: h.HoraInicio, HoraFin: h.HoraFin });
+                });
+                App.cache._setRelacionesEquipo(nuevoId, App.state.formJugadores, App.state.formEntrenadores);
+                App.sync.done();
+              }).catch(function() {
+                App.sync.done();
+                showToast('Equipo creado, pero hubo un error al asignar horarios/jugadores. Edítalo para completar.', 'error');
+              });
+            })
+            .catch(function(e) { App.sync.done(); showToast((e && e.message) || 'Error al crear equipo', 'error'); });
+        }
+      },
+
+      eliminar: function() {
+        var equipoId = App.state.formEquipoId;
+        if (!equipoId) return;
+        var eq = App.cache.getEquipoById(equipoId);
+        var nombre = eq ? eq.Nombre : 'este equipo';
+        App.openModal('Eliminar equipo',
+          _htmlConfirmModal('danger',
+            '\u00bfSeguro que quieres eliminar <strong>' + nombre + '</strong>?',
+            'Se eliminar\u00e1n todas sus sesiones, asistencias y horarios. Los jugadores y entrenadores NO se eliminar\u00e1n.',
+            "App.views['equipo-form']._confirmarEliminar()"
+          )
+        );
+      },
+      _confirmarEliminar: function() {
+        var equipoId = App.state.formEquipoId;
+        App.closeModal();
+        // OPTIMISTA: guardar backup para posible rollback
+        var eqBackup      = Object.assign({}, App.cache.equipos.find(function(e) { return e.ID === equipoId; }));
+        var sesBackup     = App.cache.sesiones.filter(function(s) { return s.ID_Equipo === equipoId; }).map(function(s) { return Object.assign({}, s); });
+        var horBackup     = App.cache.horarios.filter(function(h) { return h.ID_Equipo === equipoId; }).map(function(h) { return Object.assign({}, h); });
+        var jugRelBackup  = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo === equipoId; }).map(function(r) { return Object.assign({}, r); });
+        var entRelBackup  = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo === equipoId; }).map(function(r) { return Object.assign({}, r); });
+        var sesionIds     = sesBackup.map(function(s) { return s.ID; });
+        var asistJugBackup = App.cache.asistJugadores.filter(function(r) { return sesionIds.indexOf(r.ID_Sesion) >= 0; });
+        var asistEntBackup = App.cache.asistEntrenadores.filter(function(r) { return sesionIds.indexOf(r.ID_Sesion) >= 0; });
+
+        // Limpiar cache y navegar a la lista inmediatamente
+        App.cache.sesiones = App.cache.sesiones.filter(function(s) { return s.ID_Equipo !== equipoId; });
+        App.cache.asistJugadores   = App.cache.asistJugadores.filter(function(r) { return sesionIds.indexOf(r.ID_Sesion) < 0; });
+        App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return sesionIds.indexOf(r.ID_Sesion) < 0; });
+        App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== equipoId; });
+        App.cache.jugadoresEquipos   = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
+        App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
+        App.cache.remove('equipos', equipoId);
+        App.state.equipos = App.state.equipos.filter(function(e) { return e.ID !== equipoId; });
+        App.state.formEquipoId = null;
+        App.state._formIsDirty = false;
+        showToast('Equipo eliminado', 'success');
+        // Limpiar historial para no volver a la ficha eliminada
+        var _hIdx = App.state.viewHistory.lastIndexOf('equipos-admin');
+        App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'equipo-form' && v !== 'equipo-detalle'; });
+        App.navigate('equipos-admin', {}, false);
+
+        // Eliminar en servidor en segundo plano con rollback si falla
+        App.sync.run('eliminarEquipo', [equipoId], function() {
+          if (eqBackup && eqBackup.ID) { App.cache.upsert('equipos', eqBackup); App.state.equipos.push(eqBackup); }
+          sesBackup.forEach(function(s) { App.cache.upsert('sesiones', s); });
+          horBackup.forEach(function(h) { App.cache.horarios.push(h); });
+          jugRelBackup.forEach(function(r) { App.cache.jugadoresEquipos.push(r); });
+          entRelBackup.forEach(function(r) { App.cache.entrenadoresEquipos.push(r); });
+          asistJugBackup.forEach(function(r) { App.cache.asistJugadores.push(r); });
+          asistEntBackup.forEach(function(r) { App.cache.asistEntrenadores.push(r); });
+        });
+      },
+
+      _sincronizarPersonas: function(equipoId) {
+        var idsEntAhora = App.state.formEntrenadores.map(function(e) { return e.ID; });
+        var idsEntAntes = App.state.formEntOriginales;
+        var idsJugAhora = App.state.formJugadores.map(function(j) { return j.ID; });
+        var idsJugAntes = App.state.formJugOriginales;
+        var promesas = [];
+
+        idsEntAhora.filter(function(id) { return idsEntAntes.indexOf(id) < 0; }).forEach(function(id) {
+          promesas.push(server('asignarEntrenadorAEquipo', id, equipoId));
+        });
+        idsEntAntes.filter(function(id) { return idsEntAhora.indexOf(id) < 0; }).forEach(function(id) {
+          promesas.push(server('desasignarEntrenadorDeEquipo', id, equipoId));
+        });
+        App.state.formJugadores.filter(function(j) { return idsJugAntes.indexOf(j.ID) < 0; }).forEach(function(j) {
+          promesas.push(server('asignarJugadorAEquipo', j.ID, equipoId, j.Tipo));
+        });
+        idsJugAntes.filter(function(id) { return idsJugAhora.indexOf(id) < 0; }).forEach(function(id) {
+          promesas.push(server('desasignarJugadorDeEquipo', id, equipoId));
+        });
+
+        return Promise.all(promesas).then(function(resultados) {
+          var errores = resultados.filter(function(r) { return r && r.success === false; });
+          if (errores.length > 0) {
+            throw new Error(errores.map(function(r) { return r.error; }).filter(Boolean).join('; '));
+          }
+        });
+      },
+    },
+
+    // -- Lista jugadores (admin) ----------------------------
+    'jugadores-admin': {
+      render: function() {
+        App.state._todosJugadores = App.cache.jugadores;
+        App.views['jugadores-admin']._render(App.cache.jugadores);
+      },
+      _render: function(lista) {
+        var el = document.getElementById('jugadores-admin-lista');
+        if (!lista.length) {
+          el.innerHTML = '<div class="empty-state"><div class="ei">&#x1F3C0;</div><p>Sin jugadores registrados</p></div>';
+          return;
+        }
+        el.innerHTML = lista.map(function(j) {
+          var ini = (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '');
+          return '<div class="list-item" onclick="App.views[\'jugador-detalle\'].cargar(\'' + j.ID + '\')">'+
+            '<div class="li-avatar">' + ini + '</div>' +
+            '<div style="flex:1"><div class="li-name">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
+            '<div class="li-sub">Dorsal ' + (j.Dorsal || '-') + '</div></div>' +
+            '<div class="li-arrow">&#x203A;</div></div>';
+        }).join('');
+      },
+      filtrar: function(q) {
+        var lower = q.toLowerCase();
+        App.views['jugadores-admin']._render(
+          App.state._todosJugadores.filter(function(j) {
+            return (j.Nombre + ' ' + j.Apellidos + ' ' + j.Dorsal).toLowerCase().indexOf(lower) >= 0;
+          })
+        );
+      },
+    },
+
+    // -- Form jugador ---------------------------------------
+    'jugador-form': {
+      render: function() {
+        var delZone = document.getElementById('jugador-delete-zone');
+        if (delZone) delZone.style.display = App.state.formJugadorId ? '' : 'none';
+        if (!App.state.formJugadorId) App.views['jugador-form']._reset();
+        var setDirty = function() { App.state._formIsDirty = true; };
+        ['jug-nombre','jug-apellidos','jug-dorsal','jug-fechanac','jug-tel','jug-email'].forEach(function(id) {
+          document.getElementById(id).oninput = setDirty;
+        });
+      },
+      _reset: function() {
+        App.state._formIsDirty = false;
+        ['jug-nombre','jug-apellidos','jug-tel','jug-email'].forEach(function(id) {
+          document.getElementById(id).value = '';
+        });
+        document.getElementById('jug-dorsal').value   = '';
+        document.getElementById('jug-fechanac').value = '';
+      },
+      cargar: function(jugadorId) {
+        App.state.formJugadorId = jugadorId;
+        App.state._formIsDirty = false;
+        var j = App.state._todosJugadores.find(function(x) { return x.ID === jugadorId; });
+        App.navigate('jugador-form');
+        if (j) {
+          document.getElementById('jug-nombre').value    = j.Nombre || '';
+          document.getElementById('jug-apellidos').value = j.Apellidos || '';
+          document.getElementById('jug-dorsal').value    = j.Dorsal || '';
+          document.getElementById('jug-fechanac').value  = j.FechaNac || '';
+          document.getElementById('jug-tel').value       = j.Telefono || '';
+          document.getElementById('jug-email').value     = j.Email || '';
+        }
+      },
+      guardar: function(force) {
+        var _n = document.getElementById('jug-nombre');
+        if (!_n) { showToast('Error: recarga la página (formulario no encontrado)', 'error'); return; }
+        var datos = {
+          Nombre:    _n.value.trim(),
           Apellidos: document.getElementById('jug-apellidos').value.trim(),
           Dorsal:    document.getElementById('jug-dorsal').value,
           FechaNac:  document.getElementById('jug-fechanac').value,
@@ -602,352 +1421,832 @@ const App = {
           Email:     document.getElementById('jug-email').value.trim(),
         };
         if (!datos.Nombre || !datos.Apellidos) { showToast('Nombre y apellidos son obligatorios', 'error'); return; }
+        if (datos.Email && !_validarEmail(datos.Email)) { showToast('El email no tiene un formato válido', 'error'); return; }
+        if (datos.Telefono && !_validarTel(datos.Telefono)) { showToast('El teléfono no tiene un formato válido (mín. 9 dígitos)', 'error'); return; }
+        if (datos.FechaNac && datos.FechaNac > _hoy()) { showToast('La fecha de nacimiento no puede ser futura', 'error'); return; }
+        var jugId = App.state.formJugadorId;
+        if (!force) {
+          var dup = App.cache.jugadores.find(function(j) {
+            return j.ID !== jugId &&
+                   j.Nombre.toLowerCase() === datos.Nombre.toLowerCase() &&
+                   j.Apellidos.toLowerCase() === datos.Apellidos.toLowerCase();
+          });
+          if (dup) {
+            App.openModal('Jugador duplicado',
+              _htmlWarnModal('Ya existe un jugador llamado <strong>' + datos.Nombre + ' ' + datos.Apellidos + '</strong>.',
+                '¿Deseas guardarlo igualmente?', 'Guardar igualmente', "App.closeModal();App.views['jugador-form'].guardar(true)")
+            );
+            return;
+          }
+        }
+        if (jugId) {
+          // EDICIÓN OPTIMISTA: actualizar cache y navegar de inmediato, sincronizar en segundo plano
+          var original = Object.assign({}, App.cache.getJugadorById(jugId));
+          App.cache.upsert('jugadores', Object.assign({ ID: jugId }, datos));
+          App.state._todosJugadores = App.cache.jugadores;
+          App.state._formIsDirty = false;
+          App.state.formJugadorId = null;
+          showToast('Jugador actualizado', 'success');
+          var _hIdx = App.state.viewHistory.lastIndexOf('jugadores-admin');
+          App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'jugador-form' && v !== 'jugador-detalle'; });
+          App.navigate('jugadores-admin', null, false);
+          App.sync.run('actualizarJugador', [jugId, datos], function() {
+            App.cache.upsert('jugadores', original);
+            App.state._todosJugadores = App.cache.jugadores;
+          });
+        } else {
+          // CREACIÓN: esperar ID del servidor, indicador no bloqueante
+          showToast('Creando jugador\u2026', '');
+          App.sync.start();
+          server('crearJugador', datos)
+            .then(function(res) {
+              App.sync.done();
+              var volverEquipo = App.state._volverAEquipoFormDespues;
+              App.state._volverAEquipoFormDespues = false;
+              if (!res.success) { showToast(res.error, 'error'); return; }
+              if (res.jugador) App.cache.upsert('jugadores', res.jugador);
+              App.state._todosJugadores = App.cache.jugadores;
+              showToast('Jugador creado', 'success');
+              App.state._formIsDirty = false;
+              App.state.formJugadorId = null;
+              if (volverEquipo) {
+                var nuevoJug = res.jugador;
+                if (nuevoJug) App.state.formJugadores.push({ID:nuevoJug.ID,Nombre:nuevoJug.Nombre,Apellidos:nuevoJug.Apellidos,Dorsal:nuevoJug.Dorsal,Tipo:'Principal'});
+                App.goBack();
+              } else {
+                var _hIdx = App.state.viewHistory.lastIndexOf('jugadores-admin');
+                App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'jugador-form' && v !== 'jugador-detalle'; });
+                App.views['jugadores-admin'].render();
+                App.navigate('jugadores-admin', null, false);
+              }
+            })
+            .catch(function(err) { App.sync.done(); showToast((err && err.message) || 'Error al crear jugador', 'error'); });
+        }
+      },
+
+      eliminar: function() {
+        var jugId = App.state.formJugadorId;
+        if (!jugId) return;
+        var j = App.state._todosJugadores.find(function(x) { return x.ID === jugId; });
+        var nombre = j ? (j.Nombre + ' ' + j.Apellidos) : 'este jugador';
+        App.openModal('Eliminar jugador',
+          _htmlConfirmModal('danger',
+            '\u00bfSeguro que quieres eliminar a <strong>' + nombre + '</strong>?',
+            'Se eliminar\u00e1n sus asistencias y asignaciones a equipos.',
+            "App.views['jugador-form']._confirmarEliminar()"
+          )
+        );
+      },
+      _confirmarEliminar: function() {
+        var jugId = App.state.formJugadorId;
         App.closeModal();
-        showLoading();
-        const fn = jugadorId ? server('actualizarJugador', jugadorId, datos) : server('crearJugador', datos);
-        fn.then(res => {
-          hideLoading();
-          if (res.success) { showToast(jugadorId ? 'Jugador actualizado' : 'Jugador creado', 'success'); App.views.jugadores.render(); }
-          else showToast(res.error, 'error');
-        }).catch(() => { hideLoading(); showToast('Error al guardar', 'error'); });
+        // ELIMINACIÓN OPTIMISTA: actualizar cache y navegar de inmediato
+        var jBackup = Object.assign({}, App.cache.getJugadorById(jugId));
+        var relBackup = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Jugador === jugId; });
+        App.cache.remove('jugadores', jugId);
+        App.cache.jugadoresEquipos = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Jugador !== jugId; });
+        App.cache.asistencias = {};
+        App.state._todosJugadores = App.cache.jugadores;
+        showToast('Jugador eliminado', 'success');
+        App.state.formJugadorId = null;
+        App.state._formIsDirty = false;
+        var _hIdx = App.state.viewHistory.lastIndexOf('jugadores-admin');
+        App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'jugador-form' && v !== 'jugador-detalle'; });
+        App.navigate('jugadores-admin', null, false);
+        App.sync.run('eliminarJugador', [jugId], function() {
+          if (jBackup && jBackup.ID) App.cache.upsert('jugadores', jBackup);
+          relBackup.forEach(function(r) { App.cache.jugadoresEquipos.push(r); });
+          App.state._todosJugadores = App.cache.jugadores;
+        });
       },
     },
 
-    // ── ENTRENADORES (admin) ─────────────────────────────────────────────────
-    entrenadores: {
-      _todos: [],
-      render() {
-        showLoading();
-        server('getEntrenadores')
-          .then(res => {
-            hideLoading();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            App.views.entrenadores._todos = res.entrenadores;
-            const container = document.getElementById('entrenadores-lista');
-            if (!res.entrenadores.length) {
-              container.innerHTML = '<div class="empty-state"><div class="empty-icon">🎽</div><p>No hay entrenadores registrados.</p></div>';
-              return;
-            }
-            container.innerHTML = res.entrenadores.map(e => `
-              <div class="card card-row">
-                <div>
-                  <div class="card-title">${e.Apellidos}, ${e.Nombre}</div>
-                  <div class="card-sub">${e.Email}</div>
-                </div>
-                <button class="btn-icon" onclick="App.views.entrenadores.abrirModal('${e.ID}')">✏️</button>
-              </div>`).join('');
+    // -- Lista entrenadores (admin) -------------------------
+    'entrenadores-admin': {
+      render: function() {
+        App.state._todosEntrenadores = App.cache.entrenadores;
+        App.views['entrenadores-admin']._render(App.cache.entrenadores);
+      },
+      _render: function(lista) {
+        var el = document.getElementById('entrenadores-admin-lista');
+        if (!lista.length) {
+          el.innerHTML = '<div class="empty-state"><div class="ei">&#x1F3BD;</div><p>Sin entrenadores registrados</p></div>';
+          return;
+        }
+        el.innerHTML = lista.map(function(e) {
+          var ini = (e.Nombre ? e.Nombre[0] : '') + (e.Apellidos ? e.Apellidos[0] : '');
+          return '<div class="list-item" onclick="App.views[\'entrenador-detalle\'].cargar(\'' + e.ID + '\')">' +
+            '<div class="li-avatar">' + ini + '</div>' +
+            '<div style="flex:1"><div class="li-name">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
+            '<div class="li-sub">' + e.Email + '</div></div>' +
+            '<div class="li-arrow">&#x203A;</div></div>';
+        }).join('');
+      },
+      filtrar: function(q) {
+        var lower = q.toLowerCase();
+        App.views['entrenadores-admin']._render(
+          App.state._todosEntrenadores.filter(function(e) {
+            return (e.Nombre + ' ' + e.Apellidos + ' ' + e.Email).toLowerCase().indexOf(lower) >= 0;
           })
-          .catch(() => { hideLoading(); showToast('Error al cargar entrenadores', 'error'); });
+        );
       },
+    },
 
-      abrirModal(entrenadorId) {
-        const ent = entrenadorId ? App.views.entrenadores._todos.find(e => e.ID === entrenadorId) : null;
-        App.openModal(ent ? 'Editar entrenador' : 'Nuevo entrenador', `
-          <div class="form-group"><label>Nombre *</label>
-            <input type="text" id="ent-nombre" value="${ent?.Nombre || ''}"></div>
-          <div class="form-group"><label>Apellidos *</label>
-            <input type="text" id="ent-apellidos" value="${ent?.Apellidos || ''}"></div>
-          <div class="form-group"><label>Email Google *</label>
-            <input type="email" id="ent-email" value="${ent?.Email || ''}" ${ent ? 'disabled' : ''}>
-            ${ent ? '<small style="color:var(--texto-sec)">El email no se puede cambiar (clave de acceso)</small>' : ''}
-          </div>
-          <div class="form-group"><label>Teléfono</label>
-            <input type="tel" id="ent-tel" value="${ent?.Telefono || ''}"></div>
-          <div class="modal-actions">
-            <button class="btn btn-secondary" onclick="App.closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="App.views.entrenadores._guardar('${entrenadorId || ''}')">
-              ${ent ? 'Guardar cambios' : 'Crear entrenador'}
-            </button>
-          </div>`);
+    // -- Form entrenador ------------------------------------
+    'entrenador-form': {
+      render: function() {
+        var delZone = document.getElementById('entrenador-delete-zone');
+        if (delZone) delZone.style.display = App.state.formEntrenadorId ? '' : 'none';
+        if (!App.state.formEntrenadorId) App.views['entrenador-form']._reset();
+        var setDirty = function() { App.state._formIsDirty = true; };
+        ['ent-nombre','ent-apellidos','ent-email','ent-tel'].forEach(function(id) {
+          document.getElementById(id).oninput = setDirty;
+        });
       },
-
-      _guardar(entrenadorId) {
-        const datos = {
-          Nombre:    document.getElementById('ent-nombre').value.trim(),
+      _reset: function() {
+        App.state._formIsDirty = false;
+        ['ent-nombre','ent-apellidos','ent-email','ent-tel'].forEach(function(id) {
+          document.getElementById(id).value = '';
+        });
+        document.getElementById('ent-email').disabled = false;
+        document.getElementById('ent-email-aviso').classList.add('hidden');
+      },
+      cargar: function(entrenadorId) {
+        App.state.formEntrenadorId = entrenadorId;
+        App.state._formIsDirty = false;
+        var e = App.state._todosEntrenadores.find(function(x) { return x.ID === entrenadorId; });
+        App.navigate('entrenador-form');
+        if (e) {
+          document.getElementById('ent-nombre').value    = e.Nombre || '';
+          document.getElementById('ent-apellidos').value = e.Apellidos || '';
+          document.getElementById('ent-email').value     = e.Email || '';
+          document.getElementById('ent-email').disabled  = true;
+          document.getElementById('ent-email-aviso').classList.remove('hidden');
+          document.getElementById('ent-tel').value       = e.Telefono || '';
+        }
+      },
+      guardar: function(force) {
+        var _n = document.getElementById('ent-nombre');
+        if (!_n) { showToast('Error: recarga la página (formulario no encontrado)', 'error'); return; }
+        var datos = {
+          Nombre:    _n.value.trim(),
           Apellidos: document.getElementById('ent-apellidos').value.trim(),
-          Email:     document.getElementById('ent-email')?.value?.trim(),
+          Email:     document.getElementById('ent-email').value.trim(),
           Telefono:  document.getElementById('ent-tel').value.trim(),
         };
         if (!datos.Nombre || !datos.Apellidos) { showToast('Nombre y apellidos son obligatorios', 'error'); return; }
+        if (!datos.Email && !App.state.formEntrenadorId) { showToast('El email es obligatorio para nuevos entrenadores', 'error'); return; }
+        if (datos.Email && !_validarEmail(datos.Email)) { showToast('El email no tiene un formato válido', 'error'); return; }
+        if (datos.Telefono && !_validarTel(datos.Telefono)) { showToast('El teléfono no tiene un formato válido (mín. 9 dígitos)', 'error'); return; }
+        var entId = App.state.formEntrenadorId;
+        if (!force) {
+          // Detectar email duplicado (al crear)
+          if (!entId && datos.Email) {
+            var dupEmail = App.cache.entrenadores.find(function(e) { return e.Email.toLowerCase() === datos.Email.toLowerCase(); });
+            if (dupEmail) { showToast('Ya existe un entrenador con ese email', 'error'); return; }
+          }
+          // Detectar nombre duplicado
+          var dup = App.cache.entrenadores.find(function(e) {
+            return e.ID !== entId &&
+                   e.Nombre.toLowerCase() === datos.Nombre.toLowerCase() &&
+                   e.Apellidos.toLowerCase() === datos.Apellidos.toLowerCase();
+          });
+          if (dup) {
+            App.openModal('Entrenador duplicado',
+              _htmlWarnModal('Ya existe un entrenador llamado <strong>' + datos.Nombre + ' ' + datos.Apellidos + '</strong>.',
+                '¿Deseas guardarlo igualmente?', 'Guardar igualmente', "App.closeModal();App.views['entrenador-form'].guardar(true)")
+            );
+            return;
+          }
+        }
+        if (entId) {
+          // EDICIÓN OPTIMISTA: actualizar cache y navegar de inmediato
+          var original = Object.assign({}, App.cache.getEntrenadorById(entId));
+          App.cache.upsert('entrenadores', Object.assign({ ID: entId }, datos));
+          App.state._todosEntrenadores = App.cache.entrenadores;
+          App.state._formIsDirty = false;
+          App.state.formEntrenadorId = null;
+          showToast('Entrenador actualizado', 'success');
+          var _hIdx = App.state.viewHistory.lastIndexOf('entrenadores-admin');
+          App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'entrenador-form' && v !== 'entrenador-detalle'; });
+          App.navigate('entrenadores-admin', null, false);
+          App.sync.run('actualizarEntrenador', [entId, datos], function() {
+            App.cache.upsert('entrenadores', original);
+            App.state._todosEntrenadores = App.cache.entrenadores;
+          });
+        } else {
+          // CREACIÓN: esperar ID del servidor, indicador no bloqueante
+          App.sync.start();
+          server('crearEntrenador', datos)
+            .then(function(res) {
+              App.sync.done();
+              if (!res.success) { showToast(res.error, 'error'); return; }
+              if (res.entrenador) App.cache.upsert('entrenadores', res.entrenador);
+              App.state._todosEntrenadores = App.cache.entrenadores;
+              showToast('Entrenador creado', 'success');
+              App.state._formIsDirty = false;
+              App.state.formEntrenadorId = null;
+              if (App.state._volverAEquipoFormDespues) {
+                App.state._volverAEquipoFormDespues = false;
+                var nuevoEnt = res.entrenador;
+                if (nuevoEnt) App.state.formEntrenadores.push({ID:nuevoEnt.ID,Nombre:nuevoEnt.Nombre,Apellidos:nuevoEnt.Apellidos});
+                App.goBack();
+              } else {
+                var _hIdx = App.state.viewHistory.lastIndexOf('entrenadores-admin');
+                App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'entrenador-form' && v !== 'entrenador-detalle'; });
+                App.navigate('entrenadores-admin', null, false);
+              }
+            })
+            .catch(function(err) { App.sync.done(); showToast((err && err.message) || 'Error al crear entrenador', 'error'); });
+        }
+      },
+
+      eliminar: function() {
+        var entId = App.state.formEntrenadorId;
+        if (!entId) return;
+        var e = App.state._todosEntrenadores.find(function(x) { return x.ID === entId; });
+        var nombre = e ? (e.Nombre + ' ' + e.Apellidos) : 'este entrenador';
+        App.openModal('Eliminar entrenador',
+          _htmlConfirmModal('danger',
+            '\u00bfSeguro que quieres eliminar a <strong>' + nombre + '</strong>?',
+            'Se eliminar\u00e1n sus asistencias y asignaciones a equipos.',
+            "App.views['entrenador-form']._confirmarEliminar()"
+          )
+        );
+      },
+      _confirmarEliminar: function() {
+        var entId = App.state.formEntrenadorId;
         App.closeModal();
-        showLoading();
-        const fn = entrenadorId ? server('actualizarEntrenador', entrenadorId, datos) : server('crearEntrenador', datos);
-        fn.then(res => {
-          hideLoading();
-          if (res.success) { showToast(entrenadorId ? 'Entrenador actualizado' : 'Entrenador creado', 'success'); App.views.entrenadores.render(); }
-          else showToast(res.error, 'error');
-        }).catch(() => { hideLoading(); showToast('Error al guardar', 'error'); });
+        // ELIMINACIÓN OPTIMISTA: actualizar cache y navegar de inmediato
+        var eBackup = Object.assign({}, App.cache.getEntrenadorById(entId));
+        var relBackup = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Entrenador === entId; });
+        App.cache.remove('entrenadores', entId);
+        App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Entrenador !== entId; });
+        App.cache.asistencias = {};
+        App.state._todosEntrenadores = App.cache.entrenadores;
+        showToast('Entrenador eliminado', 'success');
+        App.state.formEntrenadorId = null;
+        App.state._formIsDirty = false;
+        var _hIdx = App.state.viewHistory.lastIndexOf('entrenadores-admin');
+        App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'entrenador-form' && v !== 'entrenador-detalle'; });
+        App.navigate('entrenadores-admin', null, false);
+        App.sync.run('eliminarEntrenador', [entId], function() {
+          if (eBackup && eBackup.ID) App.cache.upsert('entrenadores', eBackup);
+          relBackup.forEach(function(r) { App.cache.entrenadoresEquipos.push(r); });
+          App.state._todosEntrenadores = App.cache.entrenadores;
+        });
       },
     },
 
-    // ── EQUIPOS (admin) ──────────────────────────────────────────────────────
-    equipos: {
-      render() {
-        showLoading();
-        server('getEquipos')
-          .then(res => {
-            hideLoading();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            const container = document.getElementById('equipos-lista');
-            if (!res.equipos.length) {
-              container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏆</div><p>No hay equipos creados aún.</p></div>';
-              return;
+    // -- Historial completo de equipo ----------------------
+    'historial-equipo': {
+      render: function() {
+        var equipoId = App.state.equipoSesionesId;
+        if (!equipoId) return;
+        var hoy = _hoy();
+        var sesiones = App.cache.getSesionesByEquipo(equipoId);
+        var pasadas  = sesiones.filter(function(s) { return s.Fecha < hoy; });
+
+        // Agrupar pasadas por mes YYYY-MM, orden descendente
+        var meses = {};
+        pasadas.forEach(function(s) {
+          var mes = s.Fecha.substring(0, 7);
+          if (!meses[mes]) meses[mes] = [];
+          meses[mes].push(s);
+        });
+        var mesesOrdenados = Object.keys(meses).sort(function(a, b) { return a < b ? 1 : -1; });
+        var mesesNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+        // Pre-computar stats desde caché para sesiones ya guardadas
+        sesiones.forEach(function(s) {
+          var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE';
+          if (guardada && !s._statsJug) {
+            var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === s.ID; });
+            if (rs.length) {
+              s._statsJug = {
+                P: rs.filter(function(r) { return r.Estado === 'P'; }).length,
+                A: rs.filter(function(r) { return r.Estado === 'A'; }).length,
+                R: rs.filter(function(r) { return r.Estado === 'R'; }).length
+              };
             }
-            container.innerHTML = res.equipos.map(eq => `
-              <div class="card card-row" style="cursor:pointer" onclick="App.navigate('equipo', { id: '${eq.ID}' })">
-                <div>
-                  <div class="card-title">${eq.Nombre}</div>
-                  <div class="card-sub">${eq.Categoria} · ${eq.Modalidad}</div>
-                </div>
-                <span style="color:var(--texto-sec);font-size:1.2rem">›</span>
-              </div>`).join('');
-          })
-          .catch(() => { hideLoading(); showToast('Error al cargar equipos', 'error'); });
-      },
+          }
+        });
 
-      abrirModal() {
-        const CATEGORIAS = ['baybasket','pre-minibasket','minibasket','infantil','cadete','junior','senior'];
-        App.openModal('Nuevo equipo', `
-          <div class="form-group"><label>Nombre *</label>
-            <input type="text" id="eq-nombre" placeholder="Ej. Infantil Masculino A"></div>
-          <div class="form-group"><label>Categoría *</label>
-            <select id="eq-categoria">
-              ${CATEGORIAS.map(c => `<option value="${c}">${c}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-group"><label>Modalidad *</label>
-            <select id="eq-modalidad">
-              <option>Masculino</option><option>Femenino</option><option>Mixto</option>
-            </select>
-          </div>
-          <div class="modal-actions">
-            <button class="btn btn-secondary" onclick="App.closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="App.views.equipos._guardar()">Crear equipo</button>
-          </div>`);
-      },
-
-      _guardar() {
-        const datos = {
-          Nombre:    document.getElementById('eq-nombre').value.trim(),
-          Categoria: document.getElementById('eq-categoria').value,
-          Modalidad: document.getElementById('eq-modalidad').value,
-        };
-        if (!datos.Nombre) { showToast('El nombre es obligatorio', 'error'); return; }
-        App.closeModal();
-        showLoading();
-        server('crearEquipo', datos)
-          .then(res => {
-            hideLoading();
-            if (res.success) { showToast('Equipo creado', 'success'); App.views.equipos.render(); App.state.equipos.push(res.equipo); }
-            else showToast(res.error, 'error');
-          })
-          .catch(() => { hideLoading(); showToast('Error al crear el equipo', 'error'); });
-      },
-    },
-
-    // ── HISTÓRICO ────────────────────────────────────────────────────────────
-    historico: {
-      render() {
-        const sel = document.getElementById('historico-equipo-select');
-        sel.innerHTML = '<option value="">— Selecciona un equipo —</option>' +
-          App.state.equipos.map(eq => `<option value="${eq.ID}">${eq.Nombre}</option>`).join('');
-
-        // Rango por defecto: mes actual
-        const hoy   = App.hoy();
-        const desde = hoy.substring(0, 7) + '-01';
-        document.getElementById('historico-desde').value = desde;
-        document.getElementById('historico-hasta').value = hoy;
-      },
-
-      cargar() {
-        const equipoId = document.getElementById('historico-equipo-select').value;
-        if (!equipoId) { document.getElementById('historico-lista').innerHTML = ''; return; }
-
-        showLoading();
-        server('getSesionesByEquipo', equipoId)
-          .then(res => {
-            hideLoading();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            const desde = document.getElementById('historico-desde').value;
-            const hasta = document.getElementById('historico-hasta').value;
-            const filtradas = res.sesiones
-              .filter(s => (!desde || s.Fecha >= desde) && (!hasta || s.Fecha <= hasta))
-              .sort((a, b) => b.Fecha.localeCompare(a.Fecha));
-
-            const container = document.getElementById('historico-lista');
-            if (!filtradas.length) {
-              container.innerHTML = '<div class="empty-state"><p>No hay sesiones en el periodo seleccionado.</p></div>';
-              return;
+        function htmlSesion(s) {
+          var f = _fmtFecha(s.Fecha);
+          var extra = (s.EsExtra === true || s.EsExtra === 'TRUE') ? '<span class="badge-extra">Extra</span>' : '';
+          var badgeHtml = '';
+          var statsHtml = '';
+          var sinRegistrar = '';
+          var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada;
+          if (guardada) {
+            badgeHtml = '<span class="sc-status-badge registrada">Registrada</span>';
+            if (s._statsJug) {
+              statsHtml = '<div class="sc-stats">&#10003;' + s._statsJug.P + ' &middot; &#10007;' + s._statsJug.A +
+                (s._statsJug.R ? ' &middot; &#8987;' + s._statsJug.R : '') + '</div>';
             }
-            container.innerHTML = filtradas.map(s => {
-              const f = App.formatFecha(s.Fecha);
-              return `<div class="sesion-card" onclick="App.navigate('sesion',{ id:'${s.ID}' })">
-                <div class="sesion-fecha">
-                  <div class="dia">${f.dia}</div>
-                  <div class="mes">${f.mes}</div>
-                </div>
-                <div class="sesion-info">
-                  <div style="font-weight:700">${f.diaNombre}</div>
-                  <div class="hora">${s.HoraInicio}–${s.HoraFin}</div>
-                  ${s.Notas ? `<div class="hora">${s.Notas}</div>` : ''}
-                </div>
-                ${s.EsExtra===true||s.EsExtra==='TRUE' ? '<span class="sesion-extra-badge">Extra</span>' : ''}
-              </div>`;
-            }).join('');
-          })
-          .catch(() => { hideLoading(); showToast('Error al cargar sesiones', 'error'); });
+          } else if (s.Fecha < hoy) {
+            badgeHtml = '<span class="sc-status-badge pendiente">!</span>';
+            sinRegistrar = ' sin-registrar';
+          }
+          return '<div class="sesion-card' + sinRegistrar + '" onclick="App.views.sesiones.abrirSesion(\'' + s.ID + '\')">' +
+            '<div class="sc-fecha"><div class="dia">' + f.d + '</div><div class="mes">' + f.m + '</div></div>' +
+            '<div class="sc-info" style="flex:1"><div class="dia-n">' + f.dn + '</div>' +
+            '<div class="hora">' + s.HoraInicio + '&ndash;' + s.HoraFin + '</div>' +
+            statsHtml + '</div>' +
+            badgeHtml + extra + '</div>';
+        }
+
+        var html = '';
+        mesesOrdenados.forEach(function(mes) {
+          var partes = mes.split('-');
+          var mesNombre = mesesNames[Number(partes[1]) - 1] + ' ' + partes[0];
+          html += '<div class="historial-mes-hdr">' + mesNombre + ' (' + meses[mes].length + ')</div>';
+          html += meses[mes].slice().reverse().map(htmlSesion).join('');
+        });
+
+        if (!html) {
+          html = '<div class="empty-state" style="padding:48px 24px"><p>Sin sesiones registradas</p></div>';
+        }
+
+        document.getElementById('historial-lista').innerHTML = html;
       },
     },
 
-    // ── INFORMES ─────────────────────────────────────────────────────────────
-    informes: {
-      render() {
-        const sel = document.getElementById('informes-equipo-select');
-        sel.innerHTML = '<option value="">— Selecciona un equipo —</option>' +
-          App.state.equipos.map(eq => `<option value="${eq.ID}">${eq.Nombre}</option>`).join('');
-        document.getElementById('informes-contenido').innerHTML = '';
+    // -- Detalle jugador ------------------------------------
+    'jugador-detalle': {
+      cargar: function(id) {
+        App.state.detalleJugadorId = id;
+        App.navigate('jugador-detalle');
       },
+      render: function() {
+        var id = App.state.detalleJugadorId;
+        if (!id) return;
+        var j = App.cache.getJugadorById(id);
+        if (!j) return;
 
-      cargar() {
-        const equipoId = document.getElementById('informes-equipo-select').value;
-        if (!equipoId) { document.getElementById('informes-contenido').innerHTML = ''; return; }
+        var regs   = App.cache.asistJugadores.filter(function(r) { return r.ID_Jugador === id; });
+        var countP = regs.filter(function(r) { return r.Estado === 'P'; }).length;
+        var countA = regs.filter(function(r) { return r.Estado === 'A'; }).length;
+        var countR = regs.filter(function(r) { return r.Estado === 'R'; }).length;
+        var total  = regs.length;
+        var pct    = total > 0 ? Math.round(countP / total * 100) : 0;
 
-        showLoading('Calculando estadísticas…');
-        server('getTemporadaActiva')
-          .then(res => {
-            if (!res.success || !res.temporada) throw new Error('Sin temporada activa');
-            return server('getEstadisticasEquipo', equipoId, res.temporada.ID);
-          })
-          .then(res => {
-            hideLoading();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            App.views.informes._renderStats(res.estadisticas);
-          })
-          .catch(e => { hideLoading(); showToast(e.message || 'Error al cargar informes', 'error'); });
-      },
+        // Racha: sesiones consecutivas más recientes con P
+        var hist = regs.map(function(r) {
+          var s = App.cache.sesiones.find(function(x) { return x.ID === r.ID_Sesion; });
+          return s ? { fecha: s.Fecha, estado: r.Estado } : null;
+        }).filter(Boolean).sort(function(a, b) { return a.fecha < b.fecha ? 1 : -1; });
+        var racha = 0;
+        for (var i = 0; i < hist.length; i++) { if (hist[i].estado === 'P') racha++; else break; }
 
-      _renderStats(stats) {
-        const container = document.getElementById('informes-contenido');
+        // Equipos
+        var equiposJug = App.cache.jugadoresEquipos
+          .filter(function(r) { return r.ID_Jugador === id && (r.Activo === true || r.Activo === 'TRUE'); })
+          .map(function(r) { var eq = App.cache.getEquipoById(r.ID_Equipo); return eq ? Object.assign({}, eq, { Tipo: r.Tipo }) : null; })
+          .filter(Boolean);
 
-        const resumenChips = `
-          <div class="resumen-chips">
-            <span class="resumen-chip chip-p">✓ ${stats.jugadores.reduce((a,j)=>a+j.presentes,0)} presentes</span>
-            <span class="resumen-chip chip-a">✗ ${stats.jugadores.reduce((a,j)=>a+j.ausentes,0)} ausentes</span>
-            <span class="resumen-chip chip-r">⏱ ${stats.jugadores.reduce((a,j)=>a+j.retrasos,0)} retrasos</span>
-          </div>`;
+        var ini = (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '');
+        var html = '<div class="detalle-perfil">' +
+          '<div class="detalle-avatar">' + ini + '</div>' +
+          '<div><div class="detalle-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
+          '<div class="detalle-sub">Dorsal ' + (j.Dorsal || '-') + '</div>' +
+          (j.FechaNac ? '<div class="detalle-meta">Nac. ' + j.FechaNac + '</div>' : '') +
+          '</div></div>';
 
-        const barrasJugadores = stats.jugadores.map(s => {
-          const clase = s.porcentaje >= 80 ? 'alta' : s.porcentaje >= 60 ? 'media' : 'baja';
-          return `<div class="stat-bar-wrap">
-            <div class="stat-bar-label">
-              <span>${s.jugador.Apellidos}, ${s.jugador.Nombre}</span>
-              <strong>${s.porcentaje}%</strong>
-            </div>
-            <div class="stat-bar-track">
-              <div class="stat-bar-fill ${clase}" style="width:${s.porcentaje}%"></div>
-            </div>
-          </div>`;
-        }).join('');
+        if (equiposJug.length) {
+          html += '<div class="stat-grid-1"><div class="stat-widget">' +
+            '<div class="stat-widget-title">Equipos</div>' +
+            equiposJug.map(function(eq) {
+              return '<span class="detalle-equipo-tag">' + (eq.Tipo === 'Principal' ? '\u2605 ' : '') + eq.Nombre + '</span>';
+            }).join('') + '</div></div>';
+        }
 
-        container.innerHTML = `
-          <div class="card" style="margin-bottom:10px">
-            <div class="card-title">📊 ${stats.equipo.Nombre}</div>
-            <div class="card-sub">${stats.totalSesiones} sesiones en la temporada</div>
-            <hr class="divider">
-            ${resumenChips}
-          </div>
-          <div class="card" style="margin-bottom:10px">
-            <p class="section-label" style="margin-top:0">Asistencia por jugador</p>
-            ${barrasJugadores || '<p class="text-muted">Sin datos</p>'}
-          </div>
-          <button class="btn btn-primary btn-full" onclick="App.views.informes._exportar('${stats.equipo.ID}')">
-            📤 Exportar a Google Sheets
-          </button>
-          <div style="height:16px"></div>`;
-      },
+        html += '<div class="stat-grid-2">' +
+          '<div class="stat-widget"><div class="stat-widget-title">Sesiones</div>' +
+          '<div class="stat-valor azul">' + total + '</div><div class="stat-label">con registro</div></div>' +
+          '<div class="stat-widget"><div class="stat-widget-title">Asistencia</div>' +
+          '<div class="stat-valor ' + (pct >= 75 ? 'verde' : pct >= 50 ? 'naranja' : 'rojo') + '">' + pct + '%</div>' +
+          '<div class="stat-label">de presencia</div></div></div>';
 
-      _exportar(equipoId) {
-        showLoading('Generando informe…');
-        server('getTemporadaActiva')
-          .then(res => server('exportarInformeASheets', equipoId, res.temporada.ID))
-          .then(res => {
-            hideLoading();
-            if (res.success) {
-              showToast('Informe exportado. Abriendo…', 'success');
-              window.open(res.url, '_blank');
-            } else {
-              showToast(res.error, 'error');
-            }
-          })
-          .catch(() => { hideLoading(); showToast('Error al exportar', 'error'); });
+        if (total > 0) {
+          html += '<div class="stat-grid-1"><div class="stat-widget">' +
+            '<div class="stat-widget-title">Desglose asistencia</div><div class="bar-wrap">' +
+            _htmlBarRow('Presentes', countP, total, '#4CAF50') +
+            _htmlBarRow('Ausentes',  countA, total, '#F44336') +
+            _htmlBarRow('Retrasos',  countR, total, '#FFC107') +
+            '</div></div></div>';
+        }
+
+        html += '<div class="stat-grid-2">' +
+          '<div class="stat-widget"><div class="stat-widget-title">Racha actual</div>' +
+          '<div class="stat-valor ' + (racha >= 5 ? 'verde' : racha >= 2 ? 'azul' : 'naranja') + '">' + racha + '</div>' +
+          '<div class="stat-label">seguidas &#10003;</div></div>' +
+          '<div class="stat-widget"><div class="stat-widget-title">Ausencias</div>' +
+          '<div class="stat-valor ' + (countA === 0 ? 'verde' : countA <= 3 ? 'naranja' : 'rojo') + '">' + countA + '</div>' +
+          '<div class="stat-label">faltas totales</div></div></div>';
+
+        html += '<div style="padding-bottom:28px"></div>';
+        document.getElementById('jugador-detalle-contenido').innerHTML = html;
       },
     },
+
+    // -- Detalle entrenador ---------------------------------
+    'entrenador-detalle': {
+      cargar: function(id) {
+        App.state.detalleEntrenadorId = id;
+        App.navigate('entrenador-detalle');
+      },
+      render: function() {
+        var id = App.state.detalleEntrenadorId;
+        if (!id) return;
+        var e = App.cache.getEntrenadorById(id);
+        if (!e) return;
+
+        var regs    = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Entrenador === id; });
+        var total   = regs.length;
+        var asistio = regs.filter(function(r) { return r.Asistio === true || r.Asistio === 'TRUE'; }).length;
+        var pct     = total > 0 ? Math.round(asistio / total * 100) : 0;
+
+        var equiposEnt = App.cache.entrenadoresEquipos
+          .filter(function(r) { return r.ID_Entrenador === id && (r.Activo === true || r.Activo === 'TRUE'); })
+          .map(function(r) { return App.cache.getEquipoById(r.ID_Equipo); })
+          .filter(Boolean);
+
+        // Sesiones por equipo
+        var porEq = {};
+        regs.forEach(function(r) {
+          var s = App.cache.sesiones.find(function(x) { return x.ID === r.ID_Sesion; });
+          if (!s) return;
+          if (!porEq[s.ID_Equipo]) porEq[s.ID_Equipo] = { asistio: 0, total: 0 };
+          porEq[s.ID_Equipo].total++;
+          if (r.Asistio === true || r.Asistio === 'TRUE') porEq[s.ID_Equipo].asistio++;
+        });
+
+        var ini = (e.Nombre ? e.Nombre[0] : '') + (e.Apellidos ? e.Apellidos[0] : '');
+        var html = '<div class="detalle-perfil">' +
+          '<div class="detalle-avatar">' + ini + '</div>' +
+          '<div><div class="detalle-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
+          '<div class="detalle-sub">' + (e.Email || '') + '</div>' +
+          (e.Telefono ? '<div class="detalle-meta">' + e.Telefono + '</div>' : '') +
+          '</div></div>';
+
+        if (equiposEnt.length) {
+          html += '<div class="stat-grid-1"><div class="stat-widget">' +
+            '<div class="stat-widget-title">Equipos asignados</div>' +
+            equiposEnt.map(function(eq) { return '<span class="detalle-equipo-tag">' + eq.Nombre + '</span>'; }).join('') +
+            '</div></div>';
+        }
+
+        html += '<div class="stat-grid-2">' +
+          '<div class="stat-widget"><div class="stat-widget-title">Sesiones</div>' +
+          '<div class="stat-valor azul">' + total + '</div><div class="stat-label">registradas</div></div>' +
+          '<div class="stat-widget"><div class="stat-widget-title">Presencia</div>' +
+          '<div class="stat-valor ' + (pct >= 80 ? 'verde' : pct >= 60 ? 'naranja' : 'rojo') + '">' + pct + '%</div>' +
+          '<div class="stat-label">asistencia</div></div></div>';
+
+        var eqIds = Object.keys(porEq);
+        if (eqIds.length > 1) {
+          var maxSes = Math.max.apply(null, eqIds.map(function(k) { return porEq[k].total; }));
+          html += '<div class="stat-grid-1"><div class="stat-widget">' +
+            '<div class="stat-widget-title">Actividad por equipo</div><div class="bar-wrap">' +
+            eqIds.map(function(k) {
+              var eq = App.cache.getEquipoById(k);
+              return _htmlBarRow(eq ? eq.Nombre : k, porEq[k].asistio, maxSes || 1, '#4A148C');
+            }).join('') + '</div></div></div>';
+        }
+
+        html += '<div style="padding-bottom:28px"></div>';
+        document.getElementById('entrenador-detalle-contenido').innerHTML = html;
+      },
+    },
+
+    // -- Detalle equipo ------------------------------------
+    'equipo-detalle': {
+      cargar: function(id) {
+        App.state.detalleEquipoId = id;
+        App.navigate('equipo-detalle');
+      },
+      render: function() {
+        var id = App.state.detalleEquipoId;
+        if (!id) return;
+        var eq = App.cache.getEquipoById(id);
+        if (!eq) return;
+
+        var hoy = _hoy();
+        var sesiones   = App.cache.getSesionesByEquipo(id);
+        var sGuardadas = sesiones.filter(function(s) {
+          return s.Fecha < hoy && (s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE');
+        });
+        var sIds  = new Set(sGuardadas.map(function(s) { return s.ID; }));
+        var regs  = App.cache.asistJugadores.filter(function(r) { return sIds.has(r.ID_Sesion); });
+        var total = regs.length;
+        var cP    = regs.filter(function(r) { return r.Estado === 'P'; }).length;
+        var cA    = regs.filter(function(r) { return r.Estado === 'A'; }).length;
+        var cR    = regs.filter(function(r) { return r.Estado === 'R'; }).length;
+        var pctEq = total > 0 ? Math.round(cP / total * 100) : 0;
+
+        var jugs = App.cache.getJugadoresByEquipo(id);
+        var statsPJ = {};
+        regs.forEach(function(r) {
+          if (!statsPJ[r.ID_Jugador]) statsPJ[r.ID_Jugador] = { P:0, A:0, R:0 };
+          statsPJ[r.ID_Jugador][r.Estado] = (statsPJ[r.ID_Jugador][r.Estado] || 0) + 1;
+        });
+        var jugStats = jugs.filter(function(j) { return statsPJ[j.ID]; }).map(function(j) {
+          var s = statsPJ[j.ID]; var tot = (s.P||0) + (s.A||0) + (s.R||0);
+          return { j:j, P:s.P||0, A:s.A||0, R:s.R||0, total:tot, pct: tot > 0 ? Math.round((s.P||0)/tot*100) : 0 };
+        });
+        var topAsist = jugStats.slice().sort(function(a,b){return b.pct-a.pct;}).slice(0,3);
+        var topAus   = jugStats.slice().sort(function(a,b){return b.A-a.A;}).slice(0,3).filter(function(x){return x.A>0;});
+        var perfecta = jugStats.filter(function(x){return x.A===0&&x.R===0&&x.total>0;});
+
+        var html = '<div class="detalle-perfil">' +
+          '<div class="detalle-avatar" style="font-size:1.4rem">&#x1F3C0;</div>' +
+          '<div><div class="detalle-nombre">' + eq.Nombre + '</div>' +
+          '<div class="detalle-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div>' +
+          '<div class="detalle-meta">' + jugs.length + ' jugadores &middot; ' + sGuardadas.length + ' sesiones guardadas</div>' +
+          '</div></div>';
+
+        html += '<div class="stat-grid-2">' +
+          '<div class="stat-widget"><div class="stat-widget-title">Sesiones</div>' +
+          '<div class="stat-valor azul">' + sGuardadas.length + '</div><div class="stat-label">registradas</div></div>' +
+          '<div class="stat-widget"><div class="stat-widget-title">Asistencia media</div>' +
+          '<div class="stat-valor ' + (pctEq >= 75 ? 'verde' : pctEq >= 50 ? 'naranja' : 'rojo') + '">' + pctEq + '%</div>' +
+          '<div class="stat-label">del equipo</div></div></div>';
+
+        if (total > 0) {
+          html += '<div class="stat-grid-1"><div class="stat-widget">' +
+            '<div class="stat-widget-title">Distribuci\u00f3n global</div>' +
+            _svgPie(cP, cA, cR) + '</div></div>';
+        }
+
+        if (topAsist.length) {
+          html += '<div class="stat-grid-1"><div class="stat-widget">' +
+            '<div class="stat-widget-title">&#x1F3C6; Mejor asistencia</div>' +
+            topAsist.map(function(x,i) {
+              return '<div class="ranking-row"><div class="ranking-num">'+(i+1)+'</div>' +
+                '<div class="ranking-name">'+x.j.Apellidos+', '+x.j.Nombre+'</div>' +
+                '<div class="ranking-val" style="color:#2E7D32">'+x.pct+'%</div></div>';
+            }).join('') + '</div></div>';
+        }
+
+        if (topAus.length) {
+          html += '<div class="stat-grid-1"><div class="stat-widget">' +
+            '<div class="stat-widget-title">Mayores ausencias</div>' +
+            topAus.map(function(x,i) {
+              return '<div class="ranking-row"><div class="ranking-num">'+(i+1)+'</div>' +
+                '<div class="ranking-name">'+x.j.Apellidos+', '+x.j.Nombre+'</div>' +
+                '<div class="ranking-val" style="color:#C62828">'+x.A+' aus.</div></div>';
+            }).join('') + '</div></div>';
+        }
+
+        if (perfecta.length) {
+          html += '<div class="stat-grid-1"><div class="stat-widget">' +
+            '<div class="stat-widget-title">&#x1F389; Asistencia perfecta</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">' +
+            perfecta.map(function(x) {
+              return '<span class="detalle-equipo-tag" style="background:var(--verde-s);color:var(--verde)">'+x.j.Nombre+'</span>';
+            }).join('') + '</div></div></div>';
+        }
+
+        html += '<div style="padding-bottom:28px"></div>';
+        document.getElementById('equipo-detalle-contenido').innerHTML = html;
+      },
+    },
+
   }, // fin views
 
-  // ── Helpers de fecha ────────────────────────────────────────────────────────
-  formatFecha(yyyymmdd) {
-    if (!yyyymmdd) return { dia: '–', mes: '–', diaNombre: '–', mesNombre: '–' };
-    const [y, m, d] = yyyymmdd.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    const dias  = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-    const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-    const mesesL= ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-    return {
-      dia:      String(d).padStart(2,'0'),
-      mes:      meses[m - 1],
-      diaNombre: dias[date.getDay()],
-      mesNombre: mesesL[m - 1],
-    };
-  },
+}; // fin App
 
-  formatDia(num) {
-    const dias = {1:'Lun',2:'Mar',3:'Mié',4:'Jue',5:'Vie',6:'Sáb',7:'Dom'};
-    return dias[num] || num;
+// ================================================================
+// App.sync — Módulo de sincronización en segundo plano
+// Muestra un indicador no bloqueante mientras hay operaciones activas
+// y permite actualizaciones optimistas con rollback en caso de error.
+// ================================================================
+App.sync = {
+  _count: 0,
+  start: function() {
+    this._count++;
+    var el = document.getElementById('sync-badge');
+    if (el) el.classList.add('syncing');
   },
-
-  hoy() {
-    const d = new Date();
-    return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
+  done: function() {
+    this._count = Math.max(0, this._count - 1);
+    if (!this._count) {
+      var el = document.getElementById('sync-badge');
+      if (el) el.classList.remove('syncing');
+    }
   },
+  // Ejecuta una llamada al servidor en segundo plano.
+  // Si falla (error de red o res.success===false), llama a rollback() y muestra toast de error.
+  run: function(fn, args, rollback) {
+    var self = this;
+    self.start();
+    return server.apply(null, [fn].concat(args || []))
+      .then(function(res) {
+        self.done();
+        if (res && !res.success) {
+          if (rollback) rollback();
+          showToast(res.error || 'Error al sincronizar', 'error');
+        }
+        return res;
+      })
+      .catch(function(err) {
+        self.done();
+        if (rollback) rollback();
+        showToast((err && err.message) || 'Error de conexión', 'error');
+      });
+  }
 };
+// ================================================================
+function _htmlConfirmModal(tipo, msg, subMsg, confirmCall) {
+  return '<div class="modal-confirm-' + tipo + '" style="padding:20px 16px 16px;text-align:center">' +
+    '<div class="modal-confirm-icon">&#x26A0;</div>' +
+    '<div class="modal-confirm-msg">' + msg + (subMsg ? '<br><br><span style="font-size:.8rem">' + subMsg + '</span>' : '') + '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:20px">' +
+    '<button class="btn btn-secondary" style="flex:1" onclick="App.closeModal()">Cancelar</button>' +
+    '<button class="btn btn-destructive" style="flex:1" onclick="' + confirmCall + '">Eliminar</button>' +
+    '</div></div>';
+}
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Helpers globales
-// ══════════════════════════════════════════════════════════════════════════════
+function _htmlWarnModal(msg, subMsg, confirmLabel, confirmCall) {
+  return '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
+    '<div class="modal-confirm-icon">&#x26A0;</div>' +
+    '<div class="modal-confirm-msg">' + msg + (subMsg ? '<br><br><span style="font-size:.8rem">' + subMsg + '</span>' : '') + '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:20px">' +
+    '<button class="btn btn-secondary" style="flex:1" onclick="App.closeModal()">Cancelar</button>' +
+    '<button class="btn btn-primary" style="flex:1" onclick="' + confirmCall + '">' + confirmLabel + '</button>' +
+    '</div></div>';
+}
 
-/**
- * Wrapper Promise para google.script.run.
- * Uso: server('funcionGAS', arg1, arg2).then(res => ...).catch(err => ...)
- */
-function server(fn, ...args) {
-  return new Promise((resolve, reject) => {
-    google.script.run
-      .withSuccessHandler(resolve)
-      .withFailureHandler(reject)
-      [fn](...args);
+function _validarEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+function _validarTel(tel) {
+  var digits = tel.replace(/[\s\-\.\(\)]/g, '');
+  return /^\+?[0-9]{9,15}$/.test(digits);
+}
+
+function server(fn) {
+  var args = [].slice.call(arguments, 1);
+  if (fn !== 'iniciarSesion') {
+    if (!App.state.auth) {
+      App.navigate('login');
+      return Promise.reject(new Error('Sesión no iniciada.'));
+    }
+    args.unshift(App.state.auth);
+  }
+  return new Promise(function(resolve, reject) {
+    var call = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+    call[fn].apply(call, args);
   });
 }
 
-function showLoading(msg = 'Cargando…') {
-  document.getElementById('loading-msg').textContent = msg;
+function _getStoredAuth() {
+  try {
+    return localStorage.getItem('cb_baeza_auth');
+  } catch (e) {
+    return null;
+  }
+}
+
+function _setStoredAuth(value) {
+  try {
+    localStorage.setItem('cb_baeza_auth', value);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function _clearStoredAuth() {
+  try {
+    localStorage.removeItem('cb_baeza_auth');
+  } catch (e) {}
+}
+
+function _formatDiagError(baseMsg, res, fallbackStage) {
+  var msg = baseMsg || 'Error';
+  var stage = (res && res.stage) || fallbackStage;
+  var trace = res && res.traceId;
+  var hoja = res && res.failedSheet;
+  if (stage) msg += ' [stage: ' + stage + ']';
+  if (hoja) msg += ' [hoja: ' + hoja + ']';
+  if (trace) msg += ' [trace: ' + trace + ']';
+  return msg;
+}
+
+function _clientLog(evento, data) {
+  try {
+    var call = google.script.run.withFailureHandler(function() {});
+    call.logCliente(evento, data || {});
+  } catch (e) {}
+}
+
+function showLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg || 'Cargando...';
   document.getElementById('loading-overlay').classList.remove('hidden');
 }
 function hideLoading() {
   document.getElementById('loading-overlay').classList.add('hidden');
 }
 
-function showToast(msg, type = 'info') {
-  const container = document.getElementById('toast-container');
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.textContent = msg;
-  container.appendChild(toast);
-  setTimeout(() => {
-    toast.classList.add('out');
-    setTimeout(() => toast.remove(), 350);
-  }, 3500);
+function showToast(msg, type) {
+  var c = document.getElementById('toast-container');
+  var t = document.createElement('div');
+  t.className = 'toast ' + (type || '');
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(function() { t.classList.add('out'); setTimeout(function() { t.remove(); }, 280); }, 3000);
 }
 
-// ── Arranque ─────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => App.init());
+function _hoy() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function _fmtFecha(s) {
+  if (!s) return {d:'-',m:'-',dn:'-',ml:'-'};
+  var parts = s.split('-').map(Number);
+  var dt = new Date(parts[0], parts[1]-1, parts[2]);
+  var dias = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
+  var mesesC = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  var mesesL = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  return {
+    d:  String(parts[2]).padStart(2,'0'),
+    m:  mesesC[parts[1]-1],
+    dn: dias[dt.getDay()],
+    ml: mesesL[parts[1]-1],
+  };
+}
+
+function _diaN(num) {
+  return {1:'Lun',2:'Mar',3:'Mie',4:'Jue',5:'Vie',6:'Sab',7:'Dom'}[num] || num;
+}
+
+function _iconEstado(e) {
+  if (e === 'P') return String.fromCharCode(10003);
+  if (e === 'A') return String.fromCharCode(10007);
+  if (e === 'R') return String.fromCharCode(8987);
+  return '?';
+}
+
+function _esc(s) {
+  return (s || '').replace(/'/g, "\\'");
+}
+
+function _svgPie(cP, cA, cR) {
+  var total = cP + cA + cR;
+  if (!total) return '<div style="text-align:center;color:var(--texto-sec);font-size:.8rem;padding:12px">Sin datos</div>';
+  var sz=120, r=45, cx=60, cy=60;
+  var cols=['#4CAF50','#F44336','#FFC107'], vals=[cP,cA,cR], labs=['Presentes','Ausentes','Retrasos'];
+  var arcs='', angle=-Math.PI/2;
+  vals.forEach(function(v,i) {
+    if (!v) return;
+    if (v===total) { arcs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="'+cols[i]+'"/>'; return; }
+    var ea=angle+v/total*2*Math.PI, la=(ea-angle>Math.PI?1:0);
+    var x1=cx+r*Math.cos(angle),y1=cy+r*Math.sin(angle),x2=cx+r*Math.cos(ea),y2=cy+r*Math.sin(ea);
+    arcs+='<path d="M'+cx+','+cy+' L'+x1.toFixed(1)+','+y1.toFixed(1)+' A'+r+','+r+' 0 '+la+',1 '+x2.toFixed(1)+','+y2.toFixed(1)+' Z" fill="'+cols[i]+'"/>';
+    angle=ea;
+  });
+  var pct=Math.round(cP/total*100);
+  arcs+='<circle cx="'+cx+'" cy="'+cy+'" r="26" fill="#fff"/>'+
+        '<text x="'+cx+'" y="'+(cy-3)+'" text-anchor="middle" font-size="13" font-weight="800" fill="#1A1A1A">'+pct+'%</text>'+
+        '<text x="'+cx+'" y="'+(cy+10)+'" text-anchor="middle" font-size="7" fill="#6B6B6B">asist.</text>';
+  var leg='<div style="display:flex;justify-content:center;gap:14px;margin-top:10px;flex-wrap:wrap">';
+  vals.forEach(function(v,i){
+    if (!v) return;
+    leg+='<div style="display:flex;align-items:center;gap:5px;font-size:.7rem">'+
+         '<div style="width:9px;height:9px;border-radius:50%;background:'+cols[i]+'"></div>'+labs[i]+' ('+v+')</div>';
+  });
+  leg+='</div>';
+  return '<div style="display:flex;justify-content:center">'+
+         '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 '+sz+' '+sz+'">'+arcs+'</svg></div>'+leg;
+}
+
+function _htmlBarRow(name, val, max, color) {
+  var pct = max > 0 ? Math.round(val / max * 100) : 0;
+  return '<div class="bar-row">'+
+    '<div class="bar-label-row"><span class="bar-name">'+name+'</span><span class="bar-val">'+val+'</span></div>'+
+    '<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'+
+    '</div>';
+}
+
+window.addEventListener('error', function(ev) {
+  _clientLog('window_error', {
+    message: ev && ev.message ? ev.message : null,
+    source: ev && ev.filename ? ev.filename : null,
+    line: ev && ev.lineno ? ev.lineno : null,
+    col: ev && ev.colno ? ev.colno : null
+  });
+});
+
+window.addEventListener('unhandledrejection', function(ev) {
+  var reason = ev && ev.reason ? ev.reason : null;
+  _clientLog('unhandled_rejection', {
+    reason: reason && reason.message ? reason.message : String(reason)
+  });
+});
+
+document.addEventListener('DOMContentLoaded', function() { App.init(); });
 </script>

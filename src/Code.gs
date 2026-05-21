@@ -5,6 +5,9 @@
  *
  * REGLA: Solo este fichero expone funciones al cliente.
  * Toda la lógica real está en los módulos internos (Equipos.gs, Sesiones.gs, etc.).
+ *
+ * Todas las funciones requieren el argumento 'auth' en primer lugar
+ * (excepto doGet, include e iniciarSesion) para validar el PIN y el correo electrónico.
  */
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -22,7 +25,7 @@ function doGet() {
 }
 
 /**
- * Helper para incluir ficheros CSS/JS en el HTML (usa <?!= include('ui/styles') ?>).
+ * Helper para incluir ficheros CSS/JS en el HTML.
  * @param {string} filename
  * @returns {string}
  */
@@ -30,26 +33,142 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-// ── Contexto inicial ──────────────────────────────────────────────────────────
+// ── Autenticación Explícita ───────────────────────────────────────────────────
 
 /**
- * Devuelve el contexto del usuario que ha iniciado sesión:
- * su perfil de entrenador, rol y equipos asignados.
- * Es la primera llamada que hace la SPA al cargar.
- * @returns {{ success: boolean, usuario: Object|null, esAdmin: boolean, equipos: Object[] }}
+ * Valida las credenciales de email y PIN al iniciar sesión de forma explícita.
+ * Devuelve el contexto si es exitoso.
+ * @param {string} email
+ * @param {string} pin
+ * @returns {Object}
  */
-function getContextoUsuario() {
+function iniciarSesion(email, pin) {
   try {
-    return Auth.getContextoUsuario();
+    const auth = { email: email, pin: pin };
+    return cargarDatos(auth);
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
+// ── Contexto inicial ──────────────────────────────────────────────────────────
+
+/**
+ * Devuelve el contexto del usuario validado por email y PIN.
+ * @param {Object} auth
+ * @returns {Object}
+ */
+function getContextoUsuario(auth) {
+  try {
+    return Auth.getContextoUsuario(auth);
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+// ── Carga completa (una sola llamada → cliente trabaja en memoria) ─────────────
+
+/**
+ * Devuelve TODOS los datos de la app en una sola llamada al servidor.
+ * El cliente los almacena en App.cache y trabaja en memoria sin más lecturas.
+ * @param {Object} auth
+ * @returns {Object}
+ */
+function cargarDatos(auth) {
+  const traceId = Utilities.getUuid().slice(0, 8);
+
+  function leerHojaSegura(nombreLogico, sheetName) {
+    try {
+      return { ok: true, data: getSheetData(sheetName) };
+    } catch (e) {
+      return { ok: false, nombreLogico: nombreLogico, sheetName: sheetName, error: e };
+    }
+  }
+
+  try {
+    Logger.log(`[cargarDatos:${traceId}] inicio email=${auth && auth.email ? auth.email : '(sin email)'}`);
+    const contexto = Auth.getContextoUsuario(auth);
+    if (!contexto.success) {
+      Logger.log(`[cargarDatos:${traceId}] fallo contexto: ${contexto.error}`);
+      return {
+        success: false,
+        error: contexto.error,
+        stage: 'auth_context',
+        traceId: traceId,
+      };
+    }
+
+    const jugadoresR           = leerHojaSegura('jugadores', 'Jugadores');
+    const entrenadoresR        = leerHojaSegura('entrenadores', 'Entrenadores');
+    const equiposR             = leerHojaSegura('equipos', 'Equipos');
+    const jugadoresEquiposR    = leerHojaSegura('jugadoresEquipos', 'Jugadores_Equipos');
+    const entrenadoresEquiposR = leerHojaSegura('entrenadoresEquipos', 'Entrenadores_Equipos');
+    const horariosR            = leerHojaSegura('horarios', 'Horarios');
+    const sesionesR            = leerHojaSegura('sesiones', 'Sesiones');
+    const temporadasR          = leerHojaSegura('temporadas', 'Temporadas');
+    const asistJugadoresR      = leerHojaSegura('asistJugadores', 'Asist_Jugadores');
+    const asistEntrenadoresR   = leerHojaSegura('asistEntrenadores', 'Asist_Entrenadores');
+
+    const resultados = [
+      jugadoresR,
+      entrenadoresR,
+      equiposR,
+      jugadoresEquiposR,
+      entrenadoresEquiposR,
+      horariosR,
+      sesionesR,
+      temporadasR,
+      asistJugadoresR,
+      asistEntrenadoresR,
+    ];
+
+    const fallo = resultados.find(r => !r.ok);
+    if (fallo) {
+      const mensaje = `Error cargando hoja ${fallo.sheetName}: ${fallo.error.message}`;
+      Logger.log(`[cargarDatos:${traceId}] ${mensaje}`);
+      return {
+        success: false,
+        error: mensaje,
+        stage: 'sheet_load',
+        failedSheet: fallo.sheetName,
+        traceId: traceId,
+      };
+    }
+
+    Logger.log(`[cargarDatos:${traceId}] ok`);
+
+    return {
+      success:             true,
+      traceId:             traceId,
+      contexto:            contexto,
+      jugadores:           jugadoresR.data,
+      entrenadores:        entrenadoresR.data,
+      equipos:             equiposR.data,
+      jugadoresEquipos:    jugadoresEquiposR.data,
+      entrenadoresEquipos: entrenadoresEquiposR.data,
+      horarios:            horariosR.data,
+      sesiones:            sesionesR.data,
+      temporadas:          temporadasR.data,
+      asistJugadores:      asistJugadoresR.data,
+      asistEntrenadores:   asistEntrenadoresR.data,
+    };
+  } catch (e) {
+    Logger.log(`[cargarDatos:${traceId}] excepcion inesperada: ${e.message}`);
+    return {
+      success: false,
+      error: e.message,
+      stage: 'unexpected',
+      traceId: traceId,
+    };
+  }
+}
+
 // ── Temporadas ────────────────────────────────────────────────────────────────
 
-function getTemporadaActiva() {
+function getTemporadaActiva(auth) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
     const temporadas = getSheetData(CONFIG.SHEETS.TEMPORADAS);
     const activa = temporadas.find(t => t.Activa === true || t.Activa === 'TRUE');
     return { success: true, temporada: activa || null };
@@ -60,43 +179,47 @@ function getTemporadaActiva() {
 
 // ── Equipos ───────────────────────────────────────────────────────────────────
 
-function getEquipos() {
+function getEquipos(auth) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
     return { success: true, equipos: Equipos.getEquipos() };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function getEquipoById(equipoId) {
+function getEquipoById(auth, equipoId) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
     return { success: true, equipo: Equipos.getEquipoById(equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function crearEquipo(datos) {
+function crearEquipo(auth, datos) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
     return { success: true, equipo: Equipos.crearEquipo(datos) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function actualizarEquipo(equipoId, datos) {
+function actualizarEquipo(auth, equipoId, datos) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
     return { success: true, actualizado: Equipos.actualizarEquipo(equipoId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function eliminarEquipo(equipoId) {
+function eliminarEquipo(auth, equipoId) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
     return { success: true, eliminado: Equipos.eliminarEquipo(equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -105,52 +228,65 @@ function eliminarEquipo(equipoId) {
 
 // ── Jugadores ─────────────────────────────────────────────────────────────────
 
-function getJugadores() {
+function getJugadores(auth) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
     return { success: true, jugadores: Equipos.getJugadores() };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function getJugadoresByEquipo(equipoId) {
+function getJugadoresByEquipo(auth, equipoId) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
     return { success: true, jugadores: Equipos.getJugadoresByEquipo(equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function crearJugador(datos) {
+function crearJugador(auth, datos) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
     return { success: true, jugador: Equipos.crearJugador(datos) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function actualizarJugador(jugadorId, datos) {
+function actualizarJugador(auth, jugadorId, datos) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
     return { success: true, actualizado: Equipos.actualizarJugador(jugadorId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function asignarJugadorAEquipo(jugadorId, equipoId, tipo) {
+function eliminarJugador(auth, jugadorId) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
+    return { success: true, eliminado: Equipos.eliminarJugador(jugadorId) };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function asignarJugadorAEquipo(auth, jugadorId, equipoId, tipo) {
+  try {
+    Auth.requireAdmin(auth);
     return { success: true, relacion: Equipos.asignarJugadorAEquipo(jugadorId, equipoId, tipo) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function desasignarJugadorDeEquipo(jugadorId, equipoId) {
+function desasignarJugadorDeEquipo(auth, jugadorId, equipoId) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
     return { success: true, desasignado: Equipos.desasignarJugadorDeEquipo(jugadorId, equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -159,52 +295,65 @@ function desasignarJugadorDeEquipo(jugadorId, equipoId) {
 
 // ── Entrenadores ──────────────────────────────────────────────────────────────
 
-function getEntrenadores() {
+function getEntrenadores(auth) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
     return { success: true, entrenadores: Equipos.getEntrenadores() };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function getEntrenadoresByEquipo(equipoId) {
+function getEntrenadoresByEquipo(auth, equipoId) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
     return { success: true, entrenadores: Equipos.getEntrenadoresByEquipo(equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function crearEntrenador(datos) {
+function crearEntrenador(auth, datos) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
     return { success: true, entrenador: Equipos.crearEntrenador(datos) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function actualizarEntrenador(entrenadorId, datos) {
+function actualizarEntrenador(auth, entrenadorId, datos) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
     return { success: true, actualizado: Equipos.actualizarEntrenador(entrenadorId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function asignarEntrenadorAEquipo(entrenadorId, equipoId) {
+function eliminarEntrenador(auth, entrenadorId) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
+    return { success: true, eliminado: Equipos.eliminarEntrenador(entrenadorId) };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function asignarEntrenadorAEquipo(auth, entrenadorId, equipoId) {
+  try {
+    Auth.requireAdmin(auth);
     return { success: true, relacion: Equipos.asignarEntrenadorAEquipo(entrenadorId, equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function desasignarEntrenadorDeEquipo(entrenadorId, equipoId) {
+function desasignarEntrenadorDeEquipo(auth, entrenadorId, equipoId) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
     return { success: true, desasignado: Equipos.desasignarEntrenadorDeEquipo(entrenadorId, equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -213,43 +362,59 @@ function desasignarEntrenadorDeEquipo(entrenadorId, equipoId) {
 
 // ── Sesiones ──────────────────────────────────────────────────────────────────
 
-function getSesionesByEquipo(equipoId) {
+function getSesionesByEquipo(auth, equipoId) {
   try {
-    Auth.requireAccesoEquipo(equipoId);
+    Auth.requireAccesoEquipo(equipoId, auth);
     return { success: true, sesiones: Sesiones.getSesionesByEquipo(equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function generarSesionesSemana(equipoId) {
+function generarSesionesSemana(auth, equipoId) {
   try {
-    Auth.requireAccesoEquipo(equipoId);
+    Auth.requireAccesoEquipo(equipoId, auth);
     return { success: true, sesiones: Sesiones.generarSesionesSemana(equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function crearSesionExtra(equipoId, datos) {
+function crearSesionExtra(auth, equipoId, datos) {
   try {
-    Auth.requireAccesoEquipo(equipoId);
+    Auth.requireAccesoEquipo(equipoId, auth);
     return { success: true, sesion: Sesiones.crearSesionExtra(equipoId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function actualizarSesion(sesionId, datos) {
+function actualizarSesion(auth, sesionId, datos) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
+
+    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
+    if (sesion) {
+      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
+    }
+
     return { success: true, actualizado: Sesiones.actualizarSesion(sesionId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function eliminarSesion(sesionId) {
+function eliminarSesion(auth, sesionId) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
+
+    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
+    if (sesion) {
+      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
+    }
+
     return { success: true, eliminado: Sesiones.eliminarSesion(sesionId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -258,32 +423,64 @@ function eliminarSesion(sesionId) {
 
 // ── Asistencia ────────────────────────────────────────────────────────────────
 
-function getAsistenciaSesion(sesionId) {
+function getAsistenciaSesion(auth, sesionId) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
+
+    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
+    if (sesion) {
+      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
+    }
+
     return { success: true, asistencia: Asistencia.getAsistenciaSesion(sesionId) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function registrarAsistenciaJugador(sesionId, jugadorId, estado, esInvitado) {
+function registrarAsistenciaJugador(auth, sesionId, jugadorId, estado, esInvitado) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
+
+    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
+    if (sesion) {
+      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
+    }
+
     return { success: true, registro: Asistencia.registrarAsistenciaJugador(sesionId, jugadorId, estado, esInvitado) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function registrarAsistenciaEntrenador(sesionId, entrenadorId, asistio, esInvitado) {
+function registrarAsistenciaEntrenador(auth, sesionId, entrenadorId, asistio, esInvitado) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
+
+    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
+    if (sesion) {
+      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
+    }
+
     return { success: true, registro: Asistencia.registrarAsistenciaEntrenador(sesionId, entrenadorId, asistio, esInvitado) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function guardarAsistenciaCompleta(sesionId, asistencias) {
+function guardarAsistenciaCompleta(auth, sesionId, asistencias) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
+
+    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
+    if (sesion) {
+      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
+    }
+
     return Asistencia.guardarAsistenciaCompleta(sesionId, asistencias);
   } catch (e) {
     return { success: false, error: e.message };
@@ -292,19 +489,61 @@ function guardarAsistenciaCompleta(sesionId, asistencias) {
 
 // ── Informes ──────────────────────────────────────────────────────────────────
 
-function getEstadisticasEquipo(equipoId, temporadaId) {
+function getEstadisticasEquipo(auth, equipoId, temporadaId) {
   try {
+    Auth.requireAccesoEquipo(equipoId, auth);
     return { success: true, estadisticas: Informes.getEstadisticasEquipo(equipoId, temporadaId) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-function exportarInformeASheets(equipoId, temporadaId) {
+function exportarInformeASheets(auth, equipoId, temporadaId) {
   try {
-    Auth.requireAdmin();
+    Auth.requireAdmin(auth);
     return { success: true, url: Informes.exportarASheets(equipoId, temporadaId) };
   } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function setHorariosEquipo(auth, equipoId, horarios) {
+  try {
+    Auth.requireAdmin(auth);
+    return { success: true, actualizado: Equipos.setHorariosEquipo(equipoId, horarios) };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+// ── Trigger semanal de generación automática de sesiones ──────────────────────
+
+/**
+ * Handler del trigger de tiempo. Se ejecuta automáticamente cada lunes a las 6:00.
+ * DEBE ser una función de nivel superior (no un método de objeto).
+ */
+function triggerGenerarSesiones() {
+  try {
+    Sesiones.generarSesionesSemanaGlobal();
+  } catch (e) {
+    Logger.log('Error en trigger semanal: ' + e.message);
+  }
+}
+
+/**
+ * Recibe trazas de diagnóstico desde cliente para localizar rebotes de navegación.
+ * No requiere auth para poder registrar errores previos al login.
+ * @param {string} evento
+ * @param {Object=} data
+ * @returns {{success:boolean}}
+ */
+function logCliente(evento, data) {
+  try {
+    const payload = data || {};
+    Logger.log(`[cliente] ${evento} ${JSON.stringify(payload)}`);
+    return { success: true };
+  } catch (e) {
+    Logger.log(`[cliente] logCliente error: ${e.message}`);
     return { success: false, error: e.message };
   }
 }

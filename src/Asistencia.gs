@@ -179,30 +179,87 @@ const Asistencia = {
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
     if (!sesion) throw new Error(`Sesión no encontrada: ${sesionId}`);
 
-    let jugadoresGuardados    = 0;
-    let entrenadoresGuardados = 0;
+    const timestamp        = Asistencia._timestamp_();
+    const estadosValidos   = new Set(Object.values(CONFIG.ESTADOS_ASISTENCIA));
 
+    // ── Jugadores: leer la hoja UNA SOLA VEZ ─────────────────────────────────
+    const jugSheet = getSheet_(CONFIG.SHEETS.ASIST_JUGADORES);
+    const jugData  = jugSheet.getDataRange().getValues();
+    const jugHdrs  = jugData[0];
+    const jSesCol  = jugHdrs.indexOf('ID_Sesion');
+    const jJugCol  = jugHdrs.indexOf('ID_Jugador');
+    const jEstCol  = jugHdrs.indexOf('Estado')        + 1;
+    const jInvCol  = jugHdrs.indexOf('EsInvitado')    + 1;
+    const jTsCol   = jugHdrs.indexOf('FechaRegistro') + 1;
+
+    // Mapa: jugadorId → número de fila en hoja (1-based)
+    const jugRowMap = {};
+    for (let i = 1; i < jugData.length; i++) {
+      if (String(jugData[i][jSesCol]) === String(sesionId)) {
+        jugRowMap[String(jugData[i][jJugCol])] = i + 1;
+      }
+    }
+
+    let jugadoresGuardados = 0;
     (asistencias.jugadores || []).forEach(item => {
-      if (!item.jugadorId || !item.estado) return;
-      Asistencia.registrarAsistenciaJugador(
-        sesionId,
-        item.jugadorId,
-        item.estado,
-        item.esInvitado || false
-      );
+      if (!item.jugadorId || !item.estado || !estadosValidos.has(item.estado)) return;
+      const rowNum = jugRowMap[item.jugadorId];
+      if (rowNum) {
+        // Actualizar la fila completa en un único setValue por columna — hoja ya leída
+        jugSheet.getRange(rowNum, jEstCol).setValue(item.estado);
+        jugSheet.getRange(rowNum, jInvCol).setValue(item.esInvitado || false);
+        jugSheet.getRange(rowNum, jTsCol ).setValue(timestamp);
+      } else {
+        appendRow(CONFIG.SHEETS.ASIST_JUGADORES, {
+          ID_Sesion:     sesionId,
+          ID_Jugador:    item.jugadorId,
+          Estado:        item.estado,
+          EsInvitado:    item.esInvitado || false,
+          FechaRegistro: timestamp,
+        });
+      }
       jugadoresGuardados++;
     });
 
+    // ── Entrenadores: leer la hoja UNA SOLA VEZ ──────────────────────────────
+    const entSheet  = getSheet_(CONFIG.SHEETS.ASIST_ENTRENADORES);
+    const entData   = entSheet.getDataRange().getValues();
+    const entHdrs   = entData[0];
+    const eSesCol   = entHdrs.indexOf('ID_Sesion');
+    const eEntCol   = entHdrs.indexOf('ID_Entrenador');
+    const eAsiCol   = entHdrs.indexOf('Asistio')        + 1;
+    const eInvCol   = entHdrs.indexOf('EsInvitado')     + 1;
+    const eTsCol    = entHdrs.indexOf('FechaRegistro')  + 1;
+
+    const entRowMap = {};
+    for (let i = 1; i < entData.length; i++) {
+      if (String(entData[i][eSesCol]) === String(sesionId)) {
+        entRowMap[String(entData[i][eEntCol])] = i + 1;
+      }
+    }
+
+    let entrenadoresGuardados = 0;
     (asistencias.entrenadores || []).forEach(item => {
       if (!item.entrenadorId || item.asistio === undefined) return;
-      Asistencia.registrarAsistenciaEntrenador(
-        sesionId,
-        item.entrenadorId,
-        item.asistio,
-        item.esInvitado || false
-      );
+      const rowNum = entRowMap[item.entrenadorId];
+      if (rowNum) {
+        entSheet.getRange(rowNum, eAsiCol).setValue(item.asistio);
+        entSheet.getRange(rowNum, eInvCol).setValue(item.esInvitado || false);
+        entSheet.getRange(rowNum, eTsCol ).setValue(timestamp);
+      } else {
+        appendRow(CONFIG.SHEETS.ASIST_ENTRENADORES, {
+          ID_Sesion:     sesionId,
+          ID_Entrenador: item.entrenadorId,
+          Asistio:       item.asistio,
+          EsInvitado:    item.esInvitado || false,
+          FechaRegistro: timestamp,
+        });
+      }
       entrenadoresGuardados++;
     });
+
+    // Marcar la sesión como guardada en la hoja para que persista entre reinicios
+    updateRow(CONFIG.SHEETS.SESIONES, sesionId, { AsistenciaGuardada: true });
 
     return {
       success:               true,

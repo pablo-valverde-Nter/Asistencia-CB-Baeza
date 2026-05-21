@@ -28,6 +28,9 @@ function getSheet_(sheetName) {
 
 /**
  * Lee todos los registros de una hoja y los devuelve como array de objetos.
+ * Los valores de tipo Date (que Google Sheets devuelve al leer celdas de fecha)
+ * se convierten automáticamente a strings 'YYYY-MM-DD' para evitar errores
+ * en comparaciones y llamadas a métodos de string como localeCompare().
  * @param {string} sheetName
  * @returns {Object[]}
  */
@@ -36,9 +39,25 @@ function getSheetData(sheetName) {
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return [];
   const headers = data[0];
+  const tz = Session.getScriptTimeZone();
   return data.slice(1).map(row => {
     const obj = {};
-    headers.forEach((h, i) => { obj[h] = row[i]; });
+    headers.forEach((h, i) => {
+      let val = row[i];
+      if (val instanceof Date) {
+        if (isNaN(val)) {
+          // Celda vacía o fecha inválida
+          val = '';
+        } else if (val.getFullYear() < 1900) {
+          // Valor de tipo hora (fracción de día): formatear como HH:mm
+          val = Utilities.formatDate(val, tz, 'HH:mm');
+        } else {
+          // Fecha normal: formatear como YYYY-MM-DD
+          val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
+        }
+      }
+      obj[h] = val;
+    });
     return obj;
   });
 }

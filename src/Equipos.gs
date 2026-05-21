@@ -74,12 +74,20 @@ const Equipos = {
   },
 
   /**
-   * Elimina un equipo y en cascada sus horarios y asignaciones de jugadores/entrenadores.
-   * No borra las sesiones (quedan en el histórico).
+   * Elimina un equipo y en cascada todas sus sesiones, asistencias, horarios
+   * y asignaciones de jugadores/entrenadores. No borra los jugadores ni entrenadores.
    * @param {string} equipoId
    * @returns {boolean}
    */
   eliminarEquipo(equipoId) {
+    // Borrar asistencias de todas las sesiones del equipo
+    const sesiones = findWhere(CONFIG.SHEETS.SESIONES, 'ID_Equipo', equipoId);
+    sesiones.forEach(s => {
+      deleteWhere(CONFIG.SHEETS.ASIST_JUGADORES,    'ID_Sesion', s.ID);
+      deleteWhere(CONFIG.SHEETS.ASIST_ENTRENADORES, 'ID_Sesion', s.ID);
+    });
+    // Borrar sesiones, horarios y relaciones
+    deleteWhere(CONFIG.SHEETS.SESIONES,             'ID_Equipo', equipoId);
     deleteWhere(CONFIG.SHEETS.HORARIOS,             'ID_Equipo', equipoId);
     deleteWhere(CONFIG.SHEETS.JUGADORES_EQUIPOS,    'ID_Equipo', equipoId);
     deleteWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Equipo', equipoId);
@@ -171,6 +179,17 @@ const Equipos = {
       FotoURL:   datos.FotoURL   || '',
       Dorsal:    datos.Dorsal    || '',
     });
+  },
+
+  /**
+   * Elimina un jugador y en cascada sus asistencias y asignaciones a equipos.
+   * @param {string} jugadorId
+   * @returns {boolean}
+   */
+  eliminarJugador(jugadorId) {
+    deleteWhere(CONFIG.SHEETS.ASIST_JUGADORES,   'ID_Jugador', jugadorId);
+    deleteWhere(CONFIG.SHEETS.JUGADORES_EQUIPOS, 'ID_Jugador', jugadorId);
+    return deleteRow(CONFIG.SHEETS.JUGADORES, jugadorId);
   },
 
   /**
@@ -284,6 +303,17 @@ const Equipos = {
       Email:     datos.Email,
       Telefono:  datos.Telefono || '',
     });
+  },
+
+  /**
+   * Elimina un entrenador y en cascada sus asistencias y asignaciones a equipos.
+   * @param {string} entrenadorId
+   * @returns {boolean}
+   */
+  eliminarEntrenador(entrenadorId) {
+    deleteWhere(CONFIG.SHEETS.ASIST_ENTRENADORES,  'ID_Entrenador', entrenadorId);
+    deleteWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS,'ID_Entrenador', entrenadorId);
+    return deleteRow(CONFIG.SHEETS.ENTRENADORES, entrenadorId);
   },
 
   /**

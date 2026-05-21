@@ -7,7 +7,7 @@
 const CONFIG = {
   // ── Base de datos ────────────────────────────────────────────────────────────
   // Sustituir por el ID real del Spreadsheet tras crearlo en Google Drive
-  SPREADSHEET_ID: 'PENDIENTE_CONFIGURAR',
+  SPREADSHEET_ID: '1wUUb0wpeYqMjJui5Qbs5OIDJdY8tMQxLXoFuO2jcoFc',
 
   // ── Nombres de hojas (deben coincidir exactamente con las pestañas del Sheet) ─
   SHEETS: {
@@ -26,8 +26,12 @@ const CONFIG = {
   // ── Control de acceso ─────────────────────────────────────────────────────────
   // Emails con permisos de administrador completo
   ADMIN_EMAILS: [
-    // 'admin@gmail.com',  // Añadir el email del administrador aquí
+    'pablo.valverde@nter.es',
+    'vnpablo2002@gmail.com',  
   ],
+
+  // PIN maestro para administradores en caso de que no estén en la hoja de Entrenadores
+  ADMIN_MASTER_PIN: '0000',
 
   // ── Categorías válidas del club ───────────────────────────────────────────────
   CATEGORIAS: [

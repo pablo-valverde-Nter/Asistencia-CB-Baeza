@@ -25,13 +25,13 @@ const SCHEMA = {
     'ID', 'ID_Jugador', 'ID_Equipo', 'Tipo', 'Activo'
   ],
   Entrenadores: [
-    'ID', 'Nombre', 'Apellidos', 'Email', 'Telefono'
+    'ID', 'Nombre', 'Apellidos', 'Email', 'Telefono', 'PIN'
   ],
   Entrenadores_Equipos: [
     'ID', 'ID_Entrenador', 'ID_Equipo', 'Activo'
   ],
   Sesiones: [
-    'ID', 'ID_Equipo', 'ID_Temporada', 'Fecha', 'HoraInicio', 'HoraFin', 'EsExtra', 'Notas'
+    'ID', 'ID_Equipo', 'ID_Temporada', 'Fecha', 'HoraInicio', 'HoraFin', 'EsExtra', 'Notas', 'AsistenciaGuardada'
   ],
   Asist_Jugadores: [
     'ID', 'ID_Sesion', 'ID_Jugador', 'Estado', 'EsInvitado', 'FechaRegistro'
@@ -125,6 +125,54 @@ function verificarEstructura() {
 }
 
 /**
+ * MIGRACIÓN: Añade la columna AsistenciaGuardada a la hoja Sesiones.
+ * Ejecutar una sola vez si la base de datos ya existe y no tiene esa columna.
+ * Para sesiones pasadas con asistencias registradas, marca la columna como TRUE.
+ */
+function migrarAsistenciaGuardada() {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(CONFIG.SHEETS.SESIONES);
+  if (!sheet) { Logger.log('❌ Hoja Sesiones no encontrada.'); return; }
+
+  // Verificar si la columna ya existe
+  const cabeceras = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (cabeceras.includes('AsistenciaGuardada')) {
+    Logger.log('ℹ️  La columna AsistenciaGuardada ya existe. No se realiza ningún cambio.');
+    return;
+  }
+
+  // Añadir cabecera en la siguiente columna disponible
+  const colNueva = sheet.getLastColumn() + 1;
+  const headerCell = sheet.getRange(1, colNueva);
+  headerCell.setValue('AsistenciaGuardada');
+  headerCell.setBackground('#1a237e');
+  headerCell.setFontColor('#ffffff');
+  headerCell.setFontWeight('bold');
+  headerCell.setFontSize(10);
+
+  // Calcular qué sesiones ya tienen asistencias registradas
+  const sheetAsistJug = ss.getSheetByName(CONFIG.SHEETS.ASIST_JUGADORES);
+  const asistData = sheetAsistJug.getDataRange().getValues();
+  const idxSesionAsist = asistData[0].indexOf('ID_Sesion');
+  const sesionesConAsist = new Set(asistData.slice(1).map(r => r[idxSesionAsist]).filter(Boolean));
+
+  // Obtener filas de sesiones para marcar las que ya tienen asistencia
+  const idxId = cabeceras.indexOf('ID');
+  const numFilas = sheet.getLastRow() - 1;
+  if (numFilas > 0) {
+    const dataSesiones = sheet.getRange(2, 1, numFilas, sheet.getLastColumn()).getValues();
+    const valores = dataSesiones.map(function(row) {
+      var sesionId = row[idxId];
+      return [sesionesConAsist.has(sesionId) ? true : ''];
+    });
+    sheet.getRange(2, colNueva, numFilas, 1).setValues(valores);
+  }
+
+  Logger.log('✅ Columna AsistenciaGuardada añadida a Sesiones.');
+  Logger.log('   Sesiones con asistencia pre-existente marcadas como TRUE: ' + sesionesConAsist.size);
+}
+
+/**
  * Crea la temporada inicial 2025-2026 como activa.
  * Ejecutar después de crearBaseDatos() y de actualizar SPREADSHEET_ID.
  */
@@ -137,4 +185,40 @@ function crearTemporadaInicial() {
   });
   Logger.log(`✅ Temporada creada con ID: ${temporada.ID}`);
   Logger.log('👉 Copia este ID si necesitas referenciarla manualmente.');
+}
+
+/**
+ * MIGRACIÓN: Añade la columna PIN a la hoja Entrenadores.
+ * Ejecuta esta función si ya tenías la hoja creada para añadir el campo de contraseña.
+ * Rellena automáticamente los entrenadores con un PIN por defecto '1234'.
+ */
+function migrarPINEntrenadores() {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(CONFIG.SHEETS.ENTRENADORES);
+  if (!sheet) { Logger.log('❌ Hoja Entrenadores no encontrada.'); return; }
+
+  // Verificar si la columna ya existe
+  const cabeceras = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (cabeceras.includes('PIN')) {
+    Logger.log('ℹ️ La columna PIN ya existe. No se realiza ningún cambio.');
+    return;
+  }
+
+  // Añadir cabecera en la siguiente columna disponible
+  const colNueva = sheet.getLastColumn() + 1;
+  const headerCell = sheet.getRange(1, colNueva);
+  headerCell.setValue('PIN');
+  headerCell.setBackground('#1a237e');
+  headerCell.setFontColor('#ffffff');
+  headerCell.setFontWeight('bold');
+  headerCell.setFontSize(10);
+
+  // Rellenar filas existentes con PIN por defecto '1234'
+  const numFilas = sheet.getLastRow() - 1;
+  if (numFilas > 0) {
+    const valores = Array(numFilas).fill(['1234']);
+    sheet.getRange(2, colNueva, numFilas, 1).setValues(valores);
+  }
+
+  Logger.log('✅ Columna PIN añadida a Entrenadores con valor por defecto "1234".');
 }
