@@ -34,6 +34,7 @@ const App = {
     _tipoJugSelec:      'Principal',
     _formIsDirty:       false,
     _sesionAutoSaveTimer: null,
+    _authReqSeq:        0,
     // Vistas detalle
     detalleJugadorId:    null,
     detalleEntrenadorId: null,
@@ -112,6 +113,7 @@ const App = {
   },
 
   init() {
+    var reqSeq = ++App.state._authReqSeq;
     _clientLog('init_start', { hasAuthMem: !!App.state.auth });
     if (!App.state.auth) {
       var stored = _getStoredAuth();
@@ -138,11 +140,19 @@ const App = {
     showLoading('Cargando...');
     server('cargarDatos')
       .then(function(res) {
+        if (reqSeq !== App.state._authReqSeq) {
+          _clientLog('init_cargarDatos_stale_ignored', { reqSeq: reqSeq, currentReqSeq: App.state._authReqSeq });
+          return;
+        }
         hideLoading();
         if (!res.success) { 
           _clientLog('init_cargarDatos_fail', { stage: res.stage || null, traceId: res.traceId || null, error: res.error || null });
           showToast(_formatDiagError(res.error || 'Sesión no válida', res, 'init_cargarDatos'), 'error'); 
-          App.cerrarSesion('init_cargarDatos_fail');
+          // Solo cerrar sesión si el backend indica fallo de autenticación.
+          // Para errores de datos/hojas, mantener auth y permitir reintento.
+          if ((res.stage || '') === 'auth_context') {
+            App.cerrarSesion('init_cargarDatos_fail_auth');
+          }
           return; 
         }
         App._applyBootstrapData(res);
@@ -157,14 +167,19 @@ const App = {
         }
       })
       .catch(function(err) { 
+        if (reqSeq !== App.state._authReqSeq) {
+          _clientLog('init_cargarDatos_network_stale_ignored', { reqSeq: reqSeq, currentReqSeq: App.state._authReqSeq });
+          return;
+        }
         hideLoading(); 
         _clientLog('init_cargarDatos_network_error', { error: (err && err.message) || null });
         showToast(_formatDiagError((err && err.message) || 'Error de conexión', null, 'init_network'), 'error'); 
-        App.cerrarSesion('init_network_error');
+        // No cerrar sesión por un fallo de red transitorio.
       });
   },
 
   iniciarSesion() {
+    var reqSeq = ++App.state._authReqSeq;
     var email = document.getElementById('login-email').value.trim();
     var pin = document.getElementById('login-pin').value.trim();
     _clientLog('login_submit', { email: email || null, pinLen: pin ? String(pin).length : 0 });
@@ -177,6 +192,10 @@ const App = {
     showLoading('Iniciando sesión...');
     server('iniciarSesion', email, pin)
       .then(function(res) {
+        if (reqSeq !== App.state._authReqSeq) {
+          _clientLog('login_response_stale_ignored', { reqSeq: reqSeq, currentReqSeq: App.state._authReqSeq });
+          return;
+        }
         hideLoading();
         if (res && res.success) {
           _clientLog('login_success', { traceId: res.traceId || null });
@@ -196,6 +215,10 @@ const App = {
         }
       })
       .catch(function(err) {
+        if (reqSeq !== App.state._authReqSeq) {
+          _clientLog('login_network_stale_ignored', { reqSeq: reqSeq, currentReqSeq: App.state._authReqSeq });
+          return;
+        }
         hideLoading();
         _clientLog('login_network_error', { error: (err && err.message) || null });
         showToast(_formatDiagError((err && err.message) || 'Error al conectar con el servidor', null, 'login_network'), 'error');
@@ -216,6 +239,7 @@ const App = {
 
   cerrarSesion(reason) {
     _clientLog('cerrarSesion', { reason: reason || 'manual_or_unknown', view: App.state.currentView || null });
+    App.state._authReqSeq++;
     App.state.auth = null;
     _clearStoredAuth();
     App.state.usuario = null;
