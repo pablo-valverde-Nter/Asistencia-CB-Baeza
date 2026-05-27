@@ -198,6 +198,7 @@ input, select, textarea { font-family: inherit; }
 }
 .jug-nombre { font-size: .88rem; font-weight: 600; }
 .jug-tipo   { font-size: .7rem; color: var(--texto-sec); }
+.jug-justif-aviso { font-size: .68rem; color: #E65100; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .estado-chip {
   margin-left: auto; width: 36px; height: 36px; border-radius: 50%;
   flex-shrink: 0; display: flex; align-items: center; justify-content: center;
@@ -214,6 +215,28 @@ input, select, textarea { font-family: inherit; }
 .jug-card.R { background: var(--naranja-s); }
 .jug-card.R .jug-dorsal  { background: var(--naranja); color: #fff; }
 .jug-card.R .estado-chip  { background: var(--naranja); color: #fff; }
+
+/* ── 4b: Sesión guardada — tarjetas de solo lectura ── */
+.jug-ro-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid var(--borde);
+}
+.jug-ro-card:last-child { border-bottom: none; }
+.jug-ro-card.P { background: var(--verde-s); }
+.jug-ro-card.P .jug-dorsal  { background: var(--verde); color: #fff; }
+.jug-ro-card.P .estado-chip  { background: var(--verde); color: #fff; }
+.jug-ro-card.A { background: var(--rojo-s); }
+.jug-ro-card.A .jug-dorsal  { background: var(--rojo); color: #fff; }
+.jug-ro-card.A .estado-chip  { background: var(--rojo); color: #fff; }
+.jug-ro-card.R { background: var(--naranja-s); }
+.jug-ro-card.R .jug-dorsal  { background: var(--naranja); color: #fff; }
+.jug-ro-card.R .estado-chip  { background: var(--naranja); color: #fff; }
+.sin-justif-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: #FFF3E0; color: #E65100;
+  font-size: .62rem; font-weight: 700; padding: 2px 7px;
+  border-radius: 10px; flex-shrink: 0;
+}
 
 /* ── Toggle entrenador ── */
 .ent-row {
@@ -629,4 +652,200 @@ input, select, textarea { font-family: inherit; }
 #user-badge:active {
   background: rgba(255,255,255,0.35);
 }
+
+/* ══════════════════════════════════════════════
+   NUEVOS ESTILOS — Sistema de 4 roles (v2)
+   ══════════════════════════════════════════════ */
+
+/* ── 3c-1: Login toggle tabs ── */
+.login-tabs {
+  display: flex; gap: 4px; margin: 16px 0 4px;
+  background: rgba(255,255,255,.1); border-radius: 24px; padding: 4px;
+}
+.login-tab {
+  flex: 1; padding: 9px 6px; border-radius: 20px;
+  font-size: .78rem; font-weight: 700; color: rgba(255,255,255,.6);
+  transition: all .18s; white-space: nowrap;
+}
+.login-tab.active {
+  background: #fff; color: var(--morado);
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
+}
+
+/* ── 3c-2: Badge admin en lista de entrenadores ── */
+.badge-admin {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: #1a237e; color: #fff;
+  font-size: .6rem; font-weight: 800; padding: 2px 7px;
+  border-radius: 10px; text-transform: uppercase; letter-spacing: .4px;
+  flex-shrink: 0;
+}
+
+/* ── 3c-3: Chip Visor en tarjetas de equipo ── */
+.chip-visor {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #E3F2FD; color: #1565C0;
+  font-size: .63rem; font-weight: 700; padding: 2px 8px;
+  border-radius: 10px; margin-left: auto; flex-shrink: 0;
+}
+
+/* ── 3c-4: Mini-stats en tarjetas de equipo ── */
+.eq-stats {
+  display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap;
+}
+.eq-stat-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 7px; border-radius: 10px;
+  font-size: .63rem; font-weight: 700;
+}
+.eq-stat-chip.p { background: var(--verde-s); color: var(--verde); }
+.eq-stat-chip.a { background: var(--rojo-s);  color: var(--rojo); }
+.eq-stat-chip.r { background: var(--naranja-s); color: var(--naranja); }
+.eq-stat-chip .dot {
+  width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+}
+
+/* ── 3c-5: Sesiones del jugador coloreadas por estado propio ── */
+.sesion-jug-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 16px; border-bottom: 1px solid var(--borde);
+  cursor: pointer; transition: background .1s; position: relative;
+}
+.sesion-jug-card:last-child { border-bottom: none; }
+.sesion-jug-card:active { background: var(--morado-xs); }
+.sesion-jug-card.estado-P { border-left: 4px solid var(--verde); }
+.sesion-jug-card.estado-A { border-left: 4px solid var(--rojo); background: var(--rojo-s); }
+.sesion-jug-card.estado-R { border-left: 4px solid var(--naranja); background: var(--naranja-s); }
+.sesion-jug-card.estado-sin { border-left: 4px solid var(--borde); }
+.sjc-estado {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .8rem; font-weight: 800;
+}
+.sjc-estado.P { background: var(--verde); color: #fff; }
+.sjc-estado.A { background: var(--rojo);  color: #fff; }
+.sjc-estado.R { background: var(--naranja); color: #fff; }
+.sjc-estado.sin { background: var(--borde); color: var(--texto-sec); font-size: .65rem; }
+
+/* ── 3c-6: Indicador justificación enviada ── */
+.justif-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #E3F2FD; color: #1565C0;
+  font-size: .62rem; font-weight: 700; padding: 2px 7px;
+  border-radius: 10px; margin-left: auto; flex-shrink: 0;
+}
+.justif-badge::before { content: '✓'; font-size: .7rem; }
+.btn-justificar {
+  margin-left: auto; padding: 6px 13px; border-radius: 20px;
+  background: var(--naranja-s); color: var(--naranja);
+  font-size: .76rem; font-weight: 700; border: 1.5px solid var(--naranja);
+  flex-shrink: 0; transition: opacity .15s;
+}
+.btn-justificar:active { opacity: .7; }
+
+/* ── 3c-7: Modal de justificación ── */
+.modal-justif-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 210;
+  display: flex; align-items: flex-end; justify-content: center;
+  transition: opacity .2s;
+}
+.modal-justif-overlay.hidden { opacity: 0; pointer-events: none; }
+.modal-justif-overlay:not(.hidden) { opacity: 1; pointer-events: all; }
+.modal-justif-sheet {
+  width: 100%; max-width: 480px;
+  background: var(--blanco); border-radius: 20px 20px 0 0;
+  max-height: 92vh; display: flex; flex-direction: column;
+  transform: translateY(100%); transition: transform .22s cubic-bezier(.4,0,.2,1);
+}
+.modal-justif-overlay:not(.hidden) .modal-justif-sheet { transform: translateY(0); }
+.modal-justif-sheet .modal-body { padding: 12px 16px 32px; overflow-y: auto; }
+.radio-group { display: flex; gap: 10px; margin-top: 6px; }
+.radio-opt {
+  flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 10px 12px; border: 1.5px solid var(--borde); border-radius: 10px;
+  font-size: .85rem; font-weight: 600; transition: all .15s;
+}
+.radio-opt:has(input:checked) { border-color: var(--morado); background: var(--morado-s); color: var(--morado); }
+.radio-opt input { accent-color: var(--morado); }
+.justif-preview-wrap {
+  background: var(--fondo); border-radius: 10px; padding: 12px;
+  margin: 4px 0 14px; border-left: 3px solid var(--morado);
+}
+.justif-preview-label { font-size: .7rem; font-weight: 700; color: var(--texto-sec); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .4px; }
+.justif-preview { font-size: .82rem; color: var(--texto); line-height: 1.5; min-height: 36px; white-space: pre-wrap; }
+.form-group textarea {
+  width: 100%; padding: 10px 12px;
+  background: var(--fondo); border: 1.5px solid var(--borde);
+  border-radius: 8px; font-size: .9rem; color: var(--texto);
+  outline: none; resize: none; transition: border-color .18s; font-family: inherit;
+}
+.form-group textarea:focus { border-color: var(--morado); background: var(--blanco); }
+
+/* ── 3c-8: Vista perfil jugador y ajustes cuenta ── */
+.perfil-jugador-container { padding: 24px 16px 32px; }
+.perfil-avatar {
+  width: 88px; height: 88px; border-radius: 50%;
+  background: linear-gradient(135deg, #4A148C, #7B1FA2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.5rem; margin: 0 auto 12px; box-shadow: var(--sombra-lg);
+}
+.perfil-nombre {
+  text-align: center; font-size: 1.15rem; font-weight: 800;
+  color: var(--texto); margin-bottom: 4px;
+}
+.perfil-equipo {
+  text-align: center; font-size: .78rem; color: var(--morado);
+  background: var(--morado-s); border-radius: 20px;
+  padding: 3px 12px; display: inline-block; margin: 0 auto 24px;
+  left: 50%; position: relative; transform: translateX(-50%);
+}
+.perfil-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;
+}
+.perfil-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 22px 12px; border-radius: var(--r);
+  background: var(--blanco); box-shadow: var(--sombra-lg);
+  border: 1.5px solid var(--borde); transition: transform .12s, box-shadow .12s;
+  cursor: pointer;
+}
+.perfil-card:active { transform: scale(.96); box-shadow: var(--sombra); }
+.perfil-card-icon  { font-size: 2rem; }
+.perfil-card-label { font-size: .8rem; font-weight: 700; color: var(--texto); text-align: center; }
+
+/* Toggle switch para EsAdmin en formulario entrenador */
+.toggle-label {
+  display: flex; align-items: center; gap: 12px; cursor: pointer;
+  font-size: .85rem; font-weight: 500;
+}
+.toggle-input { display: none; }
+.toggle-slider {
+  position: relative; width: 44px; height: 24px; flex-shrink: 0;
+  background: #9E9E9E; border-radius: 12px; transition: background .18s;
+  box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.12);
+}
+.toggle-slider::after {
+  content: ''; position: absolute; width: 18px; height: 18px;
+  left: 3px; top: 3px; background: #fff; border-radius: 50%;
+  transition: transform .18s; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+.toggle-input:checked ~ .toggle-slider { background: var(--morado); box-shadow: none; }
+.toggle-input:checked ~ .toggle-slider::after { transform: translateX(20px); }
+
+/* Bloque estado sesión (vista detalle jugador) */
+.sesion-estado-bloque {
+  display: flex; align-items: center; gap: 16px;
+  padding: 20px 16px; border-bottom: 1px solid var(--borde);
+}
+.sesion-estado-icono {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem; font-weight: 900; flex-shrink: 0;
+}
+.sesion-estado-icono.P { background: var(--verde-s); color: var(--verde); }
+.sesion-estado-icono.A { background: var(--rojo-s);  color: var(--rojo); }
+.sesion-estado-icono.R { background: var(--naranja-s); color: var(--naranja); }
+.sesion-estado-icono.sin { background: var(--fondo); color: var(--texto-sec); font-size: 1.2rem; }
+.sesion-estado-texto { font-size: .95rem; font-weight: 700; }
+.sesion-estado-sub   { font-size: .78rem; color: var(--texto-sec); margin-top: 3px; }
 </style>

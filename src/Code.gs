@@ -42,9 +42,14 @@ function include(filename) {
  * @param {string} pin
  * @returns {Object}
  */
-function iniciarSesion(email, pin) {
+function iniciarSesion(tipo, credencial, pin) {
   try {
-    const auth = { email: email, pin: pin };
+    let auth;
+    if (tipo === 'jugador') {
+      auth = { tipo: 'jugador', usuario: credencial, pin: String(pin) };
+    } else {
+      auth = { tipo: 'entrenador', email: credencial, pin: String(pin) };
+    }
     return cargarDatos(auth);
   } catch (e) {
     return { success: false, error: e.message };
@@ -86,7 +91,7 @@ function cargarDatos(auth) {
   }
 
   try {
-    Logger.log(`[cargarDatos:${traceId}] inicio email=${auth && auth.email ? auth.email : '(sin email)'}`);
+    Logger.log(`[cargarDatos:${traceId}] inicio tipo=${auth && auth.tipo} id=${auth && (auth.email || auth.usuario)}`);
     const contexto = Auth.getContextoUsuario(auth);
     if (!contexto.success) {
       Logger.log(`[cargarDatos:${traceId}] fallo contexto: ${contexto.error}`);
@@ -135,22 +140,65 @@ function cargarDatos(auth) {
       };
     }
 
-    Logger.log(`[cargarDatos:${traceId}] ok`);
+    const rol = contexto.rol;
+
+    // ── Filtrado de datos sensibles según rol ──────────────────────────────────
+    let jugadoresFinal    = jugadoresR.data;
+    let asistJugFinal     = asistJugadoresR.data;
+    let entrenFinal       = entrenadoresR.data;
+
+    if (rol === CONFIG.ROLES.JUGADOR) {
+      const jugadorPropioId = contexto.jugador ? contexto.jugador.ID : null;
+
+      // Jugadores: datos completos para el propio (sin CodigoPadres) y solo campos básicos para terceros
+      jugadoresFinal = jugadoresR.data.map(j => {
+        if (j.ID === jugadorPropioId) {
+          const s = Object.assign({}, j);
+          delete s.CodigoPadres;   // El jugador nunca ve su propio CodigoPadres (es para padres)
+          return s;
+        }
+        return { ID: j.ID, Nombre: j.Nombre, Apellidos: j.Apellidos,
+                 FotoURL: j.FotoURL || '', Dorsal: j.Dorsal || '' };
+      });
+
+      // Asistencias: propias completas; las de otros solo Estado (sin justificación)
+      asistJugFinal = asistJugadoresR.data.map(r => {
+        if (r.ID_Jugador === jugadorPropioId) return r;
+        return { ID: r.ID, ID_Sesion: r.ID_Sesion, ID_Jugador: r.ID_Jugador,
+                 Estado: r.Estado, EsInvitado: r.EsInvitado, FechaRegistro: r.FechaRegistro };
+      });
+
+      // Entrenadores: datos básicos, sin PIN
+      entrenFinal = entrenadoresR.data.map(e => ({
+        ID: e.ID, Nombre: e.Nombre, Apellidos: e.Apellidos, EsAdmin: e.EsAdmin || false,
+      }));
+    } else if (rol === CONFIG.ROLES.ENTRENADOR) {
+      // Entrenadores no ven el PIN de sus compañeros entrenadores
+      entrenFinal = entrenadoresR.data.map(e => {
+        const s = Object.assign({}, e);
+        delete s.PIN;
+        return s;
+      });
+    }
+    // Admin: datos completos en todas las hojas
+
+    Logger.log(`[cargarDatos:${traceId}] ok rol=${rol}`);
 
     return {
       success:             true,
       traceId:             traceId,
       contexto:            contexto,
-      jugadores:           jugadoresR.data,
-      entrenadores:        entrenadoresR.data,
+      jugadores:           jugadoresFinal,
+      entrenadores:        entrenFinal,
       equipos:             equiposR.data,
       jugadoresEquipos:    jugadoresEquiposR.data,
       entrenadoresEquipos: entrenadoresEquiposR.data,
       horarios:            horariosR.data,
       sesiones:            sesionesR.data,
       temporadas:          temporadasR.data,
-      asistJugadores:      asistJugadoresR.data,
+      asistJugadores:      asistJugFinal,
       asistEntrenadores:   asistEntrenadoresR.data,
+      motivosJustificacion: CONFIG.MOTIVOS_JUSTIFICACION,
     };
   } catch (e) {
     Logger.log(`[cargarDatos:${traceId}] excepcion inesperada: ${e.message}`);
@@ -167,41 +215,35 @@ function cargarDatos(auth) {
 
 function getTemporadaActiva(auth) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     const temporadas = getSheetData(CONFIG.SHEETS.TEMPORADAS);
     const activa = temporadas.find(t => t.Activa === true || t.Activa === 'TRUE');
     return { success: true, temporada: activa || null };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
+  } catch (e) { return { success: false, error: e.message }; }
 }
 
 // ── Equipos ───────────────────────────────────────────────────────────────────
 
 function getEquipos(auth) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     return { success: true, equipos: Equipos.getEquipos() };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
+  } catch (e) { return { success: false, error: e.message }; }
 }
 
 function getEquipoById(auth, equipoId) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     return { success: true, equipo: Equipos.getEquipoById(equipoId) };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
+  } catch (e) { return { success: false, error: e.message }; }
 }
 
 function crearEquipo(auth, datos) {
   try {
-    Auth.requireAdmin(auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, equipo: Equipos.crearEquipo(datos) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -210,7 +252,7 @@ function crearEquipo(auth, datos) {
 
 function actualizarEquipo(auth, equipoId, datos) {
   try {
-    Auth.requireAdmin(auth);
+    Auth.requireAccesoGestionEquipo(equipoId, auth);
     return { success: true, actualizado: Equipos.actualizarEquipo(equipoId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -219,7 +261,7 @@ function actualizarEquipo(auth, equipoId, datos) {
 
 function eliminarEquipo(auth, equipoId) {
   try {
-    Auth.requireAdmin(auth);
+    Auth.requireAccesoGestionEquipo(equipoId, auth);
     return { success: true, eliminado: Equipos.eliminarEquipo(equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -230,27 +272,23 @@ function eliminarEquipo(auth, equipoId) {
 
 function getJugadores(auth) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     return { success: true, jugadores: Equipos.getJugadores() };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
+  } catch (e) { return { success: false, error: e.message }; }
 }
 
 function getJugadoresByEquipo(auth, equipoId) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     return { success: true, jugadores: Equipos.getJugadoresByEquipo(equipoId) };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
+  } catch (e) { return { success: false, error: e.message }; }
 }
 
 function crearJugador(auth, datos) {
   try {
-    Auth.requireAdmin(auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, jugador: Equipos.crearJugador(datos) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -259,7 +297,7 @@ function crearJugador(auth, datos) {
 
 function actualizarJugador(auth, jugadorId, datos) {
   try {
-    Auth.requireAdmin(auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, actualizado: Equipos.actualizarJugador(jugadorId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -268,7 +306,7 @@ function actualizarJugador(auth, jugadorId, datos) {
 
 function eliminarJugador(auth, jugadorId) {
   try {
-    Auth.requireAdmin(auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, eliminado: Equipos.eliminarJugador(jugadorId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -277,7 +315,7 @@ function eliminarJugador(auth, jugadorId) {
 
 function asignarJugadorAEquipo(auth, jugadorId, equipoId, tipo) {
   try {
-    Auth.requireAdmin(auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, relacion: Equipos.asignarJugadorAEquipo(jugadorId, equipoId, tipo) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -286,33 +324,49 @@ function asignarJugadorAEquipo(auth, jugadorId, equipoId, tipo) {
 
 function desasignarJugadorDeEquipo(auth, jugadorId, equipoId) {
   try {
-    Auth.requireAdmin(auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, desasignado: Equipos.desasignarJugadorDeEquipo(jugadorId, equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
+/**
+ * Actualiza las credenciales (Usuario y/o PIN) de un jugador.
+ * El propio jugador puede cambiar las suyas; entrenadores/admins pueden cambiar cualquiera.
+ */
+function actualizarCredencialesJugador(auth, jugadorId, nuevoUsuario, nuevoPin) {
+  try {
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
+    if (Auth.isJugador(auth)) {
+      const jugadorActual = Auth.getJugadorActual(auth);
+      if (!jugadorActual || jugadorActual.ID !== jugadorId) {
+        throw new Error('Solo puedes modificar tus propias credenciales.');
+      }
+    } else {
+      Auth.requireEntrenadorOAdmin(auth);
+    }
+    return { success: true, actualizado: Equipos.actualizarCredencialesJugador(jugadorId, nuevoUsuario, nuevoPin) };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
 // ── Entrenadores ──────────────────────────────────────────────────────────────
 
 function getEntrenadores(auth) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     return { success: true, entrenadores: Equipos.getEntrenadores() };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
+  } catch (e) { return { success: false, error: e.message }; }
 }
 
 function getEntrenadoresByEquipo(auth, equipoId) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     return { success: true, entrenadores: Equipos.getEntrenadoresByEquipo(equipoId) };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
+  } catch (e) { return { success: false, error: e.message }; }
 }
 
 function crearEntrenador(auth, datos) {
@@ -327,7 +381,8 @@ function crearEntrenador(auth, datos) {
 function actualizarEntrenador(auth, entrenadorId, datos) {
   try {
     Auth.requireAdmin(auth);
-    return { success: true, actualizado: Equipos.actualizarEntrenador(entrenadorId, datos) };
+    // Solo admin llega aqui → permiteEmail=true para permitir cambio de correo
+    return { success: true, actualizado: Equipos.actualizarEntrenador(entrenadorId, datos, true) };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -342,10 +397,10 @@ function eliminarEntrenador(auth, entrenadorId) {
   }
 }
 
-function asignarEntrenadorAEquipo(auth, entrenadorId, equipoId) {
+function asignarEntrenadorAEquipo(auth, entrenadorId, equipoId, tipoRol) {
   try {
     Auth.requireAdmin(auth);
-    return { success: true, relacion: Equipos.asignarEntrenadorAEquipo(entrenadorId, equipoId) };
+    return { success: true, relacion: Equipos.asignarEntrenadorAEquipo(entrenadorId, equipoId, tipoRol) };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -360,11 +415,32 @@ function desasignarEntrenadorDeEquipo(auth, entrenadorId, equipoId) {
   }
 }
 
+/** Añade un equipo a la lista de Visor del entrenador autenticado */
+function añadirEquipoVisor(auth, equipoId) {
+  try {
+    Auth.requireEntrenadorOAdmin(auth);
+    const ent = Auth.getEntrenadorActual(auth);
+    if (!ent) throw new Error('No se encontró el entrenador.');
+    return { success: true, relacion: Equipos.añadirEquipoVisor(ent.ID, equipoId) };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+/** Elimina un equipo de la lista de Visor del entrenador autenticado */
+function eliminarEquipoVisor(auth, equipoId) {
+  try {
+    Auth.requireEntrenadorOAdmin(auth);
+    const ent = Auth.getEntrenadorActual(auth);
+    if (!ent) throw new Error('No se encontró el entrenador.');
+    return { success: true, eliminado: Equipos.eliminarEquipoVisor(ent.ID, equipoId) };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
 // ── Sesiones ──────────────────────────────────────────────────────────────────
 
 function getSesionesByEquipo(auth, equipoId) {
   try {
-    Auth.requireAccesoEquipo(equipoId, auth);
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     return { success: true, sesiones: Sesiones.getSesionesByEquipo(equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -373,7 +449,7 @@ function getSesionesByEquipo(auth, equipoId) {
 
 function generarSesionesSemana(auth, equipoId) {
   try {
-    Auth.requireAccesoEquipo(equipoId, auth);
+    Auth.requireAccesoGestionEquipo(equipoId, auth);
     return { success: true, sesiones: Sesiones.generarSesionesSemana(equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -382,7 +458,7 @@ function generarSesionesSemana(auth, equipoId) {
 
 function crearSesionExtra(auth, equipoId, datos) {
   try {
-    Auth.requireAccesoEquipo(equipoId, auth);
+    Auth.requireAccesoGestionEquipo(equipoId, auth);
     return { success: true, sesion: Sesiones.crearSesionExtra(equipoId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -391,14 +467,10 @@ function crearSesionExtra(auth, equipoId, datos) {
 
 function actualizarSesion(auth, sesionId, datos) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
-
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) {
-      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
-    }
-
+    if (sesion) Auth.requireAccesoGestionEquipo(sesion.ID_Equipo, auth);
     return { success: true, actualizado: Sesiones.actualizarSesion(sesionId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -407,14 +479,10 @@ function actualizarSesion(auth, sesionId, datos) {
 
 function eliminarSesion(auth, sesionId) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
-
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) {
-      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
-    }
-
+    if (sesion) Auth.requireAccesoGestionEquipo(sesion.ID_Equipo, auth);
     return { success: true, eliminado: Sesiones.eliminarSesion(sesionId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -425,14 +493,10 @@ function eliminarSesion(auth, sesionId) {
 
 function getAsistenciaSesion(auth, sesionId) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
-
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) {
-      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
-    }
-
+    if (sesion) Auth.requireAccesoLecturaEquipo(sesion.ID_Equipo, auth);
     return { success: true, asistencia: Asistencia.getAsistenciaSesion(sesionId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -441,14 +505,10 @@ function getAsistenciaSesion(auth, sesionId) {
 
 function registrarAsistenciaJugador(auth, sesionId, jugadorId, estado, esInvitado) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
-
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) {
-      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
-    }
-
+    if (sesion) Auth.requireAccesoGestionEquipo(sesion.ID_Equipo, auth);
     return { success: true, registro: Asistencia.registrarAsistenciaJugador(sesionId, jugadorId, estado, esInvitado) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -457,14 +517,10 @@ function registrarAsistenciaJugador(auth, sesionId, jugadorId, estado, esInvitad
 
 function registrarAsistenciaEntrenador(auth, sesionId, entrenadorId, asistio, esInvitado) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
-
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) {
-      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
-    }
-
+    if (sesion) Auth.requireAccesoGestionEquipo(sesion.ID_Equipo, auth);
     return { success: true, registro: Asistencia.registrarAsistenciaEntrenador(sesionId, entrenadorId, asistio, esInvitado) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -473,29 +529,57 @@ function registrarAsistenciaEntrenador(auth, sesionId, entrenadorId, asistio, es
 
 function guardarAsistenciaCompleta(auth, sesionId, asistencias) {
   try {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) throw new Error(validacion.error);
-
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) {
-      Auth.requireAccesoEquipo(sesion.ID_Equipo, auth);
-    }
-
+    if (sesion) Auth.requireAccesoGestionEquipo(sesion.ID_Equipo, auth);
     return Asistencia.guardarAsistenciaCompleta(sesionId, asistencias);
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
+/**
+ * Envía una justificación de ausencia/retraso.
+ * Accesible por cualquier usuario autenticado: el CodigoPadres es la autorización real.
+ */
+function enviarJustificacion(auth, sesionId, jugadorId, codigoPadres, tipoIncidencia, motivo, detalle, horaIncorporacion) {
+  try {
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
+    return Asistencia.registrarJustificacion(sesionId, jugadorId, codigoPadres, tipoIncidencia, motivo, detalle, horaIncorporacion);
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+/** Devuelve las justificaciones de una sesión — solo entrenadores/admins */
+function getJustificacionesSesion(auth, sesionId) {
+  try {
+    Auth.requireEntrenadorOAdmin(auth);
+    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
+    if (sesion) Auth.requireAccesoLecturaEquipo(sesion.ID_Equipo, auth);
+    return { success: true, justificaciones: Asistencia.getJustificacionesSesion(sesionId) };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
 // ── Informes ──────────────────────────────────────────────────────────────────
 
 function getEstadisticasEquipo(auth, equipoId, temporadaId) {
   try {
-    Auth.requireAccesoEquipo(equipoId, auth);
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
     return { success: true, estadisticas: Informes.getEstadisticasEquipo(equipoId, temporadaId) };
   } catch (e) {
     return { success: false, error: e.message };
   }
+}
+
+/** Estadísticas de asistencia de un jugador concreto — todos los roles */
+function getEstadisticasJugador(auth, jugadorId) {
+  try {
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
+    return { success: true, estadisticas: Informes.getEstadisticasJugador(jugadorId) };
+  } catch (e) { return { success: false, error: e.message }; }
 }
 
 function exportarInformeASheets(auth, equipoId, temporadaId) {
@@ -509,7 +593,7 @@ function exportarInformeASheets(auth, equipoId, temporadaId) {
 
 function setHorariosEquipo(auth, equipoId, horarios) {
   try {
-    Auth.requireAdmin(auth);
+    Auth.requireAccesoGestionEquipo(equipoId, auth);
     return { success: true, actualizado: Equipos.setHorariosEquipo(equipoId, horarios) };
   } catch (e) {
     return { success: false, error: e.message };

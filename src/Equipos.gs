@@ -163,22 +163,53 @@ const Equipos = {
 
   /**
    * Crea un nuevo jugador en el registro global.
-   * @param {{ Nombre, Apellidos, FechaNac, Telefono, Email, FotoURL, Dorsal }} datos
-   * @returns {Object} Jugador creado.
+   * Auto-genera Usuario, PIN y CodigoPadres si no se proporcionan.
    */
   crearJugador(datos) {
     if (!datos.Nombre || !datos.Apellidos) {
       throw new Error('Nombre y apellidos son obligatorios.');
     }
+
+    // Auto-generar credenciales
+    let usuario = datos.Usuario || Equipos._generarUsuario(datos.Nombre, datos.Apellidos);
+    // Garantizar unicidad de usuario
+    const jugadoresExistentes = getSheetData(CONFIG.SHEETS.JUGADORES);
+    const usersExistentes     = jugadoresExistentes.map(j => String(j.Usuario || '').toLowerCase());
+    let base = usuario; let suf = 2;
+    while (usersExistentes.includes(usuario.toLowerCase())) { usuario = base + suf++; }
+
+    const pin          = datos.PIN          || Equipos._generarPIN4();
+    const codigoPadres = datos.CodigoPadres || Equipos._generarCodigoPadres();
+
     return appendRow(CONFIG.SHEETS.JUGADORES, {
-      Nombre:    datos.Nombre,
-      Apellidos: datos.Apellidos,
-      FechaNac:  datos.FechaNac  || '',
-      Telefono:  datos.Telefono  || '',
-      Email:     datos.Email     || '',
-      FotoURL:   datos.FotoURL   || '',
-      Dorsal:    datos.Dorsal    || '',
+      Nombre:        datos.Nombre,
+      Apellidos:     datos.Apellidos,
+      FechaNac:      datos.FechaNac      || '',
+      Telefono:      datos.Telefono      || '',
+      Email:         datos.Email         || '',
+      FotoURL:       datos.FotoURL       || '',
+      Dorsal:        datos.Dorsal        || '',
+      Usuario:       usuario,
+      PIN:           pin,
+      CodigoPadres:  codigoPadres,
+      EmailPadre1:   datos.EmailPadre1   || '',
+      EmailPadre2:   datos.EmailPadre2   || '',
+      NombrePadre1:  datos.NombrePadre1  || '',
+      NombrePadre2:  datos.NombrePadre2  || '',
     });
+  },
+
+  _generarUsuario(nombre, apellidos) {
+    const n = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    return n(nombre).charAt(0) + n(apellidos).replace(/\s+/g, '').substring(0, 10);
+  },
+
+  _generarPIN4() {
+    return String(Math.floor(1000 + Math.random() * 9000));
+  },
+
+  _generarCodigoPadres() {
+    return Utilities.getUuid().replace(/-/g, '').substring(0, 6).toUpperCase();
   },
 
   /**
@@ -193,15 +224,44 @@ const Equipos = {
   },
 
   /**
-   * Actualiza los datos de un jugador.
-   * @param {string} jugadorId
-   * @param {Object} datos
-   * @returns {boolean}
+   * Actualiza los datos de un jugador (incluye campos de tutores).
+   * La actualización de Usuario y PIN se hace por actualizarCredencialesJugador().
    */
   actualizarJugador(jugadorId, datos) {
     const campos = {};
-    const permitidos = ['Nombre', 'Apellidos', 'FechaNac', 'Telefono', 'Email', 'FotoURL', 'Dorsal'];
+    const permitidos = [
+      'Nombre', 'Apellidos', 'FechaNac', 'Telefono', 'Email', 'FotoURL', 'Dorsal',
+      'EmailPadre1', 'EmailPadre2', 'NombrePadre1', 'NombrePadre2'
+    ];
     permitidos.forEach(k => { if (datos[k] !== undefined) campos[k] = datos[k]; });
+    return updateRow(CONFIG.SHEETS.JUGADORES, jugadorId, campos);
+  },
+
+  /**
+   * Actualiza las credenciales de login de un jugador (Usuario y/o PIN).
+   * El propio jugador puede actualizar las suyas; entrenadores/admins cualquiera.
+   * @param {string} jugadorId
+   * @param {string|null} nuevoUsuario
+   * @param {string|null} nuevoPin
+   * @returns {boolean}
+   */
+  actualizarCredencialesJugador(jugadorId, nuevoUsuario, nuevoPin) {
+    const campos = {};
+    if (nuevoUsuario) {
+      nuevoUsuario = String(nuevoUsuario).trim().toLowerCase();
+      if (nuevoUsuario.length < 3) throw new Error('El usuario debe tener al menos 3 caracteres.');
+      // Verificar unicidad
+      const jugadores = getSheetData(CONFIG.SHEETS.JUGADORES);
+      const duplicado = jugadores.find(j => j.ID !== jugadorId && String(j.Usuario || '').toLowerCase() === nuevoUsuario);
+      if (duplicado) throw new Error(`El usuario "${nuevoUsuario}" ya está en uso.`);
+      campos.Usuario = nuevoUsuario;
+    }
+    if (nuevoPin) {
+      const pin = String(nuevoPin).trim();
+      if (!/^[0-9]{4,6}$/.test(pin)) throw new Error('El PIN debe tener entre 4 y 6 dígitos numéricos.');
+      campos.PIN = pin;
+    }
+    if (Object.keys(campos).length === 0) return false;
     return updateRow(CONFIG.SHEETS.JUGADORES, jugadorId, campos);
   },
 
@@ -274,12 +334,28 @@ const Equipos = {
    * @param {string} equipoId
    * @returns {Object[]}
    */
-  getEntrenadoresByEquipo(equipoId) {
+  /**
+   * Devuelve entrenadores asignados activamente a un equipo, enriquecidos con TipoRol.
+   * Por defecto solo devuelve TipoRol=Entrenador (los que aparecen en sesiones).
+   * @param {string} equipoId
+   * @param {boolean} [incluirVisores=false]
+   */
+  getEntrenadoresByEquipo(equipoId, incluirVisores) {
     const relaciones = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Equipo', equipoId)
-      .filter(r => r.Activo === true || r.Activo === 'TRUE');
+      .filter(r => {
+        if (!(r.Activo === true || r.Activo === 'TRUE')) return false;
+        if (!incluirVisores && r.TipoRol === CONFIG.TIPOS_ROL_ENTRENADOR.VISOR) return false;
+        return true;
+      });
 
     const entrenadorIds = relaciones.map(r => r.ID_Entrenador);
-    return findWhereIn(CONFIG.SHEETS.ENTRENADORES, 'ID', entrenadorIds)
+    const entrenadores  = findWhereIn(CONFIG.SHEETS.ENTRENADORES, 'ID', entrenadorIds);
+
+    return entrenadores
+      .map(e => {
+        const rel = relaciones.find(r => r.ID_Entrenador === e.ID);
+        return { ...e, TipoRol: rel ? (rel.TipoRol || CONFIG.TIPOS_ROL_ENTRENADOR.ENTRENADOR) : CONFIG.TIPOS_ROL_ENTRENADOR.ENTRENADOR };
+      })
       .sort((a, b) => `${a.Apellidos} ${a.Nombre}`.localeCompare(`${b.Apellidos} ${b.Nombre}`));
   },
 
@@ -292,16 +368,18 @@ const Equipos = {
     if (!datos.Nombre || !datos.Apellidos || !datos.Email) {
       throw new Error('Nombre, apellidos y email son obligatorios.');
     }
-    // Evitar emails duplicados
     const existentes = findWhere(CONFIG.SHEETS.ENTRENADORES, 'Email', datos.Email);
     if (existentes.length > 0) {
       throw new Error(`Ya existe un entrenador con el email: ${datos.Email}`);
     }
+    const pin = datos.PIN || '1234';
     return appendRow(CONFIG.SHEETS.ENTRENADORES, {
       Nombre:    datos.Nombre,
       Apellidos: datos.Apellidos,
       Email:     datos.Email,
       Telefono:  datos.Telefono || '',
+      PIN:       pin,
+      EsAdmin:   datos.EsAdmin === true || datos.EsAdmin === 'TRUE' ? true : false,
     });
   },
 
@@ -322,11 +400,28 @@ const Equipos = {
    * @param {Object} datos
    * @returns {boolean}
    */
-  actualizarEntrenador(entrenadorId, datos) {
+  /**
+   * Actualiza los datos de un entrenador.
+   * El Email solo puede cambiarlo un administrador (guard en Code.gs).
+   * Si se cambia el Email, la sesión activa del entrenador quedará invalidada.
+   */
+  actualizarEntrenador(entrenadorId, datos, permiteEmail) {
     const campos = {};
-    const permitidos = ['Nombre', 'Apellidos', 'Telefono'];
-    // No permitir cambiar el Email (es la clave de autenticación)
+    const permitidos = ['Nombre', 'Apellidos', 'Telefono', 'PIN'];
     permitidos.forEach(k => { if (datos[k] !== undefined) campos[k] = datos[k]; });
+    if (permiteEmail && datos.Email !== undefined) {
+      // Verificar unicidad del nuevo email
+      const existentes = findWhere(CONFIG.SHEETS.ENTRENADORES, 'Email', datos.Email);
+      if (existentes.length > 0 && existentes[0].ID !== entrenadorId) {
+        throw new Error(`El email "${datos.Email}" ya está en uso por otro entrenador.`);
+      }
+      campos.Email = datos.Email;
+    }
+    if (datos.EsAdmin !== undefined) {
+      // Garantizar que la columna EsAdmin existe antes de intentar escribirla
+      migrarCamposEntrenadores();
+      campos.EsAdmin = datos.EsAdmin === true || datos.EsAdmin === 'TRUE';
+    }
     return updateRow(CONFIG.SHEETS.ENTRENADORES, entrenadorId, campos);
   },
 
@@ -336,20 +431,67 @@ const Equipos = {
    * @param {string} equipoId
    * @returns {Object}
    */
-  asignarEntrenadorAEquipo(entrenadorId, equipoId) {
+  /**
+   * Asigna un entrenador a un equipo con el rol indicado.
+   * @param {string} entrenadorId
+   * @param {string} equipoId
+   * @param {string} [tipoRol='Entrenador'] - 'Entrenador' | 'Visor'
+   */
+  asignarEntrenadorAEquipo(entrenadorId, equipoId, tipoRol) {
+    tipoRol = tipoRol || CONFIG.TIPOS_ROL_ENTRENADOR.ENTRENADOR;
+    if (!Object.values(CONFIG.TIPOS_ROL_ENTRENADOR).includes(tipoRol)) {
+      throw new Error(`TipoRol inválido: ${tipoRol}.`);
+    }
+
     const existentes = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
       .filter(r => r.ID_Equipo === equipoId);
 
     if (existentes.length > 0) {
-      updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, existentes[0].ID, { Activo: true });
-      return { ...existentes[0], Activo: true };
+      updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, existentes[0].ID, { Activo: true, TipoRol: tipoRol });
+      return { ...existentes[0], Activo: true, TipoRol: tipoRol };
     }
 
     return appendRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, {
       ID_Entrenador: entrenadorId,
       ID_Equipo:     equipoId,
       Activo:        true,
+      TipoRol:       tipoRol,
     });
+  },
+
+  /**
+   * Añade un equipo como Visor para el entrenador indicado.
+   * Si ya es Entrenador del equipo, no hace nada (no degrada el rol).
+   */
+  añadirEquipoVisor(entrenadorId, equipoId) {
+    const existentes = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
+      .filter(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
+
+    if (existentes.length > 0) {
+      // Si ya es Entrenador, no degradar a Visor
+      if (existentes[0].TipoRol === CONFIG.TIPOS_ROL_ENTRENADOR.ENTRENADOR) {
+        return existentes[0]; // ya tiene acceso completo
+      }
+      return existentes[0]; // ya es Visor
+    }
+
+    return appendRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, {
+      ID_Entrenador: entrenadorId,
+      ID_Equipo:     equipoId,
+      Activo:        true,
+      TipoRol:       CONFIG.TIPOS_ROL_ENTRENADOR.VISOR,
+    });
+  },
+
+  /**
+   * Elimina un equipo de la lista de Visor del entrenador.
+   * Solo elimina relaciones de tipo Visor; si es Entrenador, no hace nada.
+   */
+  eliminarEquipoVisor(entrenadorId, equipoId) {
+    const existentes = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
+      .filter(r => r.ID_Equipo === equipoId && r.TipoRol === CONFIG.TIPOS_ROL_ENTRENADOR.VISOR);
+    if (existentes.length === 0) return false;
+    return updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, existentes[0].ID, { Activo: false });
   },
 
   /**

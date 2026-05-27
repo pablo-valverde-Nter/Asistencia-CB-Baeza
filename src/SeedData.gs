@@ -46,10 +46,10 @@ function cargarDatosEjemplo() {
   // ── 2. ENTRENADORES ────────────────────────────────────────────────────────
   Logger.log('\n👨‍🏫 Creando entrenadores...');
   const entrenadorDefs = [
-    { Nombre: 'Carlos',  Apellidos: 'Moreno Rivas',    Email: 'carlos.moreno@cbbaeza.es',  Telefono: '622111001', PIN: '1234' },
-    { Nombre: 'Ana',     Apellidos: 'Martínez López',  Email: 'ana.martinez@cbbaeza.es',   Telefono: '622111002', PIN: '1234' },
-    { Nombre: 'Pedro',   Apellidos: 'Ruiz García',     Email: 'pedro.ruiz@cbbaeza.es',     Telefono: '622111003', PIN: '1234' },
-    { Nombre: 'Laura',   Apellidos: 'Sánchez Jiménez', Email: 'laura.sanchez@cbbaeza.es',  Telefono: '622111004', PIN: '1234' },
+    { Nombre: 'Carlos',  Apellidos: 'Moreno Rivas',    Email: 'carlos.moreno@cbbaeza.es',  Telefono: '622111001', PIN: '1234', EsAdmin: false },
+    { Nombre: 'Ana',     Apellidos: 'Martínez López',  Email: 'ana.martinez@cbbaeza.es',   Telefono: '622111002', PIN: '1234', EsAdmin: false },
+    { Nombre: 'Pedro',   Apellidos: 'Ruiz García',     Email: 'pedro.ruiz@cbbaeza.es',     Telefono: '622111003', PIN: '1234', EsAdmin: false },
+    { Nombre: 'Laura',   Apellidos: 'Sánchez Jiménez', Email: 'laura.sanchez@cbbaeza.es',  Telefono: '622111004', PIN: '1234', EsAdmin: false },
   ];
   ids.entrenadores = entrenadorDefs.map(e => {
     const row = appendRow(CONFIG.SHEETS.ENTRENADORES, e);
@@ -80,12 +80,12 @@ function cargarDatosEjemplo() {
   // Laura   → Infantil Femenino (asistente)
   Logger.log('\n🔗 Asignando entrenadores a equipos...');
   const asignaciones = [
-    { ID_Entrenador: eCarlos, ID_Equipo: eqMini, Activo: true },
-    { ID_Entrenador: eCarlos, ID_Equipo: eqSen,  Activo: true },
-    { ID_Entrenador: eAna,    ID_Equipo: eqInfF, Activo: true },
-    { ID_Entrenador: ePedro,  ID_Equipo: eqCad,  Activo: true },
-    { ID_Entrenador: ePedro,  ID_Equipo: eqSen,  Activo: true },
-    { ID_Entrenador: eLaura,  ID_Equipo: eqInfF, Activo: true },
+    { ID_Entrenador: eCarlos, ID_Equipo: eqMini, TipoRol: 'Entrenador', Activo: true },
+    { ID_Entrenador: eCarlos, ID_Equipo: eqSen,  TipoRol: 'Entrenador', Activo: true },
+    { ID_Entrenador: eAna,    ID_Equipo: eqInfF, TipoRol: 'Entrenador', Activo: true },
+    { ID_Entrenador: ePedro,  ID_Equipo: eqCad,  TipoRol: 'Entrenador', Activo: true },
+    { ID_Entrenador: ePedro,  ID_Equipo: eqSen,  TipoRol: 'Entrenador', Activo: true },
+    { ID_Entrenador: eLaura,  ID_Equipo: eqInfF, TipoRol: 'Entrenador', Activo: true },
   ];
   asignaciones.forEach(a => appendRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, a));
   Logger.log(`  ✅ ${asignaciones.length} asignaciones creadas`);
@@ -172,12 +172,14 @@ function cargarDatosEjemplo() {
   ];
 
   /**
-   * Inserta jugadores en la hoja Jugadores y los vincula a un equipo como Principal.
+   * Inserta jugadores usando Equipos.crearJugador() para auto-generar credenciales
+   * (Usuario, PIN, CodigoPadres) y los vincula al equipo como Principal.
    * @returns {string[]} Array de IDs de jugadores insertados.
    */
   function insertarJugadoresEquipo(jugadores, equipoId) {
     return jugadores.map(j => {
-      const row = appendRow(CONFIG.SHEETS.JUGADORES, j);
+      // crearJugador auto-genera Usuario, PIN y CodigoPadres
+      const row = Equipos.crearJugador(j);
       appendRow(CONFIG.SHEETS.JUGADORES_EQUIPOS, {
         ID_Jugador: row.ID,
         ID_Equipo:  equipoId,

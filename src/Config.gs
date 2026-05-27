@@ -6,10 +6,9 @@
 
 const CONFIG = {
   // ── Base de datos ────────────────────────────────────────────────────────────
-  // Sustituir por el ID real del Spreadsheet tras crearlo en Google Drive
   SPREADSHEET_ID: '1wUUb0wpeYqMjJui5Qbs5OIDJdY8tMQxLXoFuO2jcoFc',
 
-  // ── Nombres de hojas (deben coincidir exactamente con las pestañas del Sheet) ─
+  // ── Nombres de hojas ──────────────────────────────────────────────────────────
   SHEETS: {
     TEMPORADAS:           'Temporadas',
     EQUIPOS:              'Equipos',
@@ -24,14 +23,27 @@ const CONFIG = {
   },
 
   // ── Control de acceso ─────────────────────────────────────────────────────────
-  // Emails con permisos de administrador completo
+  // Emails con permisos de administrador (fuente estática; también se lee EsAdmin en Entrenadores)
   ADMIN_EMAILS: [
     'pablo.valverde@nter.es',
-    'vnpablo2002@gmail.com',  
+    'vnpablo2002@gmail.com',
   ],
 
-  // PIN maestro para administradores en caso de que no estén en la hoja de Entrenadores
+  // PIN maestro para admins que NO estén dados de alta como entrenadores
   ADMIN_MASTER_PIN: '0000',
+
+  // ── Roles de usuario ──────────────────────────────────────────────────────────
+  ROLES: {
+    ADMIN:      'admin',
+    ENTRENADOR: 'entrenador',
+    JUGADOR:    'jugador',
+  },
+
+  // ── Tipos de rol entrenador-equipo ────────────────────────────────────────────
+  TIPOS_ROL_ENTRENADOR: {
+    ENTRENADOR: 'Entrenador',  // aparece en sesiones, gestiona asistencia
+    VISOR:      'Visor',       // solo ve el equipo en su dashboard
+  },
 
   // ── Categorías válidas del club ───────────────────────────────────────────────
   CATEGORIAS: [
@@ -59,6 +71,18 @@ const CONFIG = {
     PRINCIPAL:  'Principal',
     SECUNDARIO: 'Secundario',
   },
+
+  // ── Motivos de justificación de ausencia/retraso ──────────────────────────────
+  MOTIVOS_JUSTIFICACION: [
+    'Estudios / Examen',
+    'Estudios / Recuperación de materia',
+    'Otra actividad deportiva',
+    'Otra actividad extraescolar',
+    'Lesión',
+    'Enfermedad',
+    'Motivo familiar/personal',
+    'Otro',
+  ],
 
   // ── Días de la semana ─────────────────────────────────────────────────────────
   DIAS_SEMANA: {

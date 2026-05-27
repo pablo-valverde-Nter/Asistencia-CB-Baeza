@@ -1,183 +1,281 @@
 /**
  * Auth.gs
- * Control de acceso basado en Email y PIN para despliegue público (ExecuteAs: Me).
- * Autentica al usuario en base a las credenciales ('auth') enviadas desde el cliente.
+ * Control de acceso con 4 roles: admin, entrenador, jugador.
+ * Los padres acceden con las credenciales del jugador + CodigoPadres para justificaciones.
+ *
+ * auth = { tipo: 'entrenador'|'jugador', email?, usuario?, pin }
  */
 
 const Auth = {
 
+  // ══════════════════════════════════════════════════════════════════════════════
+  // VALIDACIÓN Y AUTENTICACIÓN
+  // ══════════════════════════════════════════════════════════════════════════════
+
   /**
-   * Valida las credenciales enviadas desde el cliente.
-   * @param {Object} auth - Objeto { email, pin }
+   * Valida las credenciales. Acepta entrenadores (email+pin) y jugadores (usuario+pin).
+   * @param {Object} auth - { tipo, email?, usuario?, pin }
    * @returns {{ success: boolean, error?: string }}
    */
   validate(auth) {
-    if (!auth || !auth.email) {
-      return { success: false, error: 'Inicia sesión para acceder al sistema.' };
-    }
-    const email = auth.email.toLowerCase().trim();
-    const pin = String(auth.pin || '').trim();
+    if (!auth) return { success: false, error: 'Sesión no iniciada. Inicia sesión.' };
 
-    if (!email || !pin) {
-      return { success: false, error: 'El email y el PIN son obligatorios.' };
+    const tipo = String(auth.tipo || 'entrenador').toLowerCase();
+    const pin  = String(auth.pin || '').trim();
+
+    if (tipo === 'jugador') {
+      const usuario = String(auth.usuario || '').toLowerCase().trim();
+      if (!usuario || !pin) return { success: false, error: 'Usuario y PIN son obligatorios.' };
+
+      const jugadores = getSheetData(CONFIG.SHEETS.JUGADORES);
+      const jugador   = jugadores.find(j => String(j.Usuario || '').toLowerCase().trim() === usuario);
+      if (!jugador) return { success: false, error: 'Usuario no encontrado.' };
+      if (String(jugador.PIN || '').trim() !== pin) return { success: false, error: 'PIN incorrecto.' };
+      return { success: true };
     }
 
-    // 1. Verificar si hay coincidencia en la hoja de Entrenadores
+    // tipo === 'entrenador' (incluye admin)
+    const email = String(auth.email || '').toLowerCase().trim();
+    if (!email || !pin) return { success: false, error: 'Email y PIN son obligatorios.' };
+
     const entrenadores = getSheetData(CONFIG.SHEETS.ENTRENADORES);
-    const entrenador = entrenadores.find(e => String(e.Email || '').toLowerCase().trim() === email);
+    const entrenador   = entrenadores.find(e => String(e.Email || '').toLowerCase().trim() === email);
 
     if (entrenador) {
-      const dbPin = String(entrenador.PIN || '').trim();
-      if (dbPin === pin) {
-        return { success: true };
-      }
-      return { success: false, error: 'El PIN de acceso es incorrecto.' };
+      if (String(entrenador.PIN || '').trim() !== pin) return { success: false, error: 'El PIN de acceso es incorrecto.' };
+      return { success: true };
     }
 
-    // 2. Si es Administrador Principal y no está registrado en la hoja como entrenador,
-    // se le permite el acceso utilizando el PIN Maestro de Config.gs.
+    // Admin estático sin fila en Entrenadores
     if (CONFIG.ADMIN_EMAILS.includes(email)) {
-      const masterPin = String(CONFIG.ADMIN_MASTER_PIN || '0000').trim();
-      if (masterPin === pin) {
-        return { success: true };
-      }
-      return { success: false, error: 'El PIN maestro de administrador es incorrecto.' };
+      if (String(CONFIG.ADMIN_MASTER_PIN).trim() !== pin) return { success: false, error: 'PIN maestro incorrecto.' };
+      return { success: true };
     }
 
     return { success: false, error: 'El correo electrónico no está registrado en el club.' };
   },
 
-  /**
-   * Devuelve el email del usuario validado o trigger de Apps Script.
-   * @param {Object} [auth] - Objeto { email, pin }
-   * @returns {string}
-   */
-  getCurrentUserEmail(auth) {
-    if (auth && auth.email) {
-      return auth.email.toLowerCase().trim();
-    }
-    // Fallback para ejecuciones internas de Apps Script (triggers / depuración editor)
-    try {
-      const eff = Session.getEffectiveUser().getEmail();
-      if (eff) return eff;
-    } catch (e) {}
-    try {
-      const act = Session.getActiveUser().getEmail();
-      if (act) return act;
-    } catch (e) {}
-    return '';
+  // ══════════════════════════════════════════════════════════════════════════════
+  // IDENTIDAD
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  /** Devuelve el rol del usuario autenticado: 'admin' | 'entrenador' | 'jugador' */
+  getRol(auth) {
+    if (!auth) return null;
+    const tipo = String(auth.tipo || 'entrenador').toLowerCase();
+    if (tipo === 'jugador') return CONFIG.ROLES.JUGADOR;
+
+    const email = String(auth.email || '').toLowerCase().trim();
+    if (CONFIG.ADMIN_EMAILS.includes(email)) return CONFIG.ROLES.ADMIN;
+
+    const entrenadores = getSheetData(CONFIG.SHEETS.ENTRENADORES);
+    const ent = entrenadores.find(e => String(e.Email || '').toLowerCase().trim() === email);
+    if (ent && (ent.EsAdmin === true || ent.EsAdmin === 'TRUE')) return CONFIG.ROLES.ADMIN;
+    if (ent) return CONFIG.ROLES.ENTRENADOR;
+
+    return CONFIG.ROLES.ENTRENADOR; // admin estático sin fila → ya se detecta arriba
   },
 
-  /**
-   * Comprueba si el usuario actual es administrador.
-   * @param {Object} auth
-   * @returns {boolean}
-   */
-  isAdmin(auth) {
-    const email = Auth.getCurrentUserEmail(auth);
-    return CONFIG.ADMIN_EMAILS.includes(email);
-  },
-
-  /**
-   * Lanza un error si el usuario no es administrador.
-   * @param {Object} auth
-   */
-  requireAdmin(auth) {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) {
-      throw new Error(validacion.error);
-    }
-    if (!Auth.isAdmin(auth)) {
-      throw new Error('Acción restringida a administradores.');
-    }
-  },
-
-  /**
-   * Devuelve el registro de Entrenadores que coincide con el email activo.
-   * @param {Object} auth
-   * @returns {Object|null}
-   */
+  /** Devuelve el registro de Entrenadores del usuario o null si es jugador. */
   getEntrenadorActual(auth) {
-    const email = Auth.getCurrentUserEmail(auth);
-    if (!email) return null;
-    const coincidencias = findWhere(CONFIG.SHEETS.ENTRENADORES, 'Email', email);
-    return coincidencias.length > 0 ? coincidencias[0] : null;
+    const tipo = String(auth && auth.tipo || 'entrenador').toLowerCase();
+    if (tipo === 'jugador') return null;
+    const email = String(auth.email || '').toLowerCase().trim();
+    const rows  = findWhere(CONFIG.SHEETS.ENTRENADORES, 'Email', email);
+    return rows.length > 0 ? rows[0] : null;
+  },
+
+  /** Devuelve el registro de Jugadores del usuario autenticado como jugador o null. */
+  getJugadorActual(auth) {
+    if (!auth || String(auth.tipo || '').toLowerCase() !== 'jugador') return null;
+    const usuario = String(auth.usuario || '').toLowerCase().trim();
+    const jugadores = getSheetData(CONFIG.SHEETS.JUGADORES);
+    return jugadores.find(j => String(j.Usuario || '').toLowerCase().trim() === usuario) || null;
+  },
+
+  isAdmin(auth) { return Auth.getRol(auth) === CONFIG.ROLES.ADMIN; },
+  isEntrenador(auth) {
+    const rol = Auth.getRol(auth);
+    return rol === CONFIG.ROLES.ADMIN || rol === CONFIG.ROLES.ENTRENADOR;
+  },
+  isJugador(auth) { return Auth.getRol(auth) === CONFIG.ROLES.JUGADOR; },
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // GUARDS (lanzan Error si no se cumple el requisito)
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  requireAdmin(auth) {
+    const v = Auth.validate(auth);
+    if (!v.success)          throw new Error(v.error);
+    if (!Auth.isAdmin(auth)) throw new Error('Acción restringida a administradores.');
+  },
+
+  requireEntrenadorOAdmin(auth) {
+    const v = Auth.validate(auth);
+    if (!v.success)              throw new Error(v.error);
+    if (!Auth.isEntrenador(auth)) throw new Error('Acción restringida a entrenadores y administradores.');
   },
 
   /**
-   * Devuelve los IDs de equipo asignados permanentemente al entrenador actual.
-   * @param {string} entrenadorId
-   * @returns {string[]}
+   * Requiere que el usuario sea entrenador (rol Entrenador, no Visor) del equipo,
+   * o administrador.
    */
-  getEquiposAsignados(entrenadorId) {
-    return findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
-      .filter(r => r.Activo === true || r.Activo === 'TRUE')
-      .map(r => r.ID_Equipo);
+  requireAccesoGestionEquipo(equipoId, auth) {
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
+    if (Auth.isAdmin(auth)) return;
+
+    const ent = Auth.getEntrenadorActual(auth);
+    if (!ent) throw new Error('No tienes permiso para gestionar este equipo.');
+
+    const rel = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', ent.ID)
+      .find(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
+
+    if (!rel || rel.TipoRol === CONFIG.TIPOS_ROL_ENTRENADOR.VISOR) {
+      throw new Error('No tienes permiso para gestionar este equipo (rol Visor).');
+    }
   },
 
   /**
-   * Comprueba si el usuario actual tiene acceso a un equipo concreto.
-   * @param {string} equipoId
-   * @param {Object} auth
+   * Acceso de solo lectura: entrenador (Entrenador o Visor), admin o jugador autenticado.
+   */
+  requireAccesoLecturaEquipo(equipoId, auth) {
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
+    if (Auth.isAdmin(auth) || Auth.isJugador(auth)) return;
+
+    const ent = Auth.getEntrenadorActual(auth);
+    if (!ent) throw new Error('No tienes acceso a este equipo.');
+
+    const rel = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', ent.ID)
+      .find(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
+    if (!rel) throw new Error('No tienes acceso a este equipo.');
+  },
+
+  /**
+   * Verifica el CodigoPadres de un jugador para autorizar justificaciones.
+   * @param {string} jugadorId
+   * @param {string} codigo
    * @returns {boolean}
    */
-  tieneAccesoEquipo(equipoId, auth) {
-    if (Auth.isAdmin(auth)) return true;
-    const entrenador = Auth.getEntrenadorActual(auth);
-    if (!entrenador) return false;
-    const equipos = Auth.getEquiposAsignados(entrenador.ID);
-    return equipos.includes(equipoId);
+  verificarCodigoPadres(jugadorId, codigo) {
+    const jugador = findById(CONFIG.SHEETS.JUGADORES, jugadorId);
+    if (!jugador) return false;
+    return String(jugador.CodigoPadres || '').trim().toUpperCase() === String(codigo || '').trim().toUpperCase();
   },
 
-  /**
-   * Lanza un error si el usuario no tiene acceso al equipo indicado.
-   * @param {string} equipoId
-   * @param {Object} auth
-   */
-  requireAccesoEquipo(equipoId, auth) {
-    const validacion = Auth.validate(auth);
-    if (!validacion.success) {
-      throw new Error(validacion.error);
-    }
-    if (!Auth.tieneAccesoEquipo(equipoId, auth)) {
-      throw new Error('No tienes permiso para acceder a este equipo.');
-    }
-  },
+  // ══════════════════════════════════════════════════════════════════════════════
+  // CONTEXTO INICIAL
+  // ══════════════════════════════════════════════════════════════════════════════
 
   /**
-   * Devuelve el contexto completo del usuario para la carga inicial de la SPA.
-   * @param {Object} auth
-   * @returns {{ success: boolean, esAdmin: boolean, entrenador: Object|null, equipos: Object[] }}
+   * Devuelve el contexto completo del usuario validado.
+   * Incluye rol, entidad (entrenador o jugador), y equipos visibles.
    */
   getContextoUsuario(auth) {
     const validacion = Auth.validate(auth);
-    if (!validacion.success) {
-      return { success: false, error: validacion.error };
+    if (!validacion.success) return { success: false, error: validacion.error };
+
+    const rol = Auth.getRol(auth);
+
+    // ── Jugador ───────────────────────────────────────────────────────────────
+    if (rol === CONFIG.ROLES.JUGADOR) {
+      const jugador = Auth.getJugadorActual(auth);
+      if (!jugador) return { success: false, error: 'Jugador no encontrado.' };
+
+      // Equipo principal del jugador
+      const relPrincipal = findWhere(CONFIG.SHEETS.JUGADORES_EQUIPOS, 'ID_Jugador', jugador.ID)
+        .find(r => r.Tipo === CONFIG.TIPOS_JUGADOR_EQUIPO.PRINCIPAL && (r.Activo === true || r.Activo === 'TRUE'));
+
+      const equipoPrincipal = relPrincipal
+        ? findById(CONFIG.SHEETS.EQUIPOS, relPrincipal.ID_Equipo)
+        : null;
+
+      // No exponer datos sensibles al rol jugador
+      const jugadorSeguro = Auth._sanitizarJugadorParaRolJugador(jugador);
+
+      return {
+        success:          true,
+        rol:              CONFIG.ROLES.JUGADOR,
+        esAdmin:          false,
+        jugador:          jugadorSeguro,
+        equipoPrincipal:  equipoPrincipal || null,
+        entrenador:       null,
+        equipos:          [],
+        equiposVisor:     [],
+      };
     }
 
-    const esAdmin   = Auth.isAdmin(auth);
+    // ── Entrenador / Admin ────────────────────────────────────────────────────
+    const esAdmin    = rol === CONFIG.ROLES.ADMIN;
     const entrenador = Auth.getEntrenadorActual(auth);
 
-    let equipos = [];
+    let equipos      = []; // equipos de gestión (TipoRol=Entrenador)
+    let equiposVisor = []; // equipos solo visibles
+
+    const temporadas = getSheetData(CONFIG.SHEETS.TEMPORADAS);
+    const activa     = temporadas.find(t => t.Activa === true || t.Activa === 'TRUE');
 
     if (esAdmin) {
-      // El admin ve todos los equipos de la temporada activa
-      const temporadas  = getSheetData(CONFIG.SHEETS.TEMPORADAS);
-      const activa      = temporadas.find(t => t.Activa === true || t.Activa === 'TRUE');
-      if (activa) {
-        equipos = findWhere(CONFIG.SHEETS.EQUIPOS, 'ID_Temporada', activa.ID);
-      }
+      equipos = activa ? findWhere(CONFIG.SHEETS.EQUIPOS, 'ID_Temporada', activa.ID) : [];
     } else if (entrenador) {
-      // El entrenador ve solo sus equipos asignados
-      const equipoIds = Auth.getEquiposAsignados(entrenador.ID);
-      equipos = findWhereIn(CONFIG.SHEETS.EQUIPOS, 'ID', equipoIds);
+      const relaciones = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenador.ID)
+        .filter(r => r.Activo === true || r.Activo === 'TRUE');
+
+      const idsEntrenador = relaciones
+        .filter(r => r.TipoRol !== CONFIG.TIPOS_ROL_ENTRENADOR.VISOR)
+        .map(r => r.ID_Equipo);
+
+      const idsVisor = relaciones
+        .filter(r => r.TipoRol === CONFIG.TIPOS_ROL_ENTRENADOR.VISOR)
+        .map(r => r.ID_Equipo);
+
+      equipos      = findWhereIn(CONFIG.SHEETS.EQUIPOS, 'ID', idsEntrenador);
+      equiposVisor = findWhereIn(CONFIG.SHEETS.EQUIPOS, 'ID', idsVisor);
     }
 
     return {
-      success:     true,
-      esAdmin:     esAdmin,
-      entrenador:  entrenador,
-      equipos:     equipos,
+      success:      true,
+      rol:          rol,
+      esAdmin:      esAdmin,
+      entrenador:   entrenador || null,
+      jugador:      null,
+      equipos:      equipos,
+      equiposVisor: equiposVisor,
     };
   },
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // HELPERS INTERNOS
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  /** Elimina campos sensibles del objeto jugador cuando lo recibe el propio jugador */
+  _sanitizarJugadorParaRolJugador(jugador) {
+    const seguro = Object.assign({}, jugador);
+    // El jugador sí puede ver su propio usuario y PIN (para cambiarlos)
+    // pero NO el CodigoPadres (es para los padres, opaco al jugador)
+    delete seguro.CodigoPadres;
+    return seguro;
+  },
+
+  /** Sanitiza una lista de jugadores para que el rol jugador no vea datos de otros */
+  sanitizarJugadoresParaRolJugador(jugadores, jugadorPropio) {
+    return jugadores.map(j => {
+      if (j.ID === jugadorPropio) {
+        // El propio jugador ve todo excepto CodigoPadres
+        const s = Object.assign({}, j);
+        delete s.CodigoPadres;
+        return s;
+      }
+      // Otros jugadores: solo datos públicos
+      return {
+        ID:        j.ID,
+        Nombre:    j.Nombre,
+        Apellidos: j.Apellidos,
+        FotoURL:   j.FotoURL   || '',
+        Dorsal:    j.Dorsal    || '',
+      };
+    });
+  },
 };
+

@@ -51,18 +51,39 @@
       <div class="login-container">
         <div class="login-logo">&#x1F3C0;</div>
         <h1 class="login-title">CB BAEZA</h1>
-        <p class="login-subtitle">Gestión de Asistencia</p>
-        
-        <div class="form-group" style="margin-top: 24px; text-align: left;">
-          <label style="color: rgba(255,255,255,0.75);">Email Registrado</label>
-          <input type="email" id="login-email" placeholder="entrenador@ejemplo.com" autocomplete="email" style="background: rgba(255,255,255,0.1); border: 1.5px solid rgba(255,255,255,0.2); color: #fff;">
+        <p class="login-subtitle">Gesti&oacute;n de Asistencia</p>
+
+        <!-- Toggle tipo de usuario -->
+        <div class="login-tabs">
+          <button class="login-tab active" id="tab-entrenador" onclick="App.setLoginTipo('entrenador')">
+            &#x1F3BD; Entrenador / Admin
+          </button>
+          <button class="login-tab" id="tab-jugador" onclick="App.setLoginTipo('jugador')">
+            &#x1F3C0; Jugador
+          </button>
         </div>
-        
-        <div class="form-group" style="text-align: left;">
-          <label style="color: rgba(255,255,255,0.75);">PIN de Acceso</label>
-          <input type="password" id="login-pin" placeholder="••••" maxlength="6" style="text-align: center; letter-spacing: 6px; font-size: 1.2rem; background: rgba(255,255,255,0.1); border: 1.5px solid rgba(255,255,255,0.2); color: #fff;" autocomplete="current-password">
+
+        <!-- Campo: email (entrenador) -->
+        <div class="form-group login-field" id="login-field-email" style="margin-top:20px;text-align:left">
+          <label style="color:rgba(255,255,255,0.75)">Email registrado</label>
+          <input type="email" id="login-email" placeholder="entrenador@ejemplo.com" autocomplete="email"
+            style="background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.2);color:#fff">
         </div>
-        
+
+        <!-- Campo: usuario (jugador) -->
+        <div class="form-group login-field hidden" id="login-field-usuario" style="margin-top:20px;text-align:left">
+          <label style="color:rgba(255,255,255,0.75)">Usuario</label>
+          <input type="text" id="login-usuario" placeholder="nombre.apellido" autocomplete="username"
+            style="background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.2);color:#fff;text-transform:lowercase">
+        </div>
+
+        <div class="form-group" style="text-align:left">
+          <label style="color:rgba(255,255,255,0.75)">PIN de acceso</label>
+          <input type="password" id="login-pin" placeholder="&bull;&bull;&bull;&bull;" maxlength="6"
+            style="text-align:center;letter-spacing:6px;font-size:1.2rem;background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.2);color:#fff"
+            autocomplete="current-password" onkeydown="if(event.key==='Enter')App.iniciarSesion()">
+        </div>
+
         <button class="btn btn-login btn-full" onclick="App.iniciarSesion()">
           Entrar
         </button>
@@ -110,6 +131,27 @@
           Guardar asistencia
         </button>
         <button id="btn-eliminar-sesion" class="btn btn-danger btn-full mt-8" onclick="App.views.sesion.eliminar()">
+          Eliminar sesi&oacute;n
+        </button>
+      </div>
+    </section>
+
+    <!-- SESION GUARDADA (modo solo lectura) -->
+    <section id="view-sesion-guardada" class="view">
+      <div id="sesion-ro-hdr" class="vista-header"></div>
+      <div class="section-hdr">
+        <span class="section-label">Jugadores</span>
+      </div>
+      <div id="sesion-ro-jugs"></div>
+      <div class="section-hdr" style="margin-top:6px">
+        <span class="section-label">Entrenadores</span>
+      </div>
+      <div id="sesion-ro-ents"></div>
+      <div class="p-16 mt-16" style="padding-bottom:28px">
+        <button class="btn btn-secondary btn-full" onclick="App.views['sesion-guardada'].editar()">
+          &#x270F; Editar asistencia
+        </button>
+        <button class="btn btn-danger btn-full mt-8" onclick="App.views.sesion.eliminar()">
           Eliminar sesi&oacute;n
         </button>
       </div>
@@ -238,6 +280,31 @@
         <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="jug-tel" placeholder="+34 600 000 000"></div>
         <div class="form-group"><label>Email</label><input type="email" id="jug-email" placeholder="email@ejemplo.com"></div>
       </div>
+      <div class="form-section">
+        <div class="form-section-title">Contacto familiar</div>
+        <div class="form-row">
+          <div class="form-group"><label>Nombre padre/madre 1</label><input type="text" id="jug-padre1-nombre" placeholder="Nombre completo"></div>
+          <div class="form-group"><label>Email padre/madre 1</label><input type="email" id="jug-padre1-email" placeholder="padre@ejemplo.com"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Nombre padre/madre 2</label><input type="text" id="jug-padre2-nombre" placeholder="Nombre completo"></div>
+          <div class="form-group"><label>Email padre/madre 2</label><input type="email" id="jug-padre2-email" placeholder="madre@ejemplo.com"></div>
+        </div>
+      </div>
+      <div class="form-section" id="jug-credenciales-zona" style="display:none">
+        <div class="form-section-title">Credenciales de acceso</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Usuario</label>
+            <input type="text" id="jug-usuario" readonly style="background:var(--fondo-sec);color:var(--texto-sec)">
+          </div>
+          <div class="form-group">
+            <label>C&oacute;digo familias</label>
+            <input type="text" id="jug-codigo-padres" readonly style="background:var(--fondo-sec);color:var(--texto-sec);letter-spacing:3px">
+          </div>
+        </div>
+        <small style="color:var(--texto-sec);font-size:.72rem">Generados autom&aacute;ticamente. El PIN inicial es <strong>1234</strong>. Comparte el C&oacute;digo familias con los padres para que puedan justificar ausencias.</small>
+      </div>
       <div class="p-16" style="padding-bottom:32px">
         <button class="btn btn-primary btn-full" onclick="App.views['jugador-form'].guardar()">Guardar jugador</button>
         <div id="jugador-delete-zone" style="display:none;margin-top:8px">
@@ -270,6 +337,18 @@
           </small>
         </div>
         <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ent-tel" placeholder="+34 600 000 000"></div>
+        <div class="form-group">
+          <label>PIN de acceso</label>
+          <input type="text" id="ent-pin" placeholder="4 d&iacute;gitos" maxlength="4" style="letter-spacing:4px">
+          <small style="color:var(--texto-sec);font-size:.72rem">Si se deja vac&iacute;o, se mantendr&aacute; el PIN actual.</small>
+        </div>
+        <div class="form-group" id="ent-admin-wrap">
+          <label class="toggle-label">
+            <span>Conceder permisos de administrador</span>
+            <input type="checkbox" id="ent-es-admin" class="toggle-input">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
       </div>
       <div class="p-16" style="padding-bottom:32px">
         <button class="btn btn-primary btn-full" onclick="App.views['entrenador-form'].guardar()">Guardar entrenador</button>
@@ -299,18 +378,188 @@
       <div id="historial-lista"></div>
     </section>
 
+    <!-- VISTA: PERFIL JUGADOR (home del rol jugador) -->
+    <section id="view-perfil-jugador" class="view">
+      <div class="perfil-jugador-container">
+        <div id="perfil-jugador-avatar" class="perfil-avatar">&#x1F3C0;</div>
+        <div id="perfil-jugador-nombre" class="perfil-nombre"></div>
+        <div id="perfil-jugador-equipo" class="perfil-equipo"></div>
+        <div class="perfil-grid">
+          <button class="perfil-card" onclick="App.navigate('mis-entrenamientos')">
+            <span class="perfil-card-icon">&#x1F4CB;</span>
+            <span class="perfil-card-label">Mis entrenamientos</span>
+          </button>
+          <button class="perfil-card" onclick="App.navigate('mis-stats')">
+            <span class="perfil-card-icon">&#x1F4CA;</span>
+            <span class="perfil-card-label">Mis estad&iacute;sticas</span>
+          </button>
+          <button class="perfil-card" onclick="App.navigate('mi-equipo')">
+            <span class="perfil-card-icon">&#x1F3C6;</span>
+            <span class="perfil-card-label">Mi equipo</span>
+          </button>
+          <button class="perfil-card" onclick="App.navigate('ajustes-cuenta')">
+            <span class="perfil-card-icon">&#x2699;&#xFE0F;</span>
+            <span class="perfil-card-label">Ajustes</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VISTA: MIS ENTRENAMIENTOS (jugador) -->
+    <section id="view-mis-entrenamientos" class="view">
+      <div class="section-hdr">
+        <span class="section-label">Pr&oacute;ximas</span>
+      </div>
+      <div id="mis-sesiones-proximas"></div>
+      <div class="section-hdr" style="margin-top:8px">
+        <span class="section-label">Anteriores</span>
+      </div>
+      <div id="mis-sesiones-pasadas"></div>
+    </section>
+
+    <!-- VISTA: DETALLE SESI&Oacute;N JUGADOR -->
+    <section id="view-detalle-sesion-jugador" class="view">
+      <div id="detalle-sesion-jug-hdr" class="vista-header"></div>
+      <div class="detalle-sesion-jug-body">
+        <div id="detalle-sesion-jug-estado" class="sesion-estado-bloque"></div>
+        <div id="detalle-sesion-jug-info" class="sesion-info-bloque"></div>
+        <div id="detalle-sesion-jug-actions" class="p-16" style="padding-bottom:32px"></div>
+      </div>
+    </section>
+
+    <!-- VISTA: MIS ESTAD&Iacute;STICAS (jugador) -->
+    <section id="view-mis-stats" class="view">
+      <div id="mis-stats-contenido" class="p-16"></div>
+    </section>
+
+    <!-- VISTA: MI EQUIPO (jugador, solo lectura) -->
+    <section id="view-mi-equipo" class="view">
+      <div id="mi-equipo-contenido"></div>
+    </section>
+
+    <!-- VISTA: AJUSTES CUENTA (jugador) -->
+    <section id="view-ajustes-cuenta" class="view">
+      <div class="form-section">
+        <div class="form-section-title">Cambiar usuario</div>
+        <div class="form-group">
+          <label>Nuevo usuario</label>
+          <input type="text" id="ajustes-usuario" placeholder="nombre.apellido" autocomplete="username"
+            style="text-transform:lowercase" oninput="this.value=this.value.toLowerCase().replace(/\s/g,'')">
+          <small style="color:var(--texto-sec);font-size:.72rem">Solo letras, n&uacute;meros y puntos. M&aacute;x. 12 caracteres.</small>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">Cambiar PIN</div>
+        <div class="form-group">
+          <label>Nuevo PIN (4 d&iacute;gitos)</label>
+          <input type="password" id="ajustes-pin" placeholder="&bull;&bull;&bull;&bull;" maxlength="4"
+            style="text-align:center;letter-spacing:6px;font-size:1.2rem">
+        </div>
+        <div class="form-group">
+          <label>Confirmar PIN</label>
+          <input type="password" id="ajustes-pin-confirm" placeholder="&bull;&bull;&bull;&bull;" maxlength="4"
+            style="text-align:center;letter-spacing:6px;font-size:1.2rem">
+        </div>
+      </div>
+      <div class="p-16" style="padding-bottom:32px">
+        <button class="btn btn-primary btn-full" onclick="App.views['ajustes-cuenta'].guardar()">
+          Guardar cambios
+        </button>
+      </div>
+    </section>
+
   </main>
+
+  <!-- Modal de justificación de ausencia/retraso -->
+  <div id="modal-justificacion" class="modal-justif-overlay hidden" onclick="App.closeModalJustif(event)">
+    <div class="modal-justif-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-hdr">
+        <h3 id="justif-titulo">Justificar ausencia</h3>
+        <div class="modal-x" onclick="App.closeModalJustif()">&#x2715;</div>
+      </div>
+      <div class="modal-body">
+
+        <!-- Tipo de incidencia -->
+        <div class="form-group">
+          <label>Tipo de incidencia</label>
+          <div class="radio-group">
+            <label class="radio-opt">
+              <input type="radio" name="justif-tipo" value="Ausencia" checked onchange="App.views.justificacion.onTipoChange(this)">
+              <span>Ausencia</span>
+            </label>
+            <label class="radio-opt">
+              <input type="radio" name="justif-tipo" value="Retraso" onchange="App.views.justificacion.onTipoChange(this)">
+              <span>Retraso</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Hora de incorporación (solo Retraso) -->
+        <div class="form-group hidden" id="justif-hora-wrap">
+          <label>Hora de incorporación prevista</label>
+          <input type="time" id="justif-hora" oninput="App.views.justificacion.actualizarPreview()">
+        </div>
+
+        <!-- Categoría del motivo -->
+        <div class="form-group">
+          <label>Motivo</label>
+          <select id="justif-motivo" onchange="App.views.justificacion.actualizarPreview()">
+            <option value="">-- Selecciona un motivo --</option>
+            <!-- Opciones generadas por app.html desde CONFIG.MOTIVOS_JUSTIFICACION -->
+          </select>
+        </div>
+
+        <!-- Detalle libre -->
+        <div class="form-group">
+          <label>Detalle adicional <span style="color:var(--texto-sec);font-size:.8rem">(opcional)</span></label>
+          <textarea id="justif-detalle" rows="2" placeholder="A&ntilde;ade información adicional si lo deseas&hellip;"
+            oninput="App.views.justificacion.actualizarPreview()"></textarea>
+        </div>
+
+        <!-- Preview del mensaje -->
+        <div class="justif-preview-wrap">
+          <div class="justif-preview-label">Mensaje que ver&aacute;n los entrenadores:</div>
+          <div id="justif-preview" class="justif-preview"></div>
+        </div>
+
+        <!-- Código de padres -->
+        <div class="form-group">
+          <label>C&oacute;digo de autorizaci&oacute;n <small style="color:var(--texto-sec)">(proporcionado por el club)</small></label>
+          <input type="text" id="justif-codigo" placeholder="6 caracteres" maxlength="6"
+            style="text-align:center;letter-spacing:4px;text-transform:uppercase;font-size:1.1rem"
+            oninput="this.value=this.value.toUpperCase()">
+        </div>
+
+        <button class="btn btn-primary btn-full" onclick="App.views.justificacion.enviar()">
+          Enviar justificación
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Nav inferior -->
   <nav id="bottom-nav">
-    <button class="nav-tab active" data-view="equipos" onclick="App.navigate('equipos')">
+    <!-- Tabs para entrenadores/admins -->
+    <button class="nav-tab active nav-tab-ent" data-view="equipos" onclick="App.navigate('equipos')">
       <span class="nav-icon">&#x25C9;</span>
       <span>Equipos</span>
       <span class="nav-indicator"></span>
     </button>
-    <button class="nav-tab" data-view="gestion" onclick="App.navigate('gestion')">
+    <button class="nav-tab nav-tab-ent" data-view="gestion" onclick="App.navigate('gestion')">
       <span class="nav-icon">&#x2630;</span>
       <span>Gesti&oacute;n</span>
+      <span class="nav-indicator"></span>
+    </button>
+    <!-- Tabs para jugadores -->
+    <button class="nav-tab hidden nav-tab-jug" data-view="perfil-jugador" onclick="App.navigate('perfil-jugador')">
+      <span class="nav-icon">&#x1F464;</span>
+      <span>Inicio</span>
+      <span class="nav-indicator"></span>
+    </button>
+    <button class="nav-tab hidden nav-tab-jug" data-view="mis-entrenamientos" onclick="App.navigate('mis-entrenamientos')">
+      <span class="nav-icon">&#x1F4CB;</span>
+      <span>Entrenos</span>
       <span class="nav-indicator"></span>
     </button>
   </nav>
