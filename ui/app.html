@@ -970,7 +970,7 @@ const App = {
       _filtrarBuscador: function(q) {
         var lower = q.toLowerCase();
         var filtrados = (App.state._buscadorItems || []).filter(function(i) {
-          return (i.Nombre + ' ' + i.Apellidos).toLowerCase().indexOf(lower) >= 0;
+          return String((i.Nombre||'') + ' ' + (i.Apellidos||'')).toLowerCase().indexOf(lower) >= 0;
         });
         document.getElementById('buscador-lista').innerHTML =
           filtrados.map(function(i) { return App.views.sesion._htmlBuscadorItem(i); }).join('');
@@ -1280,7 +1280,7 @@ const App = {
       _filtrar: function(q, tipo) {
         var lower = q.toLowerCase();
         var filtrados = (App.state._buscadorItems || []).filter(function(i) {
-          return (i.Nombre + ' ' + i.Apellidos).toLowerCase().indexOf(lower) >= 0;
+          return String((i.Nombre||'') + ' ' + (i.Apellidos||'')).toLowerCase().indexOf(lower) >= 0;
         });
         document.getElementById('buscador-lista').innerHTML =
           filtrados.map(function(i) { return App.views['equipo-form']._htmlItem(i, tipo); }).join('');
@@ -1356,7 +1356,7 @@ const App = {
         var equipoId = App.state.formEquipoId;
         if (!force) {
           var dup = App.cache.equipos.find(function(eq) {
-            return eq.ID !== equipoId && eq.Nombre.toLowerCase() === nombre.toLowerCase();
+            return eq.ID !== equipoId && String(eq.Nombre||'').toLowerCase() === nombre.toLowerCase();
           });
           if (dup) {
             App.openModal('Equipo duplicado',
@@ -1564,7 +1564,7 @@ const App = {
         var lower = q.toLowerCase();
         App.views['jugadores-admin']._render(
           App.state._todosJugadores.filter(function(j) {
-            return (j.Nombre + ' ' + j.Apellidos + ' ' + j.Dorsal).toLowerCase().indexOf(lower) >= 0;
+            return String((j.Nombre || '') + ' ' + (j.Apellidos || '') + ' ' + (j.Dorsal || '')).toLowerCase().indexOf(lower) >= 0;
           })
         );
       },
@@ -1675,8 +1675,8 @@ const App = {
           }
           // Detectar si algo cambió
           var jugOrig = App.cache.getJugadorById(jugId) || {};
-          var usuarioCambio   = nuevoUsuario && nuevoUsuario !== (jugOrig.Usuario || '').toLowerCase();
-          var codigoCambio    = nuevoCodigo  && nuevoCodigo.toUpperCase() !== (jugOrig.CodigoPadres || '');
+          var usuarioCambio   = nuevoUsuario && nuevoUsuario !== String(jugOrig.Usuario || '').toLowerCase();
+          var codigoCambio    = nuevoCodigo  && nuevoCodigo.toUpperCase() !== String(jugOrig.CodigoPadres || '');
           var pinCambio       = !!nuevoPin;
           if (usuarioCambio || pinCambio || codigoCambio) {
             credNuevo = {
@@ -1689,8 +1689,8 @@ const App = {
         if (!force) {
           var dup = App.cache.jugadores.find(function(j) {
             return j.ID !== jugId &&
-                   j.Nombre.toLowerCase() === datos.Nombre.toLowerCase() &&
-                   j.Apellidos.toLowerCase() === datos.Apellidos.toLowerCase();
+                   String(j.Nombre || '').toLowerCase() === datos.Nombre.toLowerCase() &&
+                   String(j.Apellidos || '').toLowerCase() === datos.Apellidos.toLowerCase();
           });
           if (dup) {
             App.openModal('Jugador duplicado',
@@ -1827,7 +1827,7 @@ const App = {
         var lower = q.toLowerCase();
         App.views['entrenadores-admin']._render(
           App.state._todosEntrenadores.filter(function(e) {
-            return (e.Nombre + ' ' + e.Apellidos + ' ' + e.Email).toLowerCase().indexOf(lower) >= 0;
+            return String((e.Nombre || '') + ' ' + (e.Apellidos || '') + ' ' + (e.Email || '')).toLowerCase().indexOf(lower) >= 0;
           })
         );
       },
@@ -1931,17 +1931,17 @@ const App = {
           // Detectar email duplicado (al crear o si admin cambia email)
           if (datos.Email) {
             var entOrig = entId ? App.cache.getEntrenadorById(entId) : null;
-            var emailCambio = !entOrig || (entOrig.Email || '').toLowerCase() !== datos.Email.toLowerCase();
+            var emailCambio = !entOrig || String(entOrig.Email || '').toLowerCase() !== datos.Email.toLowerCase();
             if (emailCambio) {
-              var dupEmail = App.cache.entrenadores.find(function(e) { return e.ID !== entId && e.Email.toLowerCase() === datos.Email.toLowerCase(); });
+              var dupEmail = App.cache.entrenadores.find(function(e) { return e.ID !== entId && String(e.Email || '').toLowerCase() === datos.Email.toLowerCase(); });
               if (dupEmail) { showToast('Ya existe un entrenador con ese email', 'error'); return; }
             }
           }
           // Detectar nombre duplicado
           var dup = App.cache.entrenadores.find(function(e) {
             return e.ID !== entId &&
-                   e.Nombre.toLowerCase() === datos.Nombre.toLowerCase() &&
-                   e.Apellidos.toLowerCase() === datos.Apellidos.toLowerCase();
+                   String(e.Nombre || '').toLowerCase() === datos.Nombre.toLowerCase() &&
+                   String(e.Apellidos || '').toLowerCase() === datos.Apellidos.toLowerCase();
           });
           if (dup) {
             App.openModal('Entrenador duplicado',
