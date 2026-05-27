@@ -266,12 +266,12 @@ Actualizar el estado y añadir notas de decisiones de diseño al completar cada 
 
 | # | Subtarea | Fichero/s afectado/s | Estado |
 |---|----------|----------------------|--------|
-| 4d-1 | **[HTML]** Añadir botón "Añadir otro equipo" en la vista de equipos del entrenador (solo visible para rol entrenador, no para jugador) | `Index.html` | ⏳ |
-| 4d-2 | **[HTML]** Modal/selector de equipos: lista de equipos del club a los que el entrenador NO está ya asignado; al seleccionar uno, se añade a su vista temporal | `Index.html` | ⏳ |
-| 4d-3 | **[CSS]** Estilos para el botón "Añadir otro equipo" y el modal de selección | `styles.html` | ⏳ |
-| 4d-4 | **[JS]** Al pulsar "Añadir otro equipo", cargar la lista de equipos del club que no tiene asignados y mostrar el modal selector | `app.html` | ⏳ |
-| 4d-5 | **[JS]** Al seleccionar un equipo en el modal, añadirlo a la vista de equipos del entrenador como tarjeta con chip "Sustitución" (sin modificar `Entrenadores_Equipos` en Sheets — solo en memoria de sesión, o bien usando el mecanismo de `añadirEquipoVisor` existente) | `app.html` | ⏳ |
-| 4d-6 | **[Decisión de diseño]** Definir si la relación de sustitución es persistente (usando `añadirEquipoVisor`) o solo de sesión de app (en memoria). Preferencia inicial: usar `añadirEquipoVisor` existente para que sea reversible con `eliminarEquipoVisor` | — | ⏳ |
+| 4d-1 | **[HTML]** Añadir botón "Añadir otro equipo" en la vista de equipos del entrenador (solo visible para rol entrenador, no para jugador) | `Index.html`, `app.html` | ✅ |
+| 4d-2 | **[HTML]** Modal/selector de equipos: lista de equipos del club a los que el entrenador NO está ya asignado; al seleccionar uno, se añade a su vista temporal | `Index.html`, `app.html` | ✅ |
+| 4d-3 | **[CSS]** Estilos para el botón "Añadir otro equipo" y el modal de selección | `styles.html` | ✅ |
+| 4d-4 | **[JS]** Al pulsar "Añadir otro equipo", cargar la lista de equipos del club que no tiene asignados y mostrar el modal selector | `app.html` | ✅ |
+| 4d-5 | **[JS]** Al seleccionar un equipo en el modal, añadirlo a la vista de equipos del entrenador como tarjeta con chip "Sustitución" (sin modificar `Entrenadores_Equipos` en Sheets — solo en memoria de sesión, o bien usando el mecanismo de `añadirEquipoVisor` existente) | `app.html` | ✅ |
+| 4d-6 | **[Decisión de diseño]** Definir si la relación de sustitución es persistente (usando `añadirEquipoVisor`) o solo de sesión de app (en memoria). Preferencia inicial: usar `añadirEquipoVisor` existente para que sea reversible con `eliminarEquipoVisor` | — | ✅ |
 
 ---
 

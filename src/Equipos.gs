@@ -468,7 +468,7 @@ const Equipos = {
    * Añade un equipo como Visor para el entrenador indicado.
    * Si ya es Entrenador del equipo, no hace nada (no degrada el rol).
    */
-  añadirEquipoVisor(entrenadorId, equipoId) {
+  anadirEquipoVisor(entrenadorId, equipoId) {
     const existentes = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
       .filter(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
 

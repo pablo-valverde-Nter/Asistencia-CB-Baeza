@@ -62,9 +62,9 @@ const App = {
     asistJugadores:      [],  // todos los registros de Asist_Jugadores
     asistEntrenadores:   [],  // todos los registros de Asist_Entrenadores
 
-    getJugadorById(id)     { return this.jugadores.find(function(j)  { return j.ID === id; }) || null; },
-    getEntrenadorById(id)  { return this.entrenadores.find(function(e){ return e.ID === id; }) || null; },
-    getEquipoById(id)      { return this.equipos.find(function(e)     { return e.ID === id; }) || null; },
+    getJugadorById(id)     { return this.jugadores.find(function(j)  { return j.ID === id; }) || null; }
+    getEntrenadorById(id)  { return this.entrenadores.find(function(e){ return e.ID === id; }) || null; }
+    getEquipoById(id)      { return this.equipos.find(function(e)     { return e.ID === id; }) || null; }
 
     getJugadoresByEquipo(equipoId) {
       var self = this;
@@ -72,7 +72,7 @@ const App = {
         .filter(function(r) { return r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'); })
         .map(function(r) { var j = self.getJugadorById(r.ID_Jugador); return j ? Object.assign({}, j, { Tipo: r.Tipo }) : null; })
         .filter(Boolean);
-    },
+    }
 
     getEntrenadoresByEquipo(equipoId) {
       var self = this;
@@ -80,17 +80,17 @@ const App = {
         .filter(function(r) { return r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'); })
         .map(function(r) { return self.getEntrenadorById(r.ID_Entrenador); })
         .filter(Boolean);
-    },
+    }
 
     getHorariosByEquipo(equipoId) {
       return this.horarios.filter(function(h) { return h.ID_Equipo === equipoId; });
-    },
+    }
 
     getSesionesByEquipo(equipoId) {
       return this.sesiones
         .filter(function(s) { return s.ID_Equipo === equipoId; })
         .sort(function(a, b) { return a.Fecha < b.Fecha ? -1 : 1; });
-    },
+    }
 
     upsert(key, record) {
       if (!Array.isArray(this[key])) return;
@@ -99,12 +99,12 @@ const App = {
         if (this[key][i].ID === record.ID) { this[key][i] = Object.assign({}, this[key][i], record); found = true; break; }
       }
       if (!found) this[key].push(record);
-    },
+    }
 
     remove(key, id) {
       if (!Array.isArray(this[key])) return;
       this[key] = this[key].filter(function(r) { return r.ID !== id; });
-    },
+    }
 
     // Reemplaza las relaciones de un equipo en cache con el estado actual del formulario
     _setRelacionesEquipo(equipoId, jugadores, entrenadores) {
@@ -530,11 +530,75 @@ const App = {
             statsHtml + '</div>' +
             visorHtml + '<div class="eq-arrow">&#x203A;</div></div>';
         }).join('');
+        
+        // Botón "Añadir otro equipo" para entrenadores no-admin
+        if (!App.state.esAdmin && App.state.usuario) {
+          lista.innerHTML += '<button class="btn btn-secondary btn-full mt-16" onclick="App.views.equipos.buscarOtroEquipo()" style="margin-top:16px">+ A&ntilde;adir otro equipo</button>';
+        }
       },
       abrirEquipo: function(id, nombre) {
         App.state.equipoSesionesId = id;
         App.state._equipoNombre = nombre;
         App.navigate('sesiones');
+      },
+      buscarOtroEquipo: function() {
+        // Mostrar equipos a los que no está asignado
+        var misIds = new Set(App.state.equipos.map(function(e) { return e.ID; }));
+        (App.state.equiposVisor || []).forEach(function(e) { misIds.add(e.ID); });
+        
+        var options = App.cache.equipos.filter(function(e) { return !misIds.has(e.ID); });
+        if (!options.length) {
+          showToast('Ya tienes acceso a todos los equipos', 'info');
+          return;
+        }
+        var html = options.map(function(e) {
+          return '<div class="list-item" onclick="App.views.equipos._anadirOtroEquipo(\'' + e.ID + '\')">' +
+            '<div style="flex:1"><div class="li-name">' + e.Nombre + '</div><div class="li-sub">' + e.Categoria + ' &middot; ' + e.Modalidad + '</div></div>' +
+            '<button class="btn-icon" style="color:var(--morado)">+</button></div>';
+        }).join('');
+        App.openModal('Añadir equipo (Visor)', html);
+      },
+      _anadirOtroEquipo: function(equipoId) {
+        // Mostrar tarjeta placeholder de carga
+        var lista = document.getElementById('equipos-lista');
+        var eq = App.cache.getEquipoById(equipoId);
+        if (eq) {
+          var loadingId = 'eq-loading-' + equipoId;
+          var placeholder = document.createElement('div');
+          placeholder.className = 'equipo-card';
+          placeholder.id = loadingId;
+          placeholder.style.opacity = '0.5';
+          placeholder.style.pointerEvents = 'none';
+          placeholder.innerHTML =
+            '<div class="eq-icon">&#x1F3C0;</div>' +
+            '<div style="flex:1"><div class="eq-nombre">' + eq.Nombre + '</div>' +
+            '<div class="eq-meta">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div>' +
+            '<div class="eq-stats"></div></div>' +
+            '<span class="chip-visor">&#x1F441; Visor</span>' +
+            '<span class="sc-status-badge" style="background:var(--texto-sec);animation:pulse 1.2s ease-in-out infinite alternate;margin-left:12px">Cargando   </span>';
+          lista.appendChild(placeholder);
+        }
+        App.closeModal();
+        google.script.run
+          .withSuccessHandler(function(res) {
+            var ph = document.getElementById('eq-loading-' + equipoId);
+            if (ph) ph.remove();
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            showToast('Equipo añadido temporalmente', 'success');
+            // Añadir al estado local para esta sesión
+            var eqData = App.cache.getEquipoById(equipoId);
+            if (eqData) {
+              if (!App.state.equiposVisor) App.state.equiposVisor = [];
+              App.state.equiposVisor.push(eqData);
+              App.views.equipos.render();
+            }
+          })
+          .withFailureHandler(function() {
+            var ph = document.getElementById('eq-loading-' + equipoId);
+            if (ph) ph.remove();
+            showToast('Error de conexión', 'error');
+          })
+          .anadirEquipoVisor(App.state.auth, equipoId);
       },
     },
 
@@ -1102,7 +1166,7 @@ const App = {
                 ? '<span style="font-size:.8rem;color:var(--texto-sec)">\u2014</span>'
                 : asistio
                   ? '<span style="font-size:.8rem;font-weight:700;color:var(--verde)">\u2713 Asisti\u00f3</span>'
-                  : '<span style="font-size:.8rem;font-weight:700;color:var(--rojo)">\u2717 No asisti\u00f3</span>';
+                  : '<span style="font-size:.8rem;font-weight:700;color:var(--rojo)">\u2717 No asisti\u00fó</span>';
               return '<div class="ent-row">' +
                 '<div style="flex:1"><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
                 '<div class="ent-sub">' + (item.esInvitado ? 'Invitado' : '') + '</div></div>' +
@@ -1642,7 +1706,7 @@ const App = {
           if (esAdm) {
             var uEl = document.getElementById('jug-usuario'); if (uEl) uEl.value = j.Usuario || '';
             var cEl = document.getElementById('jug-codigo-padres'); if (cEl) cEl.value = j.CodigoPadres || '';
-            var pEl = document.getElementById('jug-pin'); if (pEl) pEl.value = '';
+            var pEl  = document.getElementById('jug-pin'); if (pEl) pEl.value = '';
             var pcEl = document.getElementById('jug-pin-confirm'); if (pcEl) pcEl.value = '';
           }
         }
@@ -2665,8 +2729,7 @@ const App = {
         var motivo = motivoEl ? motivoEl.value : '';
         var detalle = document.getElementById('justif-detalle') ? document.getElementById('justif-detalle').value.trim() : '';
         var horaWrap = document.getElementById('justif-hora-wrap');
-        var horaEl = document.getElementById('justif-hora');
-        var hora = (horaEl && horaWrap && !horaWrap.classList.contains('hidden')) ? horaEl.value : null;
+        var hora = (horaWrap && !horaWrap.classList.contains('hidden')) ? horaWrap.value : null;
         var codigo = document.getElementById('justif-codigo') ? document.getElementById('justif-codigo').value.trim().toUpperCase() : '';
         if (!codigo || codigo.length !== 6) { showToast('Introduce el c\u00f3digo de autorizaci\u00f3n de 6 caracteres', 'error'); return; }
         // Cerrar modal inmediatamente y enviar en segundo plano (no bloqueante)

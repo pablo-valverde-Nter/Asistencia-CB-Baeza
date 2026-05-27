@@ -433,12 +433,12 @@ function desasignarEntrenadorDeEquipo(auth, entrenadorId, equipoId) {
 }
 
 /** Añade un equipo a la lista de Visor del entrenador autenticado */
-function añadirEquipoVisor(auth, equipoId) {
+function anadirEquipoVisor(auth, equipoId) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
     const ent = Auth.getEntrenadorActual(auth);
     if (!ent) throw new Error('No se encontró el entrenador.');
-    return { success: true, relacion: Equipos.añadirEquipoVisor(ent.ID, equipoId) };
+    return { success: true, relacion: Equipos.anadirEquipoVisor(ent.ID, equipoId) };
   } catch (e) { return { success: false, error: e.message }; }
 }
 
