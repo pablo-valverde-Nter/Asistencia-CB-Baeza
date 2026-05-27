@@ -335,7 +335,7 @@ function desasignarJugadorDeEquipo(auth, jugadorId, equipoId) {
  * Actualiza las credenciales (Usuario y/o PIN) de un jugador.
  * El propio jugador puede cambiar las suyas; entrenadores/admins pueden cambiar cualquiera.
  */
-function actualizarCredencialesJugador(auth, jugadorId, nuevoUsuario, nuevoPin) {
+function actualizarCredencialesJugador(auth, jugadorId, nuevoUsuario, nuevoPin, nuevoCodigoPadres) {
   try {
     const v = Auth.validate(auth);
     if (!v.success) throw new Error(v.error);
@@ -344,10 +344,14 @@ function actualizarCredencialesJugador(auth, jugadorId, nuevoUsuario, nuevoPin) 
       if (!jugadorActual || jugadorActual.ID !== jugadorId) {
         throw new Error('Solo puedes modificar tus propias credenciales.');
       }
+      // Los jugadores no pueden cambiar su propio CodigoPadres
+      if (nuevoCodigoPadres) throw new Error('Solo un administrador puede cambiar el código de familias.');
     } else {
       Auth.requireEntrenadorOAdmin(auth);
+      // Solo admin puede cambiar CodigoPadres
+      if (nuevoCodigoPadres && !Auth.isAdmin(auth)) throw new Error('Solo un administrador puede cambiar el código de familias.');
     }
-    return { success: true, actualizado: Equipos.actualizarCredencialesJugador(jugadorId, nuevoUsuario, nuevoPin) };
+    return { success: true, actualizado: Equipos.actualizarCredencialesJugador(jugadorId, nuevoUsuario, nuevoPin, nuevoCodigoPadres) };
   } catch (e) { return { success: false, error: e.message }; }
 }
 

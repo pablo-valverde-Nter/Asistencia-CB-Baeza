@@ -245,7 +245,7 @@ const Equipos = {
    * @param {string|null} nuevoPin
    * @returns {boolean}
    */
-  actualizarCredencialesJugador(jugadorId, nuevoUsuario, nuevoPin) {
+  actualizarCredencialesJugador(jugadorId, nuevoUsuario, nuevoPin, nuevoCodigoPadres) {
     const campos = {};
     if (nuevoUsuario) {
       nuevoUsuario = String(nuevoUsuario).trim().toLowerCase();
@@ -260,6 +260,11 @@ const Equipos = {
       const pin = String(nuevoPin).trim();
       if (!/^[0-9]{4,6}$/.test(pin)) throw new Error('El PIN debe tener entre 4 y 6 dígitos numéricos.');
       campos.PIN = pin;
+    }
+    if (nuevoCodigoPadres) {
+      const cod = String(nuevoCodigoPadres).trim().toUpperCase();
+      if (cod.length < 4) throw new Error('El código de familias debe tener al menos 4 caracteres.');
+      campos.CodigoPadres = cod;
     }
     if (Object.keys(campos).length === 0) return false;
     return updateRow(CONFIG.SHEETS.JUGADORES, jugadorId, campos);

@@ -293,17 +293,42 @@
       </div>
       <div class="form-section" id="jug-credenciales-zona" style="display:none">
         <div class="form-section-title">Credenciales de acceso</div>
+
+        <!-- Aviso admin (4a-5) -->
+        <div id="jug-cred-aviso" class="cred-aviso-box" style="display:none">
+          <div class="cred-aviso-icon">&#x26A0;&#xFE0F;</div>
+          <div>
+            <strong>Cambio de credenciales</strong>
+            <p><strong>Usuario</strong>: con qu&eacute; nombre de usuario accede el jugador a la app.</p>
+            <p><strong>PIN</strong>: contrase&ntilde;a de acceso (4-6 d&iacute;gitos num&eacute;ricos). Deja en blanco para no cambiar.</p>
+            <p><strong>C&oacute;digo familias</strong>: c&oacute;digo que usan los padres / tutores para justificar ausencias. C&oacute;mpartelo con ellos y c&aacute;mbialo solo si fue comprometido.</p>
+          </div>
+        </div>
+
         <div class="form-row">
           <div class="form-group">
             <label>Usuario</label>
-            <input type="text" id="jug-usuario" readonly style="background:var(--fondo-sec);color:var(--texto-sec)">
+            <input type="text" id="jug-usuario" autocomplete="off">
           </div>
           <div class="form-group">
             <label>C&oacute;digo familias</label>
-            <input type="text" id="jug-codigo-padres" readonly style="background:var(--fondo-sec);color:var(--texto-sec);letter-spacing:3px">
+            <input type="text" id="jug-codigo-padres" autocomplete="off" style="letter-spacing:3px">
           </div>
         </div>
-        <small style="color:var(--texto-sec);font-size:.72rem">Generados autom&aacute;ticamente. El PIN inicial es <strong>1234</strong>. Comparte el C&oacute;digo familias con los padres para que puedan justificar ausencias.</small>
+        <!-- Campos PIN solo visibles en modo admin -->
+        <div id="jug-pin-zona" style="display:none">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Nuevo PIN</label>
+              <input type="password" id="jug-pin" placeholder="4-6 d&iacute;gitos" maxlength="6" autocomplete="new-password" style="letter-spacing:4px">
+            </div>
+            <div class="form-group">
+              <label>Confirmar PIN</label>
+              <input type="password" id="jug-pin-confirm" placeholder="Repetir PIN" maxlength="6" autocomplete="new-password" style="letter-spacing:4px">
+            </div>
+          </div>
+          <small style="color:var(--texto-sec);font-size:.72rem">Deja el PIN en blanco para mantener el actual.</small>
+        </div>
       </div>
       <div class="p-16" style="padding-bottom:32px">
         <button class="btn btn-primary btn-full" onclick="App.views['jugador-form'].guardar()">Guardar jugador</button>
@@ -335,13 +360,48 @@
           <small id="ent-email-aviso" class="hidden" style="color:var(--texto-sec);font-size:.72rem;display:block;margin-top:4px">
             El email no se puede modificar (clave de acceso)
           </small>
+          <small id="ent-email-aviso-admin" class="hidden" style="color:#5D4037;font-size:.72rem;display:block;margin-top:4px">
+            &#x26A0;&#xFE0F; C&aacute;mbialo solo si el entrenador cambi&oacute; de cuenta de Google.
+          </small>
         </div>
         <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ent-tel" placeholder="+34 600 000 000"></div>
+      </div>
+
+      <!-- Sección credenciales — solo admin al editar -->
+      <div class="form-section" id="ent-credenciales-zona" style="display:none">
+        <div class="form-section-title">Credenciales de acceso</div>
+        <div class="cred-aviso-box">
+          <div class="cred-aviso-icon">&#x26A0;&#xFE0F;</div>
+          <div>
+            <strong>Cambio de credenciales</strong>
+            <p><strong>Email</strong>: con qu&eacute; cuenta de Google accede el entrenador.</p>
+            <p><strong>PIN</strong>: contrase&ntilde;a de acceso (4-6 d&iacute;gitos num&eacute;ricos). Deja en blanco para no cambiar.</p>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nuevo PIN</label>
+            <input type="password" id="ent-pin" placeholder="4-6 d&iacute;gitos" maxlength="6" autocomplete="new-password" style="letter-spacing:4px">
+          </div>
+          <div class="form-group">
+            <label>Confirmar PIN</label>
+            <input type="password" id="ent-pin-confirm" placeholder="Repetir PIN" maxlength="6" autocomplete="new-password" style="letter-spacing:4px">
+          </div>
+        </div>
+        <small style="color:var(--texto-sec);font-size:.72rem">Deja el PIN en blanco para mantener el actual.</small>
+      </div>
+
+      <!-- PIN field para nuevos entrenadores -->
+      <div class="form-section" id="ent-pin-zona-nuevo" style="display:none">
+        <div class="form-section-title">Acceso</div>
         <div class="form-group">
           <label>PIN de acceso</label>
-          <input type="text" id="ent-pin" placeholder="4 d&iacute;gitos" maxlength="4" style="letter-spacing:4px">
-          <small style="color:var(--texto-sec);font-size:.72rem">Si se deja vac&iacute;o, se mantendr&aacute; el PIN actual.</small>
+          <input type="text" id="ent-pin-nuevo" placeholder="4 d&iacute;gitos" maxlength="4" style="letter-spacing:4px">
+          <small style="color:var(--texto-sec);font-size:.72rem">Si se deja vac&iacute;o, se usar&aacute; <strong>1234</strong> como PIN inicial.</small>
         </div>
+      </div>
+
+      <div class="form-section" id="ent-admin-section">
         <div class="form-group" id="ent-admin-wrap">
           <label class="toggle-label">
             <span>Conceder permisos de administrador</span>

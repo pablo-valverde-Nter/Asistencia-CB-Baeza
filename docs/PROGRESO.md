@@ -219,10 +219,10 @@ Actualizar el estado y añadir notas de decisiones de diseño al completar cada 
 |---|----------|----------------------|--------|
 | 4a-1 | **[CSS Bug]** Botón toggle "Hacer Admin" invisible en fondo blanco — revisar contraste del botón en `styles.html` | `styles.html` | ✅ |
 | 4a-2 | **[Backend Bug]** Estado `EsAdmin` no persiste al refrescar — verificar que `cargarDatos` en `Code.gs` devuelve `EsAdmin` y que `_applyBootstrapData` en `app.html` lo aplica correctamente al estado | `Code.gs`, `app.html` | ✅ |
-| 4a-3 | **[Frontend]** Edición de credenciales de jugador desde admin: campo `Usuario`, campo `PIN` (con confirmación), campo `CodigoPadres` — añadir formulario con modal de aviso explicativo | `Index.html`, `styles.html`, `app.html` | ⏳ |
-| 4a-4 | **[Frontend]** Edición de credenciales de entrenador desde admin: campo `Email` (con confirmación), campo `PIN` — añadir al formulario de edición de entrenador con modal de aviso | `Index.html`, `styles.html`, `app.html` | ⏳ |
-| 4a-5 | **[Frontend]** Modal de aviso genérico de credenciales: texto que explique para qué se usa cada campo (`Email` = acceso al sistema, `PIN` = contraseña, `Usuario` = login jugador, `CodigoPadres` = autorización de justificaciones) y advertencia de consecuencias si se modifica | `Index.html`, `styles.html` | ⏳ |
-| 4a-6 | **[Frontend/Backend]** Al crear un jugador, mostrar el PIN auto-generado en el toast/mensaje de confirmación de alta, ya que no es `1234` por defecto sino generado aleatoriamente | `app.html`, `Equipos.gs` | ⏳ |
+| 4a-3 | **[Frontend]** Edición de credenciales de jugador desde admin: campo `Usuario`, campo `PIN` (con confirmación), campo `CodigoPadres` — añadir formulario con modal de aviso explicativo | `Index.html`, `styles.html`, `app.html` | ✅ |
+| 4a-4 | **[Frontend]** Edición de credenciales de entrenador desde admin: campo `Email` (con confirmación), campo `PIN` — añadir al formulario de edición de entrenador con modal de aviso | `Index.html`, `styles.html`, `app.html` | ✅ |
+| 4a-5 | **[Frontend]** Modal de aviso genérico de credenciales: texto que explique para qué se usa cada campo (`Email` = acceso al sistema, `PIN` = contraseña, `Usuario` = login jugador, `CodigoPadres` = autorización de justificaciones) y advertencia de consecuencias si se modifica | `Index.html`, `styles.html` | ✅ |
+| 4a-6 | **[Frontend/Backend]** Al crear un jugador, mostrar el PIN auto-generado en el toast/mensaje de confirmación de alta, ya que no es `1234` por defecto sino generado aleatoriamente | `app.html`, `Equipos.gs` | ✅ |
 
 ---
 
@@ -316,7 +316,7 @@ Actualizar el estado y añadir notas de decisiones de diseño al completar cada 
 2. **4c-1, 4c-2** — Bugs críticos de justificaciones (persistencia + asincronía)
 3. **4c-3, 4c-4, 4c-5, 4c-6, 4c-7** — Pre-justificación y aviso al entrenador
 4. **4b-1 → 4b-6** — Rediseño completo de vista de sesión guardada
-5. **4a-3 → 4a-6** — Edición de credenciales y mensaje de PIN en alta
+5. ✅ **4a-3 → 4a-6** — Edición de credenciales y mensaje de PIN en alta
 6. **4e-1 → 4e-7** — Rediseño perfil jugador y Mi Equipo con ranking
 7. **4d-1 → 4d-6** — Botón "Añadir otro equipo" para sustituciones
 8. **4f-1 → 4f-6** — UX: confirmaciones y asincronía globales

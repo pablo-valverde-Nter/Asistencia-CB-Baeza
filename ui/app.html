@@ -1580,6 +1580,13 @@ const App = {
         ['jug-nombre','jug-apellidos','jug-dorsal','jug-fechanac','jug-tel','jug-email'].forEach(function(id) {
           document.getElementById(id).oninput = setDirty;
         });
+        // Zona de credenciales: solo visible para admin al editar un jugador existente
+        var cZone  = document.getElementById('jug-credenciales-zona');
+        var pinZ   = document.getElementById('jug-pin-zona');
+        var aviso  = document.getElementById('jug-cred-aviso');
+        if (cZone) cZone.style.display = (App.state.formJugadorId && App.state.esAdmin) ? '' : 'none';
+        if (pinZ)  pinZ.style.display  = (App.state.formJugadorId && App.state.esAdmin) ? '' : 'none';
+        if (aviso) aviso.style.display  = (App.state.formJugadorId && App.state.esAdmin) ? '' : 'none';
       },
       _reset: function() {
         App.state._formIsDirty = false;
@@ -1593,6 +1600,9 @@ const App = {
         });
         var cZone = document.getElementById('jug-credenciales-zona');
         if (cZone) cZone.style.display = 'none';
+        ['jug-usuario','jug-codigo-padres','jug-pin','jug-pin-confirm'].forEach(function(id) {
+          var el = document.getElementById(id); if (el) el.value = '';
+        });
       },
       cargar: function(jugadorId) {
         App.state.formJugadorId = jugadorId;
@@ -1610,11 +1620,19 @@ const App = {
           var p1e = document.getElementById('jug-padre1-email');  if (p1e) p1e.value = j.EmailPadre1  || '';
           var p2n = document.getElementById('jug-padre2-nombre'); if (p2n) p2n.value = j.NombrePadre2 || '';
           var p2e = document.getElementById('jug-padre2-email');  if (p2e) p2e.value = j.EmailPadre2  || '';
+          // Zona de credenciales: solo para admin
           var cZone = document.getElementById('jug-credenciales-zona');
-          if (cZone) {
-            cZone.style.display = '';
+          var pinZ  = document.getElementById('jug-pin-zona');
+          var aviso = document.getElementById('jug-cred-aviso');
+          var esAdm = App.state.esAdmin;
+          if (cZone) cZone.style.display = esAdm ? '' : 'none';
+          if (pinZ)  pinZ.style.display  = esAdm ? '' : 'none';
+          if (aviso) aviso.style.display  = esAdm ? '' : 'none';
+          if (esAdm) {
             var uEl = document.getElementById('jug-usuario'); if (uEl) uEl.value = j.Usuario || '';
             var cEl = document.getElementById('jug-codigo-padres'); if (cEl) cEl.value = j.CodigoPadres || '';
+            var pEl = document.getElementById('jug-pin'); if (pEl) pEl.value = '';
+            var pcEl = document.getElementById('jug-pin-confirm'); if (pcEl) pcEl.value = '';
           }
         }
       },
@@ -1639,7 +1657,35 @@ const App = {
         if (datos.FechaNac && datos.FechaNac > _hoy()) { showToast('La fecha de nacimiento no puede ser futura', 'error'); return; }
         if (datos.EmailPadre1 && !_validarEmail(datos.EmailPadre1)) { showToast('El email del padre/madre 1 no es válido', 'error'); return; }
         if (datos.EmailPadre2 && !_validarEmail(datos.EmailPadre2)) { showToast('El email del padre/madre 2 no es válido', 'error'); return; }
+        // Credenciales (solo admin al editar)
         var jugId = App.state.formJugadorId;
+        var credNuevo = null;
+        if (jugId && App.state.esAdmin) {
+          var _uEl  = document.getElementById('jug-usuario');
+          var _cEl  = document.getElementById('jug-codigo-padres');
+          var _pEl  = document.getElementById('jug-pin');
+          var _pcEl = document.getElementById('jug-pin-confirm');
+          var nuevoUsuario = _uEl  ? _uEl.value.trim()  : '';
+          var nuevoCodigo  = _cEl  ? _cEl.value.trim()  : '';
+          var nuevoPin     = _pEl  ? _pEl.value.trim()  : '';
+          var nuevoPin2    = _pcEl ? _pcEl.value.trim() : '';
+          if (nuevoPin || nuevoPin2) {
+            if (nuevoPin !== nuevoPin2) { showToast('Los dos PINs no coinciden', 'error'); return; }
+            if (!/^[0-9]{4,6}$/.test(nuevoPin)) { showToast('El PIN debe tener entre 4 y 6 dígitos numéricos', 'error'); return; }
+          }
+          // Detectar si algo cambió
+          var jugOrig = App.cache.getJugadorById(jugId) || {};
+          var usuarioCambio   = nuevoUsuario && nuevoUsuario !== (jugOrig.Usuario || '').toLowerCase();
+          var codigoCambio    = nuevoCodigo  && nuevoCodigo.toUpperCase() !== (jugOrig.CodigoPadres || '');
+          var pinCambio       = !!nuevoPin;
+          if (usuarioCambio || pinCambio || codigoCambio) {
+            credNuevo = {
+              usuario:  usuarioCambio ? nuevoUsuario : null,
+              pin:      pinCambio     ? nuevoPin     : null,
+              codigo:   codigoCambio  ? nuevoCodigo  : null,
+            };
+          }
+        }
         if (!force) {
           var dup = App.cache.jugadores.find(function(j) {
             return j.ID !== jugId &&
@@ -1669,6 +1715,10 @@ const App = {
             App.cache.upsert('jugadores', original);
             App.state._todosJugadores = App.cache.jugadores;
           });
+          // Credenciales: llamada extra en segundo plano si algo cambió
+          if (credNuevo) {
+            App.sync.run('actualizarCredencialesJugador', [jugId, credNuevo.usuario, credNuevo.pin, credNuevo.codigo], null);
+          }
         } else {
           // CREACIÓN: esperar ID del servidor, indicador no bloqueante
           showToast('Creando jugador\u2026', '');
@@ -1690,7 +1740,8 @@ const App = {
                     '<p style="margin-bottom:12px;font-size:.88rem;color:var(--texto-sec)">Comparte estas credenciales con el jugador y su familia:</p>' +
                     '<div class="form-group"><label>Usuario</label><input type="text" class="form-control" readonly value="' + _esc(res.jugador.Usuario) + '"></div>' +
                     '<div class="form-group"><label>Código familias</label><input type="text" class="form-control" readonly value="' + _esc(res.jugador.CodigoPadres || '') + '" style="letter-spacing:4px;font-weight:700"></div>' +
-                    '<p style="font-size:.72rem;color:var(--texto-sec);margin-top:8px">El PIN inicial es <strong>1234</strong>. El jugador puede cambiarlo desde la app.</p>' +
+                    '<div class="form-group"><label>PIN inicial</label><input type="text" class="form-control" readonly value="' + _esc(res.jugador.PIN || '') + '" style="letter-spacing:4px;font-weight:700;font-size:1.1rem"></div>' +
+                    '<p style="font-size:.72rem;color:var(--texto-sec);margin-top:4px">Comparte tambi\u00e9n el C\u00f3digo familias con los padres. El jugador puede cambiar su PIN desde la app.</p>' +
                     '<button class="btn btn-primary btn-full" style="margin-top:16px" onclick="App.closeModal()">Entendido</button>' +
                     '</div>'
                   );
@@ -1795,6 +1846,12 @@ const App = {
         // Sección admin solo visible para admins
         var adminWrap = document.getElementById('ent-admin-wrap');
         if (adminWrap) adminWrap.classList.toggle('hidden', !App.state.esAdmin);
+        // Zona credenciales (admin editando) vs PIN para nuevo entrenador
+        var credZone   = document.getElementById('ent-credenciales-zona');
+        var pinNuevo   = document.getElementById('ent-pin-zona-nuevo');
+        var editando   = !!App.state.formEntrenadorId;
+        if (credZone)  credZone.style.display  = (editando && App.state.esAdmin) ? '' : 'none';
+        if (pinNuevo)  pinNuevo.style.display   = (!editando && App.state.esAdmin) ? '' : 'none';
       },
       _reset: function() {
         App.state._formIsDirty = false;
@@ -1803,7 +1860,10 @@ const App = {
         });
         document.getElementById('ent-email').disabled = false;
         document.getElementById('ent-email-aviso').classList.add('hidden');
-        var pinEl = document.getElementById('ent-pin'); if (pinEl) pinEl.value = '';
+        var avi2 = document.getElementById('ent-email-aviso-admin'); if (avi2) avi2.classList.add('hidden');
+        var pinEl  = document.getElementById('ent-pin');         if (pinEl)  pinEl.value  = '';
+        var pinCEl = document.getElementById('ent-pin-confirm'); if (pinCEl) pinCEl.value = '';
+        var pinNEl = document.getElementById('ent-pin-nuevo');   if (pinNEl) pinNEl.value = '';
         var esAdminEl = document.getElementById('ent-es-admin'); if (esAdminEl) esAdminEl.checked = false;
       },
       cargar: function(entrenadorId) {
@@ -1815,12 +1875,23 @@ const App = {
           document.getElementById('ent-nombre').value    = e.Nombre || '';
           document.getElementById('ent-apellidos').value = e.Apellidos || '';
           document.getElementById('ent-email').value     = e.Email || '';
-          document.getElementById('ent-email').disabled  = true;
-          document.getElementById('ent-email-aviso').classList.remove('hidden');
           document.getElementById('ent-tel').value       = e.Telefono || '';
-          var pinEl = document.getElementById('ent-pin'); if (pinEl) pinEl.value = '';
           var esAdminEl = document.getElementById('ent-es-admin');
           if (esAdminEl) esAdminEl.checked = (e.EsAdmin === true || e.EsAdmin === 'TRUE');
+          // Credenciales: admin puede editar email; otros ven email bloqueado
+          if (App.state.esAdmin) {
+            document.getElementById('ent-email').disabled = false;
+            document.getElementById('ent-email-aviso').classList.add('hidden');
+            var avi2 = document.getElementById('ent-email-aviso-admin');
+            if (avi2) avi2.classList.remove('hidden');
+          } else {
+            document.getElementById('ent-email').disabled = true;
+            document.getElementById('ent-email-aviso').classList.remove('hidden');
+            var avi2b = document.getElementById('ent-email-aviso-admin');
+            if (avi2b) avi2b.classList.add('hidden');
+          }
+          var pinEl  = document.getElementById('ent-pin');         if (pinEl)  pinEl.value  = '';
+          var pinCEl = document.getElementById('ent-pin-confirm'); if (pinCEl) pinCEl.value = '';
         }
       },
       guardar: function(force) {
@@ -1832,20 +1903,39 @@ const App = {
           Email:     document.getElementById('ent-email').value.trim(),
           Telefono:  document.getElementById('ent-tel').value.trim(),
         };
-        var _pinEl = document.getElementById('ent-pin');
-        if (_pinEl && _pinEl.value.trim()) datos.PIN = _pinEl.value.trim();
+        var entId = App.state.formEntrenadorId;
+        // Recoger PIN según modo: credenciales (edición admin) o pin-nuevo (creación)
+        if (entId && App.state.esAdmin) {
+          // Edición admin: PIN con confirmación
+          var _pinEl  = document.getElementById('ent-pin');
+          var _pinCEl = document.getElementById('ent-pin-confirm');
+          var pinVal  = _pinEl  ? _pinEl.value.trim()  : '';
+          var pinVal2 = _pinCEl ? _pinCEl.value.trim() : '';
+          if (pinVal || pinVal2) {
+            if (pinVal !== pinVal2) { showToast('Los dos PINs no coinciden', 'error'); return; }
+            if (!/^[0-9]{4,6}$/.test(pinVal)) { showToast('El PIN debe tener entre 4 y 6 dígitos numéricos', 'error'); return; }
+            datos.PIN = pinVal;
+          }
+        } else if (!entId) {
+          // Creación: pin-nuevo opcional
+          var _pinNEl = document.getElementById('ent-pin-nuevo');
+          if (_pinNEl && _pinNEl.value.trim()) datos.PIN = _pinNEl.value.trim();
+        }
         var _esAdminEl = document.getElementById('ent-es-admin');
         if (App.state.esAdmin && _esAdminEl) datos.EsAdmin = _esAdminEl.checked;
         if (!datos.Nombre || !datos.Apellidos) { showToast('Nombre y apellidos son obligatorios', 'error'); return; }
-        if (!datos.Email && !App.state.formEntrenadorId) { showToast('El email es obligatorio para nuevos entrenadores', 'error'); return; }
+        if (!datos.Email && !entId) { showToast('El email es obligatorio para nuevos entrenadores', 'error'); return; }
         if (datos.Email && !_validarEmail(datos.Email)) { showToast('El email no tiene un formato válido', 'error'); return; }
         if (datos.Telefono && !_validarTel(datos.Telefono)) { showToast('El teléfono no tiene un formato válido (mín. 9 dígitos)', 'error'); return; }
-        var entId = App.state.formEntrenadorId;
         if (!force) {
-          // Detectar email duplicado (al crear)
-          if (!entId && datos.Email) {
-            var dupEmail = App.cache.entrenadores.find(function(e) { return e.Email.toLowerCase() === datos.Email.toLowerCase(); });
-            if (dupEmail) { showToast('Ya existe un entrenador con ese email', 'error'); return; }
+          // Detectar email duplicado (al crear o si admin cambia email)
+          if (datos.Email) {
+            var entOrig = entId ? App.cache.getEntrenadorById(entId) : null;
+            var emailCambio = !entOrig || (entOrig.Email || '').toLowerCase() !== datos.Email.toLowerCase();
+            if (emailCambio) {
+              var dupEmail = App.cache.entrenadores.find(function(e) { return e.ID !== entId && e.Email.toLowerCase() === datos.Email.toLowerCase(); });
+              if (dupEmail) { showToast('Ya existe un entrenador con ese email', 'error'); return; }
+            }
           }
           // Detectar nombre duplicado
           var dup = App.cache.entrenadores.find(function(e) {
