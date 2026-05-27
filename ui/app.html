@@ -386,14 +386,25 @@ const App = {
 
     var fabViews = {'equipos-admin':true,'jugadores-admin':true,'entrenadores-admin':true};
     var fab = document.getElementById('fab-btn');
-    if (fabViews[view]) fab.classList.remove('hidden');
-    else fab.classList.add('hidden');
+    if (fabViews[view]) {
+      if (view === 'entrenadores-admin' && !App.state.esAdmin) fab.classList.add('hidden');
+      else fab.classList.remove('hidden');
+    } else {
+      fab.classList.add('hidden');
+    }
 
     var _editViews = {'jugador-detalle':true,'entrenador-detalle':true,'equipo-detalle':true};
     var _btnEdit   = document.getElementById('btn-edit');
     var _userBadge = document.getElementById('user-badge');
-    if (_editViews[view]) { _btnEdit.classList.remove('hidden'); _userBadge.classList.add('hidden'); }
-    else                  { _btnEdit.classList.add('hidden');    _userBadge.classList.remove('hidden'); }
+    if (_editViews[view]) {
+      var isEntDetalleAjeno = (view === 'entrenador-detalle' && !App.state.esAdmin && App.state.usuario && App.state.usuario.ID !== App.state.detalleEntrenadorId);
+      if (isEntDetalleAjeno) _btnEdit.classList.add('hidden');
+      else _btnEdit.classList.remove('hidden');
+      _userBadge.classList.add('hidden');
+    } else {
+      _btnEdit.classList.add('hidden');
+      _userBadge.classList.remove('hidden');
+    }
 
     // Ocultar controles de administración para el rol jugador
     if (App.state.rol === 'jugador') {
@@ -1816,9 +1827,10 @@ const App = {
         el.innerHTML = lista.map(function(e) {
           var ini = (e.Nombre ? e.Nombre[0] : '') + (e.Apellidos ? e.Apellidos[0] : '');
           var adminBadge = (e.EsAdmin === true || e.EsAdmin === 'TRUE') ? ' <span class="badge-admin">Admin</span>' : '';
+          var isMeBadge = (App.state.usuario && e.ID === App.state.usuario.ID) ? ' <span style="font-size:0.7em; background:#2196F3; color:white; padding:2px 6px; border-radius:10px; margin-left:4px;">(Tú)</span>' : '';
           return '<div class="list-item" onclick="App.views[\'entrenador-detalle\'].cargar(\'' + e.ID + '\')">' +
             '<div class="li-avatar">' + ini + '</div>' +
-            '<div style="flex:1"><div class="li-name">' + e.Apellidos + ', ' + e.Nombre + adminBadge + '</div>' +
+            '<div style="flex:1"><div class="li-name">' + e.Apellidos + ', ' + e.Nombre + adminBadge + isMeBadge + '</div>' +
             '<div class="li-sub">' + e.Email + '</div></div>' +
             '<div class="li-arrow">&#x203A;</div></div>';
         }).join('');
@@ -1846,11 +1858,12 @@ const App = {
         // Sección admin solo visible para admins
         var adminWrap = document.getElementById('ent-admin-wrap');
         if (adminWrap) adminWrap.classList.toggle('hidden', !App.state.esAdmin);
-        // Zona credenciales (admin editando) vs PIN para nuevo entrenador
+        // Zona credenciales (admin editando o editando propio) vs PIN para nuevo entrenador
         var credZone   = document.getElementById('ent-credenciales-zona');
         var pinNuevo   = document.getElementById('ent-pin-zona-nuevo');
         var editando   = !!App.state.formEntrenadorId;
-        if (credZone)  credZone.style.display  = (editando && App.state.esAdmin) ? '' : 'none';
+        var editandoPropio = editando && App.state.usuario && App.state.formEntrenadorId === App.state.usuario.ID;
+        if (credZone)  credZone.style.display  = (editando && (App.state.esAdmin || editandoPropio)) ? '' : 'none';
         if (pinNuevo)  pinNuevo.style.display   = (!editando && App.state.esAdmin) ? '' : 'none';
       },
       _reset: function() {
@@ -1861,6 +1874,7 @@ const App = {
         document.getElementById('ent-email').disabled = false;
         document.getElementById('ent-email-aviso').classList.add('hidden');
         var avi2 = document.getElementById('ent-email-aviso-admin'); if (avi2) avi2.classList.add('hidden');
+        var avi3 = document.getElementById('ent-email-aviso-propio'); if (avi3) avi3.classList.add('hidden');
         var pinEl  = document.getElementById('ent-pin');         if (pinEl)  pinEl.value  = '';
         var pinCEl = document.getElementById('ent-pin-confirm'); if (pinCEl) pinCEl.value = '';
         var pinNEl = document.getElementById('ent-pin-nuevo');   if (pinNEl) pinNEl.value = '';
@@ -1878,17 +1892,28 @@ const App = {
           document.getElementById('ent-tel').value       = e.Telefono || '';
           var esAdminEl = document.getElementById('ent-es-admin');
           if (esAdminEl) esAdminEl.checked = (e.EsAdmin === true || e.EsAdmin === 'TRUE');
-          // Credenciales: admin puede editar email; otros ven email bloqueado
-          if (App.state.esAdmin) {
+          // Credenciales: admin o dueño pueden editar email
+          var editandoPropio = App.state.usuario && entrenadorId === App.state.usuario.ID;
+          if (App.state.esAdmin || editandoPropio) {
             document.getElementById('ent-email').disabled = false;
             document.getElementById('ent-email-aviso').classList.add('hidden');
             var avi2 = document.getElementById('ent-email-aviso-admin');
-            if (avi2) avi2.classList.remove('hidden');
+            if (avi2) {
+              if (App.state.esAdmin && !editandoPropio) avi2.classList.remove('hidden');
+              else avi2.classList.add('hidden');
+            }
+            var avi3 = document.getElementById('ent-email-aviso-propio');
+            if (avi3) {
+              if (editandoPropio) avi3.classList.remove('hidden');
+              else avi3.classList.add('hidden');
+            }
           } else {
             document.getElementById('ent-email').disabled = true;
             document.getElementById('ent-email-aviso').classList.remove('hidden');
             var avi2b = document.getElementById('ent-email-aviso-admin');
             if (avi2b) avi2b.classList.add('hidden');
+            var avi3b = document.getElementById('ent-email-aviso-propio');
+            if (avi3b) avi3b.classList.add('hidden');
           }
           var pinEl  = document.getElementById('ent-pin');         if (pinEl)  pinEl.value  = '';
           var pinCEl = document.getElementById('ent-pin-confirm'); if (pinCEl) pinCEl.value = '';
@@ -1904,9 +1929,10 @@ const App = {
           Telefono:  document.getElementById('ent-tel').value.trim(),
         };
         var entId = App.state.formEntrenadorId;
-        // Recoger PIN según modo: credenciales (edición admin) o pin-nuevo (creación)
-        if (entId && App.state.esAdmin) {
-          // Edición admin: PIN con confirmación
+        var editandoPropio = App.state.usuario && entId === App.state.usuario.ID;
+        // Recoger PIN según modo: credenciales (edición admin/propio) o pin-nuevo (creación)
+        if (entId && (App.state.esAdmin || editandoPropio)) {
+          // Edición admin o propio: PIN con confirmación
           var _pinEl  = document.getElementById('ent-pin');
           var _pinCEl = document.getElementById('ent-pin-confirm');
           var pinVal  = _pinEl  ? _pinEl.value.trim()  : '';

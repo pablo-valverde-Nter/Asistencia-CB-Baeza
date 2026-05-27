@@ -384,8 +384,21 @@ function crearEntrenador(auth, datos) {
 
 function actualizarEntrenador(auth, entrenadorId, datos) {
   try {
-    Auth.requireAdmin(auth);
-    // Solo admin llega aqui → permiteEmail=true para permitir cambio de correo
+    let permiteEdicion = false;
+    let isAdmin = Auth.isAdmin(auth);
+    if (isAdmin) {
+      permiteEdicion = true;
+    } else {
+      const ent = Auth.getEntrenadorActual(auth);
+      if (ent && ent.ID === entrenadorId) {
+        permiteEdicion = true;
+      }
+    }
+    
+    if (!permiteEdicion) {
+      throw new Error('No tienes permisos para editar este entrenador.');
+    }
+
     return { success: true, actualizado: Equipos.actualizarEntrenador(entrenadorId, datos, true) };
   } catch (e) {
     return { success: false, error: e.message };

@@ -363,18 +363,21 @@
           <small id="ent-email-aviso-admin" class="hidden" style="color:#5D4037;font-size:.72rem;display:block;margin-top:4px">
             &#x26A0;&#xFE0F; C&aacute;mbialo solo si el entrenador cambi&oacute; de cuenta de Google.
           </small>
+          <small id="ent-email-aviso-propio" class="hidden" style="color:#D32F2F;font-weight:bold;font-size:.72rem;display:block;margin-top:4px">
+            &#x26A0;&#xFE0F; AVISO: Si modificas tu email de Google o PIN, afectar&aacute; a tu pr&oacute;ximo inicio de sesi&oacute;n.
+          </small>
         </div>
         <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ent-tel" placeholder="+34 600 000 000"></div>
       </div>
 
-      <!-- Sección credenciales — solo admin al editar -->
+      <!-- Sección credenciales — admin editando o dueño editando propio -->
       <div class="form-section" id="ent-credenciales-zona" style="display:none">
         <div class="form-section-title">Credenciales de acceso</div>
         <div class="cred-aviso-box">
           <div class="cred-aviso-icon">&#x26A0;&#xFE0F;</div>
           <div>
             <strong>Cambio de credenciales</strong>
-            <p><strong>Email</strong>: con qu&eacute; cuenta de Google accede el entrenador.</p>
+            <p><strong>Email</strong>: cuenta de Google requerida para acceder.</p>
             <p><strong>PIN</strong>: contrase&ntilde;a de acceso (4-6 d&iacute;gitos num&eacute;ricos). Deja en blanco para no cambiar.</p>
           </div>
         </div>
@@ -403,10 +406,12 @@
 
       <div class="form-section" id="ent-admin-section">
         <div class="form-group" id="ent-admin-wrap">
-          <label class="toggle-label">
+          <label style="display: flex; align-items: center; cursor: pointer; font-size: .85rem; font-weight: 500;">
             <span>Conceder permisos de administrador</span>
-            <input type="checkbox" id="ent-es-admin" class="toggle-input">
-            <span class="toggle-slider"></span>
+            <div class="toggle-sw">
+              <input type="checkbox" id="ent-es-admin">
+              <div class="toggle-sl"></div>
+            </div>
           </label>
         </div>
       </div>
