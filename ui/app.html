@@ -62,9 +62,9 @@ const App = {
     asistJugadores:      [],  // todos los registros de Asist_Jugadores
     asistEntrenadores:   [],  // todos los registros de Asist_Entrenadores
 
-    getJugadorById(id)     { return this.jugadores.find(function(j)  { return j.ID === id; }) || null; }
-    getEntrenadorById(id)  { return this.entrenadores.find(function(e){ return e.ID === id; }) || null; }
-    getEquipoById(id)      { return this.equipos.find(function(e)     { return e.ID === id; }) || null; }
+    getJugadorById(id)     { return this.jugadores.find(function(j)  { return j.ID === id; }) || null; },
+    getEntrenadorById(id)  { return this.entrenadores.find(function(e){ return e.ID === id; }) || null; },
+    getEquipoById(id)      { return this.equipos.find(function(e)     { return e.ID === id; }) || null; },
 
     getJugadoresByEquipo(equipoId) {
       var self = this;
@@ -72,7 +72,7 @@ const App = {
         .filter(function(r) { return r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'); })
         .map(function(r) { var j = self.getJugadorById(r.ID_Jugador); return j ? Object.assign({}, j, { Tipo: r.Tipo }) : null; })
         .filter(Boolean);
-    }
+    },
 
     getEntrenadoresByEquipo(equipoId) {
       var self = this;
@@ -80,17 +80,17 @@ const App = {
         .filter(function(r) { return r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'); })
         .map(function(r) { return self.getEntrenadorById(r.ID_Entrenador); })
         .filter(Boolean);
-    }
+    },
 
     getHorariosByEquipo(equipoId) {
       return this.horarios.filter(function(h) { return h.ID_Equipo === equipoId; });
-    }
+    },
 
     getSesionesByEquipo(equipoId) {
       return this.sesiones
         .filter(function(s) { return s.ID_Equipo === equipoId; })
         .sort(function(a, b) { return a.Fecha < b.Fecha ? -1 : 1; });
-    }
+    },
 
     upsert(key, record) {
       if (!Array.isArray(this[key])) return;
@@ -99,12 +99,12 @@ const App = {
         if (this[key][i].ID === record.ID) { this[key][i] = Object.assign({}, this[key][i], record); found = true; break; }
       }
       if (!found) this[key].push(record);
-    }
+    },
 
     remove(key, id) {
       if (!Array.isArray(this[key])) return;
       this[key] = this[key].filter(function(r) { return r.ID !== id; });
-    }
+    },
 
     // Reemplaza las relaciones de un equipo en cache con el estado actual del formulario
     _setRelacionesEquipo(equipoId, jugadores, entrenadores) {
@@ -264,6 +264,7 @@ const App = {
 
   cerrarSesion(reason) {
     _clientLog('cerrarSesion', { reason: reason || 'manual_or_unknown', view: App.state.currentView || null });
+    hideLoading(); // Garantiza que el overlay no quede visible si se llama durante la carga inicial
     App.state._authReqSeq++;
     App.state.auth = null;
     _clearStoredAuth();
@@ -1166,7 +1167,7 @@ const App = {
                 ? '<span style="font-size:.8rem;color:var(--texto-sec)">\u2014</span>'
                 : asistio
                   ? '<span style="font-size:.8rem;font-weight:700;color:var(--verde)">\u2713 Asisti\u00f3</span>'
-                  : '<span style="font-size:.8rem;font-weight:700;color:var(--rojo)">\u2717 No asisti\u00fó</span>';
+                  : '<span style="font-size:.8rem;font-weight:700;color:var(--rojo)">\u2717 No asisti\u00f3</span>';
               return '<div class="ent-row">' +
                 '<div style="flex:1"><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
                 '<div class="ent-sub">' + (item.esInvitado ? 'Invitado' : '') + '</div></div>' +
