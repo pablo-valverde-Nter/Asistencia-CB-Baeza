@@ -466,7 +466,7 @@ function getSesionesByEquipo(auth, equipoId) {
 
 function generarSesionesSemana(auth, equipoId) {
   try {
-    Auth.requireAccesoGestionEquipo(equipoId, auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, sesiones: Sesiones.generarSesionesSemana(equipoId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -475,7 +475,7 @@ function generarSesionesSemana(auth, equipoId) {
 
 function crearSesionExtra(auth, equipoId, datos) {
   try {
-    Auth.requireAccesoGestionEquipo(equipoId, auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, sesion: Sesiones.crearSesionExtra(equipoId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -484,10 +484,7 @@ function crearSesionExtra(auth, equipoId, datos) {
 
 function actualizarSesion(auth, sesionId, datos) {
   try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) Auth.requireAccesoGestionEquipo(sesion.ID_Equipo, auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, actualizado: Sesiones.actualizarSesion(sesionId, datos) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -496,10 +493,7 @@ function actualizarSesion(auth, sesionId, datos) {
 
 function eliminarSesion(auth, sesionId) {
   try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) Auth.requireAccesoGestionEquipo(sesion.ID_Equipo, auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, eliminado: Sesiones.eliminarSesion(sesionId) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -522,10 +516,7 @@ function getAsistenciaSesion(auth, sesionId) {
 
 function registrarAsistenciaJugador(auth, sesionId, jugadorId, estado, esInvitado) {
   try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) Auth.requireAccesoGestionEquipo(sesion.ID_Equipo, auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, registro: Asistencia.registrarAsistenciaJugador(sesionId, jugadorId, estado, esInvitado) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -534,10 +525,7 @@ function registrarAsistenciaJugador(auth, sesionId, jugadorId, estado, esInvitad
 
 function registrarAsistenciaEntrenador(auth, sesionId, entrenadorId, asistio, esInvitado) {
   try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) Auth.requireAccesoGestionEquipo(sesion.ID_Equipo, auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return { success: true, registro: Asistencia.registrarAsistenciaEntrenador(sesionId, entrenadorId, asistio, esInvitado) };
   } catch (e) {
     return { success: false, error: e.message };
@@ -546,10 +534,7 @@ function registrarAsistenciaEntrenador(auth, sesionId, entrenadorId, asistio, es
 
 function guardarAsistenciaCompleta(auth, sesionId, asistencias) {
   try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) Auth.requireAccesoGestionEquipo(sesion.ID_Equipo, auth);
+    Auth.requireEntrenadorOAdmin(auth);
     return Asistencia.guardarAsistenciaCompleta(sesionId, asistencias);
   } catch (e) {
     return { success: false, error: e.message };
@@ -572,8 +557,6 @@ function enviarJustificacion(auth, sesionId, jugadorId, codigoPadres, tipoIncide
 function getJustificacionesSesion(auth, sesionId) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
-    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) Auth.requireAccesoLecturaEquipo(sesion.ID_Equipo, auth);
     return { success: true, justificaciones: Asistencia.getJustificacionesSesion(sesionId) };
   } catch (e) { return { success: false, error: e.message }; }
 }

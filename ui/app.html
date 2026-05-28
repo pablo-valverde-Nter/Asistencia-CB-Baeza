@@ -387,7 +387,7 @@ const App = {
     var fabViews = {'equipos-admin':true,'jugadores-admin':true,'entrenadores-admin':true};
     var fab = document.getElementById('fab-btn');
     if (fabViews[view]) {
-      if (view === 'entrenadores-admin' && !App.state.esAdmin) fab.classList.add('hidden');
+      if ((view === 'entrenadores-admin' || view === 'equipos-admin') && !App.state.esAdmin) fab.classList.add('hidden');
       else fab.classList.remove('hidden');
     } else {
       fab.classList.add('hidden');
@@ -398,7 +398,8 @@ const App = {
     var _userBadge = document.getElementById('user-badge');
     if (_editViews[view]) {
       var isEntDetalleAjeno = (view === 'entrenador-detalle' && !App.state.esAdmin && App.state.usuario && App.state.usuario.ID !== App.state.detalleEntrenadorId);
-      if (isEntDetalleAjeno) _btnEdit.classList.add('hidden');
+      var isEqDetalleAjeno  = (view === 'equipo-detalle' && !App.state.esAdmin && !App.state.equipos.some(function(e) { return e.ID === App.state.detalleEquipoId; }));
+      if (isEntDetalleAjeno || isEqDetalleAjeno) _btnEdit.classList.add('hidden');
       else _btnEdit.classList.remove('hidden');
       _userBadge.classList.add('hidden');
     } else {
@@ -530,8 +531,39 @@ const App = {
             statsHtml + '</div>' +
             visorHtml + '<div class="eq-arrow">&#x203A;</div></div>';
         }).join('');
+        // Botón de sustitución puntual (solo entrenadores, no jugadores ni admins)
+        if (App.state.rol === 'entrenador') {
+          lista.innerHTML += '<div style="padding:12px 0 4px"><button class="btn btn-secondary btn-full" onclick="App.views.equipos.abrirSustituto()">&#x1F501; Sustituir en otro equipo</button></div>';
+        }
       },
       abrirEquipo: function(id, nombre) {
+        App.state.equipoSesionesId = id;
+        App.state._equipoNombre = nombre;
+        App.navigate('sesiones');
+      },
+
+      abrirSustituto: function() {
+        var misIds = new Set(App.state.equipos.map(function(e) { return e.ID; }));
+        var otros = App.cache.equipos.filter(function(e) { return !misIds.has(e.ID); });
+        if (!otros.length) {
+          showToast('No hay otros equipos en el club', 'info');
+          return;
+        }
+        var rows = otros.map(function(eq) {
+          return '<div class="sr-item" onclick="App.views.equipos._sustituirEnEquipo(\'' + eq.ID + '\',\'' + _esc(eq.Nombre) + '\')">' +
+            '<div class="li-avatar" style="flex-shrink:0">' + (eq.Nombre ? eq.Nombre[0] : '?') + '</div>' +
+            '<div><div class="li-name">' + eq.Nombre + '</div>' +
+            '<div class="li-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div></div>' +
+            '</div>';
+        }).join('');
+        App.openModal('Sustituir en otro equipo',
+          '<div><p style="padding:12px 16px 4px;font-size:.82rem;color:var(--texto-sec)">Solo podrás gestionar sus sesiones y asistencia. No modifica tu asignación permanente.</p>' +
+          rows + '</div>'
+        );
+      },
+
+      _sustituirEnEquipo: function(id, nombre) {
+        App.closeModal();
         App.state.equipoSesionesId = id;
         App.state._equipoNombre = nombre;
         App.navigate('sesiones');
@@ -1129,12 +1161,15 @@ const App = {
           lista.innerHTML = '<div class="empty-state"><div class="ei">&#x1F3C6;</div><p>Sin equipos. Pulsa + para crear uno.</p></div>';
           return;
         }
+        var misIds = new Set(App.state.equipos.map(function(e) { return e.ID; }));
         lista.innerHTML = equipos.map(function(eq) {
+          var esMio = misIds.has(eq.ID);
+          var chipHtml = esMio ? '<span class="chip-mi-equipo">&#x2605; Mi equipo</span>' : '';
           return '<div class="list-item" onclick="App.views[\'equipo-detalle\'].cargar(\'' + eq.ID + '\')">' +
             '<div class="li-avatar">' + (eq.Nombre ? eq.Nombre[0] : '?') + '</div>' +
             '<div style="flex:1"><div class="li-name">' + eq.Nombre + '</div>' +
             '<div class="li-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div></div>' +
-            '<div class="li-arrow">&#x203A;</div></div>';
+            chipHtml + '<div class="li-arrow">&#x203A;</div></div>';
         }).join('');
       },
     },
