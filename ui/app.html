@@ -2423,6 +2423,41 @@ const App = {
         });
         var eqPrincipal = relPrincipal ? App.cache.getEquipoById(relPrincipal.ID_Equipo) : null;
         document.getElementById('perfil-jugador-equipo').textContent = eqPrincipal ? eqPrincipal.Nombre : 'Sin equipo asignado';
+        // Stats inline (4e)
+        var regs = App.cache.asistJugadores.filter(function(r) { return r.ID_Jugador === j.ID; });
+        var cP = regs.filter(function(r) { return r.Estado === 'P'; }).length;
+        var cA = regs.filter(function(r) { return r.Estado === 'A'; }).length;
+        var cR = regs.filter(function(r) { return r.Estado === 'R'; }).length;
+        var total = regs.length;
+        var pct = total > 0 ? Math.round(cP / total * 100) : 0;
+        var hist = regs.map(function(r) {
+          var s = App.cache.sesiones.find(function(x) { return x.ID === r.ID_Sesion; });
+          return s ? { fecha: s.Fecha, estado: r.Estado } : null;
+        }).filter(Boolean).sort(function(a, b) { return a.fecha < b.fecha ? 1 : -1; });
+        var racha = 0;
+        for (var i = 0; i < hist.length; i++) { if (hist[i].estado === 'P') racha++; else break; }
+        var statsEl = document.getElementById('perfil-stats');
+        statsEl.innerHTML =
+          '<div class="stat-grid-2">' +
+          '<div class="stat-widget"><div class="stat-widget-title">Asistencia</div>' +
+          '<div class="stat-valor ' + (pct >= 75 ? 'verde' : pct >= 50 ? 'naranja' : 'rojo') + '">' + pct + '%</div>' +
+          '<div class="stat-label">de presencia</div></div>' +
+          '<div class="stat-widget"><div class="stat-widget-title">Racha actual</div>' +
+          '<div class="stat-valor ' + (racha >= 5 ? 'verde' : racha >= 2 ? 'azul' : 'naranja') + '">' + racha + '</div>' +
+          '<div class="stat-label">entrenamientos &#x2713;</div></div></div>' +
+          (total > 0 ?
+            '<div class="stat-grid-1"><div class="stat-widget"><div class="stat-widget-title">Desglose</div><div class="bar-wrap">' +
+            _htmlBarRow('Presentes', cP, total, '#4CAF50') +
+            _htmlBarRow('Ausentes',  cA, total, '#F44336') +
+            _htmlBarRow('Retrasos',  cR, total, '#FFC107') +
+            '</div></div></div>' : '') +
+          '<div class="stat-grid-2">' +
+          '<div class="stat-widget"><div class="stat-widget-title">Sesiones</div>' +
+          '<div class="stat-valor azul">' + total + '</div><div class="stat-label">registradas</div></div>' +
+          '<div class="stat-widget"><div class="stat-widget-title">Ausencias</div>' +
+          '<div class="stat-valor ' + (cA === 0 ? 'verde' : cA <= 3 ? 'naranja' : 'rojo') + '">' + cA + '</div>' +
+          '<div class="stat-label">faltas totales</div></div></div>' +
+          '<div style="padding-bottom:28px"></div>';
       },
     },
 
@@ -2561,32 +2596,65 @@ const App = {
       },
     },
 
-    // Mi equipo (jugador, solo lectura)
+    // 4e-6: Mi equipo (jugador) — ranking asistencia
     'mi-equipo': {
       render: function() {
         var j = App.state.jugador;
         var el = document.getElementById('mi-equipo-contenido');
         if (!j) { el.innerHTML = ''; return; }
-        var rels = App.cache.jugadoresEquipos.filter(function(r) {
-          return r.ID_Jugador === j.ID && (r.Activo === true || r.Activo === 'TRUE');
+        var relPrincipal = App.cache.jugadoresEquipos.find(function(r) {
+          return r.ID_Jugador === j.ID && r.Tipo === 'Principal' && (r.Activo === true || r.Activo === 'TRUE');
         });
-        var html = '';
-        rels.forEach(function(rel) {
-          var eq = App.cache.getEquipoById(rel.ID_Equipo);
-          if (!eq) return;
-          var jugs = App.cache.getJugadoresByEquipo(eq.ID);
-          html += '<div class="stat-grid-1"><div class="stat-widget">' +
-            '<div class="stat-widget-title">' + eq.Nombre + (rel.Tipo === 'Principal' ? ' \u2605' : ' (Secundario)') + '</div>' +
-            jugs.map(function(jj) {
-              var esYo = jj.ID === j.ID;
-              return '<div class="ranking-row">' +
-                '<div class="ranking-num">' + (jj.Dorsal || '-') + '</div>' +
-                '<div class="ranking-name" style="' + (esYo ? 'font-weight:800;color:var(--morado)' : '') + '">' +
-                jj.Apellidos + ', ' + jj.Nombre + (esYo ? ' (yo)' : '') + '</div></div>';
-            }).join('') + '</div></div>';
+        if (!relPrincipal) {
+          el.innerHTML = '<div class="empty-state"><div class="ei">&#x1F3C6;</div><p>No asignado a ning\u00fan equipo</p></div>';
+          return;
+        }
+        var eq = App.cache.getEquipoById(relPrincipal.ID_Equipo);
+        if (!eq) { el.innerHTML = ''; return; }
+        var jugs = App.cache.getJugadoresByEquipo(eq.ID);
+        var sesGuardadas = App.cache.sesiones.filter(function(s) {
+          return s.ID_Equipo === eq.ID && (s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE');
         });
-        if (!html) html = '<div class="empty-state"><div class="ei">&#x1F3C6;</div><p>No asignado a ning\u00fan equipo</p></div>';
-        el.innerHTML = html;
+        var totalSes = sesGuardadas.length;
+        var sesIds = new Set(sesGuardadas.map(function(s) { return s.ID; }));
+        // Ranking por jugador
+        var ranking = jugs.map(function(jj) {
+          var regs = App.cache.asistJugadores.filter(function(r) { return r.ID_Jugador === jj.ID && sesIds.has(r.ID_Sesion); });
+          var pres = regs.filter(function(r) { return r.Estado === 'P'; }).length;
+          var pct = totalSes > 0 ? Math.round(pres / totalSes * 100) : 0;
+          return { jugador: jj, pres: pres, pct: pct };
+        }).sort(function(a, b) { return b.pres - a.pres || (a.jugador.Apellidos || '').localeCompare(b.jugador.Apellidos || ''); });
+        // % asistencia media del equipo
+        var totalPres = ranking.reduce(function(acc, x) { return acc + x.pres; }, 0);
+        var pctEquipo = (totalSes > 0 && jugs.length > 0) ? Math.round(totalPres / (totalSes * jugs.length) * 100) : 0;
+        var medals = ['&#x1F947;', '&#x1F948;', '&#x1F949;'];
+        var rankingHtml = ranking.map(function(item, idx) {
+          var esYo = item.jugador.ID === j.ID;
+          var posHtml = idx < 3
+            ? '<span class="ranking-medal">' + medals[idx] + '</span>'
+            : '<span class="ranking-pos">' + (idx + 1) + '</span>';
+          return '<div class="ranking-row' + (esYo ? ' ranking-yo' : '') + '">' +
+            posHtml +
+            '<div class="ranking-name">' + _esc(item.jugador.Apellidos) + ', ' + _esc(item.jugador.Nombre) +
+            (esYo ? ' <span style="color:var(--morado);font-size:.72rem;font-weight:600">(yo)</span>' : '') + '</div>' +
+            '<div class="ranking-bar-wrap"><div class="ranking-bar-fill" style="width:' + item.pct + '%"></div></div>' +
+            '<div class="ranking-val ' + (item.pct >= 75 ? 'verde' : item.pct >= 50 ? 'naranja' : 'rojo') + '">' +
+            item.pres + (totalSes > 0 ? '/' + totalSes : '') + '</div>' +
+            '</div>';
+        }).join('');
+        el.innerHTML =
+          '<div class="stat-grid-2" style="padding-top:14px">' +
+          '<div class="stat-widget"><div class="stat-widget-title">Sesiones del equipo</div>' +
+          '<div class="stat-valor azul">' + totalSes + '</div>' +
+          '<div class="stat-label">registradas</div></div>' +
+          '<div class="stat-widget"><div class="stat-widget-title">Asistencia media</div>' +
+          '<div class="stat-valor ' + (pctEquipo >= 75 ? 'verde' : pctEquipo >= 50 ? 'naranja' : 'rojo') + '">' + pctEquipo + '%</div>' +
+          '<div class="stat-label">del equipo</div></div></div>' +
+          '<div class="stat-grid-1" style="padding-top:12px"><div class="stat-widget">' +
+          '<div class="stat-widget-title">Ranking asistencia &#x1F3C6;</div>' +
+          (ranking.length ? rankingHtml : '<p style="font-size:.82rem;color:var(--texto-sec);margin:8px 0 4px">Sin datos registrados aún</p>') +
+          '</div></div>' +
+          '<div style="padding-bottom:28px"></div>';
       },
     },
 

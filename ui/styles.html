@@ -802,7 +802,7 @@ input, select, textarea { font-family: inherit; }
 .form-group textarea:focus { border-color: var(--morado); background: var(--blanco); }
 
 /* ── 3c-8: Vista perfil jugador y ajustes cuenta ── */
-.perfil-jugador-container { padding: 24px 16px 32px; }
+.perfil-jugador-container { padding: 24px 16px 20px; }
 .perfil-avatar {
   width: 88px; height: 88px; border-radius: 50%;
   background: linear-gradient(135deg, #4A148C, #7B1FA2);
@@ -816,22 +816,33 @@ input, select, textarea { font-family: inherit; }
 .perfil-equipo {
   text-align: center; font-size: .78rem; color: var(--morado);
   background: var(--morado-s); border-radius: 20px;
-  padding: 3px 12px; display: inline-block; margin: 0 auto 24px;
+  padding: 3px 12px; display: inline-block; margin: 0 auto 20px;
   left: 50%; position: relative; transform: translateX(-50%);
 }
-.perfil-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;
+/* ── 4e-2: 3 botones horizontales navegación perfil ── */
+.perfil-nav-3 {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
 }
-.perfil-card {
+.perfil-nav-btn {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 10px; padding: 22px 12px; border-radius: var(--r);
+  gap: 6px; padding: 14px 6px; border-radius: var(--r);
   background: var(--blanco); box-shadow: var(--sombra-lg);
   border: 1.5px solid var(--borde); transition: transform .12s, box-shadow .12s;
-  cursor: pointer;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-.perfil-card:active { transform: scale(.96); box-shadow: var(--sombra); }
-.perfil-card-icon  { font-size: 2rem; }
-.perfil-card-label { font-size: .8rem; font-weight: 700; color: var(--texto); text-align: center; }
+.perfil-nav-btn:active { transform: scale(.96); box-shadow: var(--sombra); }
+.perfil-nav-icon  { font-size: 1.6rem; line-height: 1; }
+.perfil-nav-label { font-size: .72rem; font-weight: 700; color: var(--texto); text-align: center; line-height: 1.25; }
+
+/* ── 4e-4: Ranking asistencia (mi-equipo) ── */
+.ranking-medal { font-size: 1.1rem; flex-shrink: 0; width: 22px; text-align: center; }
+.ranking-pos   { width: 22px; text-align: center; font-size: .76rem; font-weight: 800; color: var(--texto-sec); flex-shrink: 0; }
+.ranking-yo    { background: var(--morado-s); border-radius: 8px; padding: 9px 8px; margin: 2px -8px; }
+.ranking-bar-wrap { flex: 1; height: 6px; background: var(--fondo); border-radius: 3px; overflow: hidden; margin: 0 8px; }
+.ranking-bar-fill { height: 100%; background: var(--morado); border-radius: 3px; transition: width .4s ease; }
+.ranking-val.verde   { color: #2E7D32; }
+.ranking-val.rojo    { color: #C62828; }
+.ranking-val.naranja { color: #E65100; }
 
 /* Bloque estado sesión (vista detalle jugador) */
 .sesion-estado-bloque {

@@ -27,7 +27,7 @@ justificaciones de ausencias/retrasos y notificaciones por email vía MailApp.
 | 4b — Rediseño vista sesión | Solo lectura + modo edición + estados justif. | ⏳ Pendiente |
 | 4c — Justificaciones | Persistencia, asincronía, pre-justificación | ⏳ Pendiente |
 | 4d — Entrenadores: sustitución | Botón "Sustituir en otro equipo" (acceso puntual) | ✅ Completo |
-| 4e — Rediseño perfil jugador | Nueva vista inicial + Mi Equipo con ranking | ⏳ Pendiente |
+| 4e — Rediseño perfil jugador | Nueva vista inicial + Mi Equipo con ranking | ✅ Completo |
 | 4f — UX: confirmación y asincronía | Aviso antes de guardar + guardado en background | ⏳ Pendiente |
 
 ---
@@ -287,13 +287,13 @@ Actualizar el estado y añadir notas de decisiones de diseño al completar cada 
 
 | # | Subtarea | Fichero/s afectado/s | Estado |
 |---|----------|----------------------|--------|
-| 4e-1 | **[HTML]** Rediseñar `perfil-jugador`: imagen centrada arriba + nombre + equipo, luego fila horizontal con 3 botones rectangulares ("Mis entrenamientos", "Mi equipo", "Ajustes"), luego bloque de estadísticas propias | `Index.html` | ⏳ |
-| 4e-2 | **[CSS]** Estilos para la fila de 3 botones rectangulares horizontales en el perfil del jugador — deben ser de igual tamaño, con buen padding y contraste | `styles.html` | ⏳ |
-| 4e-3 | **[HTML]** Nueva vista `mi-equipo`: sección con estadísticas globales del equipo (% asistencia, total sesiones, etc.) y ranking de asistencia de compañeros (posición, nombre, % o nº de presencias) | `Index.html` | ⏳ |
-| 4e-4 | **[CSS]** Estilos para el ranking de compañeros: filas de ranking con posición, nombre y barra/chip de porcentaje de asistencia | `styles.html` | ⏳ |
-| 4e-5 | **[JS]** Routing: al acceder como jugador, la vista inicial es `perfilJugador` (ya estaba); asegurarse de que los 3 botones del rediseño naveguen a `misEntrenamientos`, `miEquipo` y `ajustesCuenta` respectivamente | `app.html` | ⏳ |
-| 4e-6 | **[JS]** Nueva función `miEquipo()`: llama a `getEstadisticasEquipo(equipoId)` y a `getJugadoresByEquipo(equipoId)` en paralelo con `google.script.run`, construye el ranking de compañeros por número de presencias y renderiza la vista | `app.html` | ⏳ |
-| 4e-7 | **[Backend]** `getEstadisticasEquipo()` en `Code.gs` / `Asistencia.gs` debe devolver por jugador el recuento de presencias de la temporada activa para poder construir el ranking | `Asistencia.gs`, `Code.gs` | ⏳ |
+| 4e-1 | **[HTML]** Rediseñar `perfil-jugador`: imagen centrada arriba + nombre + equipo, luego fila horizontal con 3 botones rectangulares ("Mis entrenamientos", "Mi equipo", "Ajustes"), luego bloque de estadísticas propias | `Index.html` | ✅ |
+| 4e-2 | **[CSS]** Estilos para la fila de 3 botones rectangulares horizontales en el perfil del jugador — deben ser de igual tamaño, con buen padding y contraste | `styles.html` | ✅ |
+| 4e-3 | **[HTML]** Nueva vista `mi-equipo`: sección con estadísticas globales del equipo (% asistencia, total sesiones, etc.) y ranking de asistencia de compañeros (posición, nombre, % o nº de presencias) | `Index.html` | ✅ |
+| 4e-4 | **[CSS]** Estilos para el ranking de compañeros: filas de ranking con posición, nombre y barra/chip de porcentaje de asistencia | `styles.html` | ✅ |
+| 4e-5 | **[JS]** Routing: al acceder como jugador, la vista inicial es `perfilJugador` (ya estaba); asegurarse de que los 3 botones del rediseño naveguen a `misEntrenamientos`, `miEquipo` y `ajustesCuenta` respectivamente | `app.html` | ✅ |
+| 4e-6 | **[JS]** Nueva función `miEquipo()`: construye ranking de compañeros por número de presencias usando datos en caché y renderiza la vista | `app.html` | ✅ |
+| 4e-7 | **[Backend]** `getEstadisticasEquipo()` en `Code.gs` / `Informes.gs` — ya existía y devuelve recuentos por jugador | `Informes.gs`, `Code.gs` | ✅ |
 
 ---
 
