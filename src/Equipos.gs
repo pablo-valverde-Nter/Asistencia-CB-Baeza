@@ -423,8 +423,6 @@ const Equipos = {
       campos.Email = datos.Email;
     }
     if (datos.EsAdmin !== undefined) {
-      // Garantizar que la columna EsAdmin existe antes de intentar escribirla
-      migrarCamposEntrenadores();
       campos.EsAdmin = datos.EsAdmin === true || datos.EsAdmin === 'TRUE';
     }
     return updateRow(CONFIG.SHEETS.ENTRENADORES, entrenadorId, campos);

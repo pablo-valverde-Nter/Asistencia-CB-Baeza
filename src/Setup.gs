@@ -18,7 +18,6 @@ const SCHEMA = {
   Horarios: [
     'ID', 'ID_Equipo', 'DiaSemana', 'HoraInicio', 'HoraFin'
   ],
-  // Nuevos campos v2: Usuario, PIN, CodigoPadres, EmailPadre1, EmailPadre2, NombrePadre1, NombrePadre2
   Jugadores: [
     'ID', 'Nombre', 'Apellidos', 'FechaNac', 'Telefono', 'Email', 'FotoURL', 'Dorsal',
     'Usuario', 'PIN', 'CodigoPadres', 'EmailPadre1', 'EmailPadre2', 'NombrePadre1', 'NombrePadre2'
@@ -26,18 +25,15 @@ const SCHEMA = {
   Jugadores_Equipos: [
     'ID', 'ID_Jugador', 'ID_Equipo', 'Tipo', 'Activo'
   ],
-  // Nuevo campo v2: EsAdmin
   Entrenadores: [
     'ID', 'Nombre', 'Apellidos', 'Email', 'Telefono', 'PIN', 'EsAdmin'
   ],
-  // Nuevo campo v2: TipoRol ('Entrenador' | 'Visor')
   Entrenadores_Equipos: [
     'ID', 'ID_Entrenador', 'ID_Equipo', 'Activo', 'TipoRol'
   ],
   Sesiones: [
     'ID', 'ID_Equipo', 'ID_Temporada', 'Fecha', 'HoraInicio', 'HoraFin', 'EsExtra', 'Notas', 'AsistenciaGuardada'
   ],
-  // Nuevos campos v2: justificación de ausencia/retraso
   Asist_Jugadores: [
     'ID', 'ID_Sesion', 'ID_Jugador', 'Estado', 'EsInvitado', 'FechaRegistro',
     'TieneJustificacion', 'TipoJustificacion', 'MotivoCategoria', 'MotivoDetalle',
