@@ -29,6 +29,11 @@ justificaciones de ausencias/retrasos y notificaciones por email vía MailApp.
 | 4d — Entrenadores: sustitución | Botón "Sustituir en otro equipo" (acceso puntual) | ✅ Completo |
 | 4e — Rediseño perfil jugador | Nueva vista inicial + Mi Equipo con ranking | ✅ Completo |
 | 4f — UX: confirmación y asincronía | Aviso antes de guardar + guardado en background | ✅ Completo |
+| 5a — Mejoras lista entrenadores | Orden (yo primero) + estadísticas en tarjeta | ✅ Completo |
+| 5b — Mejoras lista equipos | Orden (propios primero + edad) + estadísticas | ✅ Completo |
+| 5c — Mejoras lista jugadores | Agrupación por equipo + orden por rol/edad + stats | ✅ Completo |
+| 5d — Mejoras vista sesiones equipo | Título descriptivo + subtítulo descriptivo | ✅ Completo |
+| 5e — Mejoras sesión guardada | Más datos visibles + diferenciación visual clara | ✅ Completo |
 
 ---
 
@@ -325,3 +330,91 @@ Actualizar el estado y añadir notas de decisiones de diseño al completar cada 
 6. **4e-1 → 4e-7** — Rediseño perfil jugador y Mi Equipo con ranking
 7. **4d-1 → 4d-6** — Botón "Añadir otro equipo" para sustituciones
 8. **4f-1 → 4f-6** — UX: confirmaciones y asincronía globales
+
+---
+
+---
+
+## FASE 5 — Mejoras de UX en listas y vistas (Mayo 2026)
+
+> Mejoras detectadas en revisión de UX. Indicaciones originales del usuario conservadas en cada bloque.
+
+---
+
+### FASE 5a — Lista de entrenadores: orden y estadísticas
+
+**Indicación original:**
+> "En el modo entrenador, en el apartado de Gestión, en la lista de entrenadores, deberá aparecer arriba del todo él, y luego los demás en cualquier orden. En el espacio de la derecha se puede aprovechar para incluir algunas estadísticas generales."
+
+| # | Subtarea | Fichero/s afectado/s | Estado |
+|---|----------|----------------------|--------|
+| 5a-1 | **[JS]** Ordenar lista de entrenadores: el entrenador logueado aparece primero; el resto mantiene orden original | `app.html` | ✅ |
+| 5a-2 | **[JS/CSS]** Añadir mini-stats en el espacio derecho de cada ítem: nº de sesiones como entrenador y % de asistencia calculado desde `asistEntrenadores` | `app.html`, `styles.html` | ✅ |
+
+---
+
+### FASE 5b — Lista de equipos: orden y estadísticas en tarjeta
+
+**Indicación original:**
+> "En la lista de equipos, los equipos en los que está un entrenador deberían aparecer arriba del todo, y los demás en orden de edad. Aquí también veo que hay espacio para poder mostrar estadísticas generales, aunque los elementos salgan más grandes."
+
+Orden de categorías (de mayor a menor edad): `senior → junior → cadete → infantil → minibasket → pre-minibasket → baybasket`
+
+| # | Subtarea | Fichero/s afectado/s | Estado |
+|---|----------|----------------------|--------|
+| 5b-1 | **[JS]** Reordenar equipos: los propios del entrenador van al inicio (con chip "Mi equipo"), el resto ordenado por categoría de edad descendente | `app.html` | ✅ |
+| 5b-2 | **[JS/CSS]** Ampliar tarjeta de equipo: mostrar número de jugadores activos, sesiones registradas y % de asistencia media en el cuerpo de la tarjeta | `app.html`, `styles.html` | ✅ |
+| 5b-3 | **[CSS]** Tarjeta de equipo más grande (más padding, layout vertical en lugar de una sola fila) con zona de estadísticas bien diferenciada | `styles.html` | ✅ |
+
+---
+
+### FASE 5c — Lista de jugadores: agrupación por equipo y estadísticas
+
+**Indicación original:**
+> "En la lista de Jugadores, deberían estar separados y agrupados por equipos en los que se encuentran los jugadores. Es decir, hacer una lista por equipo y ponerlas una lista seguida de la otra. Como administrador se verían los equipos de menor a mayor edad (senior, junior, cadete, infantil, mini, premini y baby). Como entrenador primero aparecen las listas de tu equipos, y luego el resto de equipos ordenados por edad. Por último, añadir también en el espacio que hay a la derecha unas estadísticas generales del jugador."
+
+| # | Subtarea | Fichero/s afectado/s | Estado |
+|---|----------|----------------------|--------|
+| 5c-1 | **[JS]** Reescribir `jugadores-admin._render()`: agrupar jugadores por equipo en lugar de lista plana; renderizar un encabezado de sección por equipo seguido de los jugadores de ese equipo | `app.html` | ✅ |
+| 5c-2 | **[JS]** Orden de grupos como admin: categorías de mayor a menor edad (senior → baybasket). Dentro del mismo equipo: por apellido | `app.html` | ✅ |
+| 5c-3 | **[JS]** Orden de grupos como entrenador: primero sus equipos propios (en el mismo orden de edad), luego el resto de equipos ordenados por edad | `app.html` | ✅ |
+| 5c-4 | **[HTML/CSS]** Estilo para el encabezado de grupo de equipo: nombre del equipo + categoría/modalidad como separador visual entre bloques | `styles.html` | ✅ |
+| 5c-5 | **[JS/CSS]** Mini-stats en el ítem de jugador: mostrar a la derecha el % de presencia o nº P/A/R calculado desde `asistJugadores` | `app.html`, `styles.html` | ✅ |
+| 5c-6 | **[JS]** El buscador de jugadores filtra dentro de todos los grupos manteniendo los encabezados de aquellos grupos que tengan resultados | `app.html` | ✅ |
+
+---
+
+### FASE 5d — Vista de sesiones del equipo: título y mejoras en tarjetas
+
+**Indicación original:**
+> "Por último, en el apartado de Equipos, podrían añadirse en los elementos más estadísticas, aunque el elemento sea más grande. Y un Título al menos que indique que ahí es donde se va a añadir la asistencia de las sesiones."
+
+| # | Subtarea | Fichero/s afectado/s | Estado |
+|---|----------|----------------------|--------|
+| 5d-1 | **[HTML/JS]** Añadir título/subtítulo descriptivo en la vista `sesiones` que indique claramente que es el apartado de registro de asistencia | `Index.html`, `app.html` | ✅ |
+| 5d-2 | **[JS/CSS]** Ampliar la tarjeta de sesión ya registrada: mostrar nombres de jugadores con incidencia (A/R) sin justificar, y separar visualmente las guardadas de las pendientes | `app.html`, `styles.html` | ✅ |
+
+---
+
+### FASE 5e — Vista sesión guardada: más datos y diferenciación visual
+
+**Indicación original:**
+> "Las sesiones, una vez guardadas, podrían mostrar más datos y de forma que se diferencia más una sesión cuando se ha guardado de cuando está en modo edición."
+
+| # | Subtarea | Fichero/s afectado/s | Estado |
+|---|----------|----------------------|--------|
+| 5e-1 | **[CSS]** Estilo diferenciado para la vista `sesion-guardada`: cabecera con fondo de color, banner "Sesión registrada" bien visible, aspecto completamente distinto al formulario de edición | `styles.html` | ✅ |
+| 5e-2 | **[JS]** Ampliar la información mostrada en `sesion-guardada`: resumen numérico (P/A/R totales), lista de incidencias sin justificar destacada, notas de la sesión | `app.html` | ✅ |
+| 5e-3 | **[HTML]** Bloque de resumen estadístico en la parte superior de la sesión guardada (antes de la lista de jugadores): contador de P/A/R con colores | `Index.html` | ✅ |
+
+---
+
+## Orden de implementación sugerido (Fase 5)
+
+> Priorizado por visibilidad inmediata y facilidad de implementación.
+
+1. **5a-1, 5a-2** — Lista de entrenadores: orden + stats (impacto rápido, pocos cambios)
+2. **5b-1, 5b-2, 5b-3** — Lista de equipos: orden + tarjeta ampliada
+3. **5c-1 → 5c-6** — Lista de jugadores agrupada (más compleja, mayor impacto)
+4. **5d-1, 5d-2** — Vista sesiones: título + tarjetas mejoradas
+5. **5e-1, 5e-2, 5e-3** — Sesión guardada: diferenciación visual + más datos

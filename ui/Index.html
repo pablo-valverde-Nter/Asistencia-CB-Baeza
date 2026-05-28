@@ -98,6 +98,9 @@
     <!-- SESIONES DE UN EQUIPO -->
     <section id="view-sesiones" class="view">
       <div id="sesiones-equipo-hdr" class="vista-header"></div>
+      <div id="sesiones-subtitulo" style="padding:10px 16px 6px; background:var(--fondo); border-bottom:1px solid var(--borde); display:none">
+        <span style="font-size:.76rem; color:var(--texto-sec)">Selecciona una sesi&oacute;n para registrar o revisar la asistencia</span>
+      </div>
       <div class="section-hdr">
         <span class="section-label">Pr&oacute;ximas</span>
         <div style="display:flex;gap:8px">
@@ -138,7 +141,12 @@
 
     <!-- SESION GUARDADA (modo solo lectura) -->
     <section id="view-sesion-guardada" class="view">
-      <div id="sesion-ro-hdr" class="vista-header"></div>
+      <div id="sesion-ro-hdr"></div>
+      <div id="sesion-ro-resumen" class="sesion-ro-resumen" style="display:none"></div>
+      <div id="sesion-ro-incid-bloque" style="display:none">
+        <div class="sesion-ro-incid-hdr">&#x26A0; Incidencias sin justificar</div>
+        <div id="sesion-ro-incid-lista"></div>
+      </div>
       <div class="section-hdr">
         <span class="section-label">Jugadores</span>
       </div>

@@ -860,4 +860,96 @@ input, select, textarea { font-family: inherit; }
 .sesion-estado-icono.sin { background: var(--fondo); color: var(--texto-sec); font-size: 1.2rem; }
 .sesion-estado-texto { font-size: .95rem; font-weight: 700; }
 .sesion-estado-sub   { font-size: .78rem; color: var(--texto-sec); margin-top: 3px; }
+
+/* ── 5a: Mini-stats entrenadores en lista ── */
+.ent-mini-stats {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 44px; margin-right: 2px;
+}
+.ems-val { font-size: .88rem; font-weight: 800; color: var(--morado); line-height: 1; }
+.ems-lab { font-size: .6rem; color: var(--texto-sec); text-align: center; margin-top: 2px; }
+
+/* ── 5b: Tarjeta equipo ampliada ── */
+.eq-card {
+  display: flex; flex-direction: column;
+  padding: 14px 16px; border-bottom: 1px solid var(--borde);
+  cursor: pointer; transition: background .1s;
+}
+.eq-card:active { background: var(--morado-xs); }
+.eq-card:last-child { border-bottom: none; }
+.eq-card-hdr { display: flex; align-items: center; gap: 12px; }
+.eq-card-body { margin-top: 8px; padding-left: 52px; }
+.eq-card-stats { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.eq-card-stat { font-size: .72rem; color: var(--texto-sec); }
+.eq-card-stat strong { color: var(--texto); font-weight: 800; }
+.eq-pct-bar-wrap { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.eq-pct-bar { flex: 1; height: 5px; background: var(--fondo); border-radius: 3px; overflow: hidden; }
+.eq-pct-fill { height: 100%; border-radius: 3px; background: var(--morado); transition: width .4s; }
+.eq-pct-label { font-size: .68rem; font-weight: 800; color: var(--morado); min-width: 32px; }
+
+/* ── 5c: Agrupación jugadores por equipo ── */
+.grp-header {
+  padding: 9px 16px 6px; background: var(--fondo);
+  border-bottom: 1px solid var(--borde);
+  border-top: 1px solid var(--borde);
+}
+.grp-header:first-child { border-top: none; }
+.grp-header-nombre { font-size: .8rem; font-weight: 800; color: var(--morado); }
+.grp-header-sub { font-size: .67rem; color: var(--texto-sec); margin-top: 1px; }
+
+/* mini-stats jugador en lista */
+.jug-list-stats {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 40px; margin-right: 2px;
+}
+.jls-val { font-size: .85rem; font-weight: 800; line-height: 1; }
+.jls-val.verde   { color: var(--verde); }
+.jls-val.naranja { color: var(--naranja); }
+.jls-val.rojo    { color: var(--rojo); }
+.jls-val.sec     { color: var(--texto-sec); }
+.jls-lab { font-size: .6rem; color: var(--texto-sec); text-align: center; margin-top: 2px; }
+
+/* ── 5d: Vista sesiones — subtítulo ── */
+.sesiones-desc { font-size: .76rem; color: rgba(255,255,255,.75); margin-top: 4px; }
+
+/* ── 5e: Sesión guardada diferenciada ── */
+.sesion-ro-header-wrap {
+  background: linear-gradient(135deg, #3d0e70, #7B1FA2);
+  color: #fff; padding: 20px 16px 16px; position: relative;
+}
+.sesion-ro-header-wrap h2   { color: #fff; font-size: 1.1rem; margin: 0 0 4px; font-weight: 800; }
+.sesion-ro-header-wrap .vh-sub    { color: rgba(255,255,255,.78); font-size: .82rem; }
+.sesion-ro-header-wrap .vh-horario { color: rgba(255,255,255,.65); font-size: .76rem; margin-top: 6px; white-space: pre-line; }
+.sesion-ro-edit-btn {
+  position: absolute; top: 14px; right: 14px;
+  background: rgba(255,255,255,.18); color: #fff;
+  border: 1.5px solid rgba(255,255,255,.45);
+  padding: 6px 14px; border-radius: 20px;
+  font-size: .78rem; font-weight: 700; cursor: pointer;
+}
+.sesion-ro-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,255,255,.18); color: #fff;
+  font-size: .65rem; font-weight: 800; padding: 3px 10px;
+  border-radius: 10px; text-transform: uppercase; letter-spacing: .5px;
+  margin-bottom: 8px;
+}
+.sesion-ro-resumen {
+  display: flex; border-bottom: 1px solid var(--borde);
+}
+.sesion-ro-stat {
+  flex: 1; padding: 12px 8px; text-align: center;
+  border-right: 1px solid var(--borde);
+}
+.sesion-ro-stat:last-child { border-right: none; }
+.sesion-ro-stat-val { font-size: 1.5rem; font-weight: 900; line-height: 1; }
+.sesion-ro-stat-lab { font-size: .6rem; color: var(--texto-sec); margin-top: 4px; text-transform: uppercase; letter-spacing: .3px; }
+.sesion-ro-stat.p .sesion-ro-stat-val { color: var(--verde); }
+.sesion-ro-stat.a .sesion-ro-stat-val { color: var(--rojo); }
+.sesion-ro-stat.r .sesion-ro-stat-val { color: var(--naranja); }
+.sesion-ro-incid-hdr {
+  padding: 10px 16px 4px;
+  font-size: .7rem; font-weight: 800; color: var(--rojo);
+  text-transform: uppercase; letter-spacing: .5px;
+}
 </style>
