@@ -23,9 +23,9 @@ justificaciones de ausencias/retrasos y notificaciones por email vía MailApp.
 | 3b — Frontend estructura | Index.html | ✅ Completo |
 | 3c — Frontend estilos | styles.html | ✅ Completo |
 | 3d — Frontend lógica | app.html | ✅ Completo |
-| 4a — Bugs admin y credenciales | CSS, persistencia, edición segura | 🔄 En curso |
-| 4b — Rediseño vista sesión | Solo lectura + modo edición + estados justif. | ⏳ Pendiente |
-| 4c — Justificaciones | Persistencia, asincronía, pre-justificación | ⏳ Pendiente |
+| 4a — Bugs admin y credenciales | CSS, persistencia, edición segura | ✅ Completo |
+| 4b — Rediseño vista sesión | Solo lectura + modo edición + estados justif. | ✅ Completo |
+| 4c — Justificaciones | Persistencia, asincronía, pre-justificación | ✅ Completo |
 | 4d — Entrenadores: sustitución | Botón "Sustituir en otro equipo" (acceso puntual) | ✅ Completo |
 | 4e — Rediseño perfil jugador | Nueva vista inicial + Mi Equipo con ranking | ✅ Completo |
 | 4f — UX: confirmación y asincronía | Aviso antes de guardar + guardado en background | ✅ Completo |

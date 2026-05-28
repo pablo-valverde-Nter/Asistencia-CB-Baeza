@@ -12,8 +12,8 @@
  *   • 4 entrenadores (con asignaciones a equipos)
  *   • 40 jugadores (10 por equipo; 2 cadetes doblan en Senior como secundarios)
  *   • Horarios semanales para cada equipo
- *   • 8 sesiones por equipo (32 en total, fechas de marzo–mayo 2026)
- *   • Registros de asistencia de jugadores y entrenadores para todas las sesiones
+ *   • 8 sesiones pasadas (AsistenciaGuardada=true) + 2 futuras por equipo (40 en total)
+ *   • Registros de asistencia con variedad realista P/A/R y justificaciones de ejemplo
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -216,52 +216,64 @@ function cargarDatosEjemplo() {
   // ── 7. SESIONES ────────────────────────────────────────────────────────────
   Logger.log('\n📋 Creando sesiones (marzo–mayo 2026)...');
 
-  // Minibasket: Lunes y Miércoles (+ 1 sesión extra sábado)
+  // Minibasket: Lunes y Miércoles (+ 1 sesión extra sábado)  ← todas pasadas → guardadas
   const miniSesiones = [
-    { Fecha: '2026-03-02', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: ''                              },
-    { Fecha: '2026-03-09', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: ''                              },
-    { Fecha: '2026-03-25', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: ''                              },
-    { Fecha: '2026-04-06', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: ''                              },
-    { Fecha: '2026-04-22', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: ''                              },
-    { Fecha: '2026-05-04', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: 'Repaso de defensa en zona'     },
-    { Fecha: '2026-05-11', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: ''                              },
-    { Fecha: '2026-05-10', HoraInicio: '10:00', HoraFin: '11:30', EsExtra: true,  Notas: 'Sesión extra previa a torneo' },
+    { Fecha: '2026-03-02', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: '',                             AsistenciaGuardada: true  },
+    { Fecha: '2026-03-09', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: '',                             AsistenciaGuardada: true  },
+    { Fecha: '2026-03-25', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: '',                             AsistenciaGuardada: true  },
+    { Fecha: '2026-04-06', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: '',                             AsistenciaGuardada: true  },
+    { Fecha: '2026-04-22', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: '',                             AsistenciaGuardada: true  },
+    { Fecha: '2026-05-04', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: 'Repaso de defensa en zona',   AsistenciaGuardada: true  },
+    { Fecha: '2026-05-11', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: '',                             AsistenciaGuardada: true  },
+    { Fecha: '2026-05-10', HoraInicio: '10:00', HoraFin: '11:30', EsExtra: true,  Notas: 'Sesión extra previa a torneo', AsistenciaGuardada: true  },
+    // Futuras (sin guardar) para probar el modo formulario
+    { Fecha: '2026-06-02', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: '',                             AsistenciaGuardada: false },
+    { Fecha: '2026-06-04', HoraInicio: '18:00', HoraFin: '19:00', EsExtra: false, Notas: '',                             AsistenciaGuardada: false },
   ];
 
   // Infantil Femenino: Martes y Jueves
   const infFSesiones = [
-    { Fecha: '2026-03-03', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: ''                           },
-    { Fecha: '2026-03-10', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: ''                           },
-    { Fecha: '2026-03-24', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: ''                           },
-    { Fecha: '2026-04-07', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: ''                           },
-    { Fecha: '2026-04-21', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: ''                           },
-    { Fecha: '2026-05-05', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: ''                           },
-    { Fecha: '2026-05-12', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: 'Trabajo de tiro libre'      },
-    { Fecha: '2026-05-19', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: ''                           },
+    { Fecha: '2026-03-03', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: '',                        AsistenciaGuardada: true  },
+    { Fecha: '2026-03-10', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: '',                        AsistenciaGuardada: true  },
+    { Fecha: '2026-03-24', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: '',                        AsistenciaGuardada: true  },
+    { Fecha: '2026-04-07', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: '',                        AsistenciaGuardada: true  },
+    { Fecha: '2026-04-21', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: '',                        AsistenciaGuardada: true  },
+    { Fecha: '2026-05-05', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: '',                        AsistenciaGuardada: true  },
+    { Fecha: '2026-05-12', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: 'Trabajo de tiro libre',   AsistenciaGuardada: true  },
+    { Fecha: '2026-05-19', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: '',                        AsistenciaGuardada: true  },
+    // Futuras
+    { Fecha: '2026-06-02', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: '',                        AsistenciaGuardada: false },
+    { Fecha: '2026-06-04', HoraInicio: '18:30', HoraFin: '20:00', EsExtra: false, Notas: '',                        AsistenciaGuardada: false },
   ];
 
   // Cadete Masculino: Lunes, Miércoles y Viernes
   const cadSesiones = [
-    { Fecha: '2026-03-02', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: ''                        },
-    { Fecha: '2026-03-04', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: ''                        },
-    { Fecha: '2026-03-09', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: ''                        },
-    { Fecha: '2026-04-06', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: ''                        },
-    { Fecha: '2026-04-08', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: ''                        },
-    { Fecha: '2026-05-04', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: ''                        },
-    { Fecha: '2026-05-06', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: ''                        },
-    { Fecha: '2026-05-11', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: 'Preparación playoff'     },
+    { Fecha: '2026-03-02', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: '',                     AsistenciaGuardada: true  },
+    { Fecha: '2026-03-04', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: '',                     AsistenciaGuardada: true  },
+    { Fecha: '2026-03-09', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: '',                     AsistenciaGuardada: true  },
+    { Fecha: '2026-04-06', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: '',                     AsistenciaGuardada: true  },
+    { Fecha: '2026-04-08', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: '',                     AsistenciaGuardada: true  },
+    { Fecha: '2026-05-04', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: '',                     AsistenciaGuardada: true  },
+    { Fecha: '2026-05-06', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: '',                     AsistenciaGuardada: true  },
+    { Fecha: '2026-05-11', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: 'Preparación playoff',  AsistenciaGuardada: true  },
+    // Futuras
+    { Fecha: '2026-06-01', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: '',                     AsistenciaGuardada: false },
+    { Fecha: '2026-06-03', HoraInicio: '19:00', HoraFin: '21:00', EsExtra: false, Notas: '',                     AsistenciaGuardada: false },
   ];
 
   // Senior Masculino: Martes, Jueves y Sábado
   const senSesiones = [
-    { Fecha: '2026-03-03', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: ''                             },
-    { Fecha: '2026-03-05', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: ''                             },
-    { Fecha: '2026-03-10', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: ''                             },
-    { Fecha: '2026-04-07', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: ''                             },
-    { Fecha: '2026-04-09', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: ''                             },
-    { Fecha: '2026-05-05', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: ''                             },
-    { Fecha: '2026-05-07', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: ''                             },
-    { Fecha: '2026-05-12', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: 'Última sesión liga regular'   },
+    { Fecha: '2026-03-03', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: '',                           AsistenciaGuardada: true  },
+    { Fecha: '2026-03-05', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: '',                           AsistenciaGuardada: true  },
+    { Fecha: '2026-03-10', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: '',                           AsistenciaGuardada: true  },
+    { Fecha: '2026-04-07', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: '',                           AsistenciaGuardada: true  },
+    { Fecha: '2026-04-09', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: '',                           AsistenciaGuardada: true  },
+    { Fecha: '2026-05-05', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: '',                           AsistenciaGuardada: true  },
+    { Fecha: '2026-05-07', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: '',                           AsistenciaGuardada: true  },
+    { Fecha: '2026-05-12', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: 'Última sesión liga regular', AsistenciaGuardada: true  },
+    // Futuras
+    { Fecha: '2026-06-02', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: '',                           AsistenciaGuardada: false },
+    { Fecha: '2026-06-05', HoraInicio: '20:00', HoraFin: '22:00', EsExtra: false, Notas: '',                           AsistenciaGuardada: false },
   ];
 
   /**
@@ -305,6 +317,16 @@ function cargarDatosEjemplo() {
 
   const HOY = '2026-05-20';
 
+  // Justificaciones de ejemplo para que los indicadores visuales tengan datos
+  // idx jugador → { tipo, categoria, detalle }
+  const JUSTIFICACIONES = {
+    0: { tipo: 'pre', categoria: 'Enfermedad',   detalle: 'Visita médica programada' },
+    2: { tipo: 'post', categoria: 'Familiar',     detalle: 'Compromiso familiar ineludible' },
+    7: { tipo: 'post', categoria: 'Académico',    detalle: 'Examen de recuperación' },
+    8: { tipo: 'pre', categoria: 'Lesión',       detalle: 'Esguince tobillo derecho' },
+    9: { tipo: 'post', categoria: 'Transporte',   detalle: 'Sin medio de transporte' },
+  };
+
   /**
    * Registra asistencia de jugadores y entrenadores para un conjunto de sesiones.
    * @param {string[]} sesionesIds
@@ -318,12 +340,23 @@ function cargarDatosEjemplo() {
 
       // Jugadores
       jugadoresIds.forEach((jId, ji) => {
+        const estado = patronSesion[ji % patronSesion.length];
+        const tieneIncidencia = estado === 'A' || estado === 'R';
+        const justif = tieneIncidencia && JUSTIFICACIONES[ji] ? JUSTIFICACIONES[ji] : null;
         appendRow(CONFIG.SHEETS.ASIST_JUGADORES, {
-          ID_Sesion:     sesId,
-          ID_Jugador:    jId,
-          Estado:        patronSesion[ji % patronSesion.length],
-          EsInvitado:    false,
-          FechaRegistro: HOY,
+          ID_Sesion:           sesId,
+          ID_Jugador:          jId,
+          Estado:              estado,
+          EsInvitado:          false,
+          FechaRegistro:       HOY,
+          TieneJustificacion:  justif ? true : false,
+          TipoJustificacion:   justif ? justif.tipo    : '',
+          MotivoCategoria:     justif ? justif.categoria : '',
+          MotivoDetalle:       justif ? justif.detalle   : '',
+          FechaJustificacion:  justif ? HOY              : '',
+          JustificadoPor:      justif ? 'padres'         : '',
+          MensajeGenerado:     false,
+          NotificadoEntrenador: justif ? true            : false,
         });
       });
 
@@ -366,8 +399,8 @@ function cargarDatosEjemplo() {
   Logger.log('   • 4 entrenadores');
   Logger.log('   • 40 jugadores (10 por equipo)');
   Logger.log('   • 2 cadetes con equipo secundario en Senior');
-  Logger.log(`   • ${totalSesiones} sesiones (marzo–mayo 2026)`);
-  Logger.log(`   • ${totalSesiones * 10} registros de asistencia de jugadores`);
+  Logger.log(`   • ${totalSesiones} sesiones (marzo–junio 2026, 8 pasadas + 2 futuras por equipo)`);
+  Logger.log('   • Asistencias guardadas en sesiones pasadas con justificaciones de ejemplo');
   Logger.log('════════════════════════════════════════════');
 }
 
