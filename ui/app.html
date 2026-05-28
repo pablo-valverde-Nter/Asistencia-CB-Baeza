@@ -2998,5 +2998,15 @@ window.addEventListener('unhandledrejection', function(ev) {
   });
 });
 
-document.addEventListener('DOMContentLoaded', function() { App.init(); });
+document.addEventListener('DOMContentLoaded', function() {
+  // Estado base seguro: mostrar login mientras se verifica la sesión.
+  // Si App.init() navega a otra vista (sesión válida), la sobreescribe.
+  try { App.navigate('login'); } catch (e) {}
+  try {
+    App.init();
+  } catch (e) {
+    hideLoading();
+    _clientLog('dom_content_loaded_error', { error: e && e.message ? e.message : String(e) });
+  }
+});
 </script>
