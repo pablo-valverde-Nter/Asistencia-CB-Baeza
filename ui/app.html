@@ -511,12 +511,13 @@ const App = {
             }
           }
           var statsHtml = '';
+          var cP = 0, cA = 0, cR = 0;
           if (ultimaGuardada) {
             var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === ultimaGuardada.ID; });
             if (rs.length) {
-              var cP = rs.filter(function(r) { return r.Estado === 'P'; }).length;
-              var cA = rs.filter(function(r) { return r.Estado === 'A'; }).length;
-              var cR = rs.filter(function(r) { return r.Estado === 'R'; }).length;
+              cP = rs.filter(function(r) { return r.Estado === 'P'; }).length;
+              cA = rs.filter(function(r) { return r.Estado === 'A'; }).length;
+              cR = rs.filter(function(r) { return r.Estado === 'R'; }).length;
               statsHtml = '<div class="eq-stats">' +
                 (cP ? '<span class="eq-stat-chip p"><span class="dot"></span>' + cP + '</span>' : '') +
                 (cA ? '<span class="eq-stat-chip a"><span class="dot"></span>' + cA + '</span>' : '') +
@@ -532,6 +533,7 @@ const App = {
             '<div style="flex:1"><div class="eq-nombre">' + eq.Nombre + '</div>' +
             '<div class="eq-meta">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div>' +
             statsHtml + '</div>' +
+            _pieCard(cP, cA, cR) +
             visorHtml + '<div class="eq-arrow">&#x203A;</div></div>';
         }).join('');
         // Botón de sustitución puntual (solo entrenadores, no jugadores ni admins)
@@ -1160,19 +1162,20 @@ const App = {
               var j = item.jugador;
               var estado = item.estado || '';
               var esIncidencia = estado === 'A' || estado === 'R';
-              var justifChip = esIncidencia
-                ? (item.tieneJustif
-                    ? '<span class="justif-badge">Justificado</span>'
-                    : '<span class="sin-justif-chip">\u26a0 Sin justificar</span>')
-                : '';
-              return '<div class="jug-ro-card ' + estado + '">' +
-                '<div class="jug-dorsal">' + (j.Dorsal || '-') + '</div>' +
-                '<div style="flex:1;min-width:0"><div class="jug-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
-                '<div class="jug-tipo">' + (item.esInvitado ? 'Invitado' : (j.Tipo || '')) + '</div>' +
-                (item.tieneJustif && !esIncidencia ? '<div class="jug-justif-aviso">\u26a0\ufe0f Pre-justificaci\u00f3n enviada</div>' : '') +
-                '</div>' +
-                '<div class="estado-chip">' + _iconEstado(estado) + '</div>' +
-                justifChip + '</div>';
+              var chipClass = estado || 'none';
+              var chipLabel = {P:'Presente',A:'Ausente',R:'Retraso'}[estado] || '–';
+              var tagHtml = item.esInvitado ? '<span class="jrm-tag">Invitado</span>' : '';
+              var justifTag = (item.tieneJustif && !esIncidencia) ? '<span class="jrm-tag justif">Pre-just.</span>' : '';
+              var alertBadge = (esIncidencia && !item.tieneJustif)
+                ? '<span class="sin-justif-chip">&#x26A0;</span>' : '';
+              var justifBadge = (esIncidencia && item.tieneJustif)
+                ? '<span class="justif-badge" style="font-size:.6rem;padding:2px 5px">&#x2713;</span>' : '';
+              return '<div class="jug-ro-mini ' + estado + '">' +
+                '<div class="jrm-avatar">' + (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '') + '</div>' +
+                '<div class="jrm-info"><span class="jrm-nombre">' + j.Apellidos + ', ' + j.Nombre + '</span>' +
+                tagHtml + justifTag + '</div>' +
+                '<span class="ro-chip ' + chipClass + '">' + chipLabel + '</span>' +
+                alertBadge + justifBadge + '</div>';
             }).join('')
           : '<div class="empty-state" style="padding:20px"><p>Sin jugadores</p></div>';
 
@@ -1180,15 +1183,12 @@ const App = {
           ? data.entrenadores.map(function(item) {
               var e = item.entrenador;
               var asistio = item.asistio;
-              var badge = asistio === null
-                ? '<span style="font-size:.8rem;color:var(--texto-sec)">\u2014</span>'
-                : asistio
-                  ? '<span style="font-size:.8rem;font-weight:700;color:var(--verde)">\u2713 Asisti\u00f3</span>'
-                  : '<span style="font-size:.8rem;font-weight:700;color:var(--rojo)">\u2717 No asisti\u00f3</span>';
-              return '<div class="ent-row">' +
+              var chipClass = asistio === null ? 'none' : asistio ? 'P' : 'A';
+              var chipLabel = asistio === null ? '–' : asistio ? 'Asistió' : 'No asistió';
+              return '<div class="ent-ro-mini">' +
                 '<div style="flex:1"><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
-                '<div class="ent-sub">' + (item.esInvitado ? 'Invitado' : '') + '</div></div>' +
-                badge + '</div>';
+                (item.esInvitado ? '<div class="ent-sub">Invitado</div>' : '') + '</div>' +
+                '<span class="ro-chip ' + chipClass + '">' + chipLabel + '</span></div>';
             }).join('')
           : '<div class="empty-state" style="padding:20px"><p>Sin entrenadores</p></div>';
       },
@@ -1733,8 +1733,8 @@ const App = {
           var pct = st.total > 0 ? Math.round(st.presentes / st.total * 100) : null;
           var colorClass = pct === null ? 'sec' : pct >= 80 ? 'verde' : pct >= 60 ? 'naranja' : 'rojo';
           var statsHtml = pct !== null
-            ? '<div class="jug-list-stats"><div class="jls-val ' + colorClass + '">' + pct + '%</div><div class="jls-lab">asist.</div></div>'
-            : '<div class="jug-list-stats"><div class="jls-val sec">—</div><div class="jls-lab">sin datos</div></div>';
+            ? '<div class="jug-list-stats"><div class="jls-frac"><span class="jls-big ' + colorClass + '">' + st.presentes + '</span><span class="jls-de">/' + st.total + '</span></div><span class="jls-pct ' + colorClass + '">' + pct + '%</span></div>'
+            : '<div class="jug-list-stats"><span class="jls-big sec">—</span></div>';
           return '<div class="list-item" onclick="App.views[\'jugador-detalle\'].cargar(\'' + j.ID + '\')">' +
             '<div class="li-avatar">' + ini + '</div>' +
             '<div style="flex:1"><div class="li-name">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
@@ -2052,8 +2052,8 @@ const App = {
           var st = statsMap[e.ID] || { total: 0, asistidas: 0 };
           var pct = st.total > 0 ? Math.round(st.asistidas / st.total * 100) : null;
           var statsHtml = st.total > 0
-            ? '<div class="ent-mini-stats"><div class="ems-val">' + pct + '%</div><div class="ems-lab">' + st.asistidas + '/' + st.total + ' ses.</div></div>'
-            : '<div class="ent-mini-stats"><div class="ems-val" style="color:var(--texto-sec)">—</div><div class="ems-lab">sin datos</div></div>';
+            ? '<div class="ent-mini-stats"><div class="ems-frac"><span class="ems-big">' + st.asistidas + '</span><span class="ems-de">/' + st.total + '</span></div><span class="ems-pct">' + pct + '%</span></div>'
+            : '<div class="ent-mini-stats"><span class="ems-big" style="color:var(--texto-sec)">—</span></div>';
           return '<div class="list-item" onclick="App.views[\'entrenador-detalle\'].cargar(\'' + e.ID + '\')">' +
             '<div class="li-avatar">' + ini + '</div>' +
             '<div style="flex:1"><div class="li-name">' + e.Apellidos + ', ' + e.Nombre + adminBadge + isMeBadge + '</div>' +
@@ -3201,6 +3201,34 @@ function _iconEstado(e) {
 
 function _esc(s) {
   return (s || '').replace(/'/g, "\\'");
+}
+
+// 6a: SVG donut chart pequeño (44×44) para tarjetas de equipo
+function _pieCard(cP, cA, cR) {
+  var total = cP + cA + cR;
+  var sz = 44, r = 16, cx = 22, cy = 22;
+  var cols = ['#4CAF50','#F44336','#FFC107'], vals = [cP, cA, cR];
+  var inner = '<circle cx="' + cx + '" cy="' + cy + '" r="9" fill="#fff"/>';
+  if (!total) {
+    return '<svg class="eq-pie-svg" width="' + sz + '" height="' + sz + '" viewBox="0 0 ' + sz + ' ' + sz + '">' +
+           '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="#E0E0E0"/>' + inner + '</svg>';
+  }
+  var arcs = '', angle = -Math.PI / 2;
+  vals.forEach(function(v, i) {
+    if (!v) return;
+    if (v === total) {
+      arcs += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + cols[i] + '"/>';
+      return;
+    }
+    var ea = angle + v / total * 2 * Math.PI;
+    var la = (ea - angle > Math.PI) ? 1 : 0;
+    var x1 = (cx + r * Math.cos(angle)).toFixed(1), y1 = (cy + r * Math.sin(angle)).toFixed(1);
+    var x2 = (cx + r * Math.cos(ea)).toFixed(1),   y2 = (cy + r * Math.sin(ea)).toFixed(1);
+    arcs += '<path d="M' + cx + ',' + cy + ' L' + x1 + ',' + y1 + ' A' + r + ',' + r + ' 0 ' + la + ',1 ' + x2 + ',' + y2 + ' Z" fill="' + cols[i] + '"/>';
+    angle = ea;
+  });
+  return '<svg class="eq-pie-svg" width="' + sz + '" height="' + sz + '" viewBox="0 0 ' + sz + ' ' + sz + '">' +
+         arcs + inner + '</svg>';
 }
 
 function _svgPie(cP, cA, cR) {

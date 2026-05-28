@@ -34,6 +34,10 @@ justificaciones de ausencias/retrasos y notificaciones por email vía MailApp.
 | 5c — Mejoras lista jugadores | Agrupación por equipo + orden por rol/edad + stats | ✅ Completo |
 | 5d — Mejoras vista sesiones equipo | Título descriptivo + subtítulo descriptivo | ✅ Completo |
 | 5e — Mejoras sesión guardada | Más datos visibles + diferenciación visual clara | ✅ Completo |
+| 6a — Pie chart en tarjetas de equipo | Donut chart P/A/R en cada tarjeta de equipo del entrenador | ✅ Completo |
+| 6b — Título "Registrar Asistencia" | Cabecera de sección en la vista de equipos del entrenador | ✅ Completo |
+| 6c — Filas compactas en sesión guardada | Jugadores y entrenadores con rows más pequeñas y símbolos simples | ✅ Completo |
+| 6d — Eliminar botones inferiores sesión guardada | Quitar Editar y Eliminar del pie de la vista de solo lectura | ✅ Completo |
 
 ---
 
@@ -418,3 +422,70 @@ Orden de categorías (de mayor a menor edad): `senior → junior → cadete → 
 3. **5c-1 → 5c-6** — Lista de jugadores agrupada (más compleja, mayor impacto)
 4. **5d-1, 5d-2** — Vista sesiones: título + tarjetas mejoradas
 5. **5e-1, 5e-2, 5e-3** — Sesión guardada: diferenciación visual + más datos
+
+---
+
+---
+
+## FASE 6 — Mejoras visuales: pie chart y depuración de sesión guardada (Mayo 2026)
+
+> Mejoras detectadas tras revisión de la UI en dispositivo real. Indicaciones originales del usuario conservadas.
+
+---
+
+### FASE 6a — Pie chart en tarjetas de equipo
+
+**Indicación original:**
+> "Echo en falta una pie chart como la que he dibujado en el apartado de equipos, además de el titulo de 'Registrar Asistencia'."
+
+| # | Subtarea | Fichero/s afectado/s | Estado |
+|---|----------|----------------------|--------|
+| 6a-1 | **[JS]** Añadir función `_pieCard(cP, cA, cR)` que genera SVG donut de 44×44px con sectores verde/rojo/naranja para P/A/R; gris si sin datos | `app.html` | ✅ |
+| 6a-2 | **[JS]** Incluir el pie chart generado en cada `equipo-card` de la vista `equipos` (tab del entrenador), posicionado a la derecha del contenido y antes de la flecha `›` | `app.html` | ✅ |
+| 6a-3 | **[CSS]** Estilo `.eq-pie-svg` para el SVG embebido (flex-shrink:0, margin) | `styles.html` | ✅ |
+
+---
+
+### FASE 6b — Título "Registrar Asistencia" en vista equipos
+
+**Indicación original:**
+> "…además de el titulo de 'Registrar Asistencia'."
+
+| # | Subtarea | Fichero/s afectado/s | Estado |
+|---|----------|----------------------|--------|
+| 6b-1 | **[HTML]** Añadir cabecera de sección `<div class="section-hdr">` con etiqueta "Registrar Asistencia" en la parte superior de `#view-equipos` | `Index.html` | ✅ |
+
+---
+
+### FASE 6c — Filas compactas en sesión guardada (jugadores y entrenadores)
+
+**Indicación original:**
+> "He marcado dentro de cada asistencia, como me gustaría que los elementos dentro de la lista de JUGADORES y ENTRENADORES, se viera más pequeña y con los símbolos de asistencia más simples para diferenciarse del modo editar sesión."
+
+| # | Subtarea | Fichero/s afectado/s | Estado |
+|---|----------|----------------------|--------|
+| 6c-1 | **[CSS]** Nueva clase `.jug-ro-mini` para filas compactas de jugadores (padding reducido, avatar pequeño 28px) y variantes de color P/A/R | `styles.html` | ✅ |
+| 6c-2 | **[CSS]** Nueva clase `.ro-dot` (22px, circular) con variantes `.P`, `.A`, `.R`, `.none` para indicar estado de forma simple y discreta | `styles.html` | ✅ |
+| 6c-3 | **[CSS]** Nueva clase `.ent-ro-mini` para filas compactas de entrenadores en modo lectura | `styles.html` | ✅ |
+| 6c-4 | **[JS]** Actualizar render de jugadores en `sesion-guardada`: usar `.jug-ro-mini` + `.ro-dot` en vez de `.jug-ro-card` + `.estado-chip` | `app.html` | ✅ |
+| 6c-5 | **[JS]** Actualizar render de entrenadores en `sesion-guardada`: usar `.ent-ro-mini` + `.ro-dot` en vez de `.ent-row` con badges de texto | `app.html` | ✅ |
+
+---
+
+### FASE 6d — Eliminar botones redundantes de la vista sesión guardada
+
+**Indicación original:**
+> "Ya que se ha añadido el botón arriba a la derecha de editar, quitaría los botones de abajo del todo de Editar y Eliminar. Dejando solo la posibilidad de borrar la sesión una vez estás editándola."
+
+| # | Subtarea | Fichero/s afectado/s | Estado |
+|---|----------|----------------------|--------|
+| 6d-1 | **[HTML]** Eliminar el bloque de botones inferior (`Editar asistencia` + `Eliminar sesión`) de `#view-sesion-guardada`; el botón Editar ya está en la cabecera y el Eliminar queda en `#view-sesion` (modo edición) | `Index.html` | ✅ |
+
+---
+
+## Orden de implementación sugerido (Fase 6)
+
+1. **6a-1, 6a-2, 6a-3** — Pie chart: helper JS + uso en tarjeta + CSS
+2. **6b-1** — Título en vista equipos (cambio mínimo en HTML)
+3. **6c-1 → 6c-5** — CSS + JS filas compactas en sesión guardada
+4. **6d-1** — Eliminar botones redundantes del HTML

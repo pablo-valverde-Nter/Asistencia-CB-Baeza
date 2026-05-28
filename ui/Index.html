@@ -92,7 +92,8 @@
 
     <!-- TAB: EQUIPOS -->
     <section id="view-equipos" class="view">
-      <div style="padding:12px 0" id="equipos-lista"></div>
+      <div class="section-hdr" style="padding-top:16px"><span class="section-label">Registrar Asistencia</span></div>
+      <div style="padding:4px 0" id="equipos-lista"></div>
     </section>
 
     <!-- SESIONES DE UN EQUIPO -->
@@ -155,14 +156,6 @@
         <span class="section-label">Entrenadores</span>
       </div>
       <div id="sesion-ro-ents"></div>
-      <div class="p-16 mt-16" style="padding-bottom:28px">
-        <button class="btn btn-secondary btn-full" onclick="App.views['sesion-guardada'].editar()">
-          &#x270F; Editar asistencia
-        </button>
-        <button class="btn btn-danger btn-full mt-8" onclick="App.views.sesion.eliminar()">
-          Eliminar sesi&oacute;n
-        </button>
-      </div>
     </section>
 
     <!-- TAB: GESTION -->

@@ -863,9 +863,13 @@ input, select, textarea { font-family: inherit; }
 
 /* ── 5a: Mini-stats entrenadores en lista ── */
 .ent-mini-stats {
-  display: flex; flex-direction: column; align-items: center;
-  min-width: 44px; margin-right: 2px;
+  display: flex; flex-direction: row; align-items: center;
+  gap: 6px; margin-right: 2px;
 }
+.ems-frac { display: flex; align-items: baseline; gap: 1px; }
+.ems-big { font-size: 1.15rem; font-weight: 900; color: var(--morado); }
+.ems-de  { font-size: .62rem; font-weight: 700; color: var(--texto-sec); }
+.ems-pct { font-size: 1.15rem; font-weight: 900; color: var(--morado); }
 .ems-val { font-size: .88rem; font-weight: 800; color: var(--morado); line-height: 1; }
 .ems-lab { font-size: .6rem; color: var(--texto-sec); text-align: center; margin-top: 2px; }
 
@@ -899,9 +903,21 @@ input, select, textarea { font-family: inherit; }
 
 /* mini-stats jugador en lista */
 .jug-list-stats {
-  display: flex; flex-direction: column; align-items: center;
-  min-width: 40px; margin-right: 2px;
+  display: flex; flex-direction: row; align-items: center;
+  gap: 6px; margin-right: 2px;
 }
+.jls-frac { display: flex; align-items: baseline; gap: 1px; }
+.jls-big { font-size: 1.15rem; font-weight: 900; }
+.jls-big.verde   { color: var(--verde); }
+.jls-big.naranja { color: var(--naranja); }
+.jls-big.rojo    { color: var(--rojo); }
+.jls-big.sec     { color: var(--texto-sec); }
+.jls-de  { font-size: .62rem; font-weight: 700; color: var(--texto-sec); }
+.jls-pct { font-size: 1.15rem; font-weight: 900; }
+.jls-pct.verde   { color: var(--verde); }
+.jls-pct.naranja { color: var(--naranja); }
+.jls-pct.rojo    { color: var(--rojo); }
+.jls-pct.sec     { color: var(--texto-sec); }
 .jls-val { font-size: .85rem; font-weight: 800; line-height: 1; }
 .jls-val.verde   { color: var(--verde); }
 .jls-val.naranja { color: var(--naranja); }
@@ -952,4 +968,56 @@ input, select, textarea { font-family: inherit; }
   font-size: .7rem; font-weight: 800; color: var(--rojo);
   text-transform: uppercase; letter-spacing: .5px;
 }
+
+/* ── 6a: Pie chart mini en equipo-card ── */
+.eq-pie-svg { flex-shrink: 0; margin: 0 2px; }
+
+/* ── 6c: Filas compactas jugadores en sesión guardada ── */
+.jug-ro-mini {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px; border-bottom: 1px solid var(--borde);
+}
+.jug-ro-mini:last-child { border-bottom: none; }
+.jug-ro-mini.P { background: var(--verde-s); }
+.jug-ro-mini.P .jrm-avatar { background: var(--verde); color: #fff; }
+.jug-ro-mini.A { background: var(--rojo-s); }
+.jug-ro-mini.A .jrm-avatar { background: var(--rojo); color: #fff; }
+.jug-ro-mini.R { background: var(--naranja-s); }
+.jug-ro-mini.R .jrm-avatar { background: var(--naranja); color: #fff; }
+.jrm-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--borde); color: var(--texto-sec);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .62rem; font-weight: 700; flex-shrink: 0;
+}
+.jrm-info {
+  flex: 1; min-width: 0; display: flex;
+  align-items: center; gap: 5px; flex-wrap: wrap;
+}
+.jrm-nombre { font-size: .8rem; font-weight: 600; }
+.jrm-tag {
+  font-size: .62rem; color: var(--texto-sec);
+  background: var(--borde); padding: 1px 5px; border-radius: 6px;
+}
+.jrm-tag.justif { background: #E8F5E9; color: #2E7D32; }
+
+/* ── 6c: Chip de estado con texto completo ── */
+.ro-chip {
+  flex-shrink: 0; border-radius: 20px;
+  padding: 2px 9px; font-size: .68rem; font-weight: 700;
+  background: var(--borde); color: var(--texto-sec);
+}
+.ro-chip.P { background: var(--verde-s); color: var(--verde); }
+.ro-chip.A { background: var(--rojo-s); color: var(--rojo); }
+.ro-chip.R { background: var(--naranja-s); color: var(--naranja); }
+.ro-chip.none { background: var(--borde); color: var(--texto-sec); }
+
+/* ── 6c: Filas compactas entrenadores en sesión guardada ── */
+.ent-ro-mini {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 16px; border-bottom: 1px solid var(--borde);
+}
+.ent-ro-mini:last-child { border-bottom: none; }
+.ent-ro-mini .ent-nombre { font-size: .82rem; }
+.ent-ro-mini .ent-sub { font-size: .68rem; color: var(--texto-sec); }
 </style>
