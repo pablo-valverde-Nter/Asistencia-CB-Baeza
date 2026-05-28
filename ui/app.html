@@ -32,9 +32,11 @@ const App = {
     _buscadorTipo:      null,
     _jugadorPendiente:  null,
     _tipoJugSelec:      'Principal',
-    _formIsDirty:       false,
-    _sesionAutoSaveTimer: null,
-    _authReqSeq:        0,
+    _formIsDirty:            false,
+    _sesionAutoSaveTimer:    null,
+    _authReqSeq:             0,
+    _pendingConfirmSave:     null,
+    _credGuardadoConfirmado: false,
     // Vistas detalle
     detalleJugadorId:    null,
     detalleEntrenadorId: null,
@@ -418,7 +420,7 @@ const App = {
   },
 
   goBack() {
-    var _dirtyViews = ['equipo-form', 'jugador-form', 'entrenador-form', 'sesion'];
+    var _dirtyViews = ['equipo-form', 'jugador-form', 'entrenador-form', 'sesion', 'ajustes-cuenta'];
     if (_dirtyViews.indexOf(App.state.currentView) >= 0 && App.state._formIsDirty) {
       App.openModal('Cambios sin guardar',
         '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
@@ -1733,6 +1735,19 @@ const App = {
             };
           }
         }
+        // 4f-4: Confirmaci\u00f3n cuando el admin modifica credenciales de un jugador
+        if (credNuevo && !App.state._credGuardadoConfirmado) {
+          var _forzar = force;
+          var _nombreCred = datos.Nombre + ' ' + datos.Apellidos;
+          confirmarYGuardar(
+            'Modificar credenciales',
+            'Se cambiar\u00e1n las credenciales de acceso de <strong>' + _esc(_nombreCred) + '</strong>.' +
+            '<br><span style="font-size:.8rem">Aseg\u00farate de comunicarle los nuevos datos.</span>',
+            function() { App.state._credGuardadoConfirmado = true; App.views['jugador-form'].guardar(_forzar); }
+          );
+          return;
+        }
+        App.state._credGuardadoConfirmado = false;
         if (!force) {
           var dup = App.cache.jugadores.find(function(j) {
             return j.ID !== jugId &&
@@ -2663,10 +2678,16 @@ const App = {
       render: function() {
         var j = App.state.jugador;
         if (!j) return;
+        App.state._formIsDirty = false;
         var uEl = document.getElementById('ajustes-usuario');
         if (uEl) uEl.value = j.Usuario || '';
         var pEl = document.getElementById('ajustes-pin'); if (pEl) pEl.value = '';
         var pcEl = document.getElementById('ajustes-pin-confirm'); if (pcEl) pcEl.value = '';
+        // Dirty tracking (4f-6)
+        var setDirty = function() { App.state._formIsDirty = true; };
+        if (uEl)  uEl.oninput  = setDirty;
+        if (pEl)  pEl.oninput  = setDirty;
+        if (pcEl) pcEl.oninput = setDirty;
       },
       guardar: function() {
         var nuevoUsuario = (document.getElementById('ajustes-usuario').value || '').trim().toLowerCase();
@@ -2677,26 +2698,33 @@ const App = {
         if (!nuevoUsuario) { showToast('El usuario no puede estar vac\u00edo', 'error'); return; }
         if (nuevoPin && nuevoPin !== confirmarPin) { showToast('Los PINs no coinciden', 'error'); return; }
         if (nuevoPin && (nuevoPin.length < 4 || !/^\d+$/.test(nuevoPin))) { showToast('El PIN debe tener 4 d\u00edgitos num\u00e9ricos', 'error'); return; }
-        showLoading('Guardando...');
-        server('actualizarCredencialesJugador', j.ID, nuevoUsuario, nuevoPin || null)
-          .then(function(res) {
-            hideLoading();
-            if (!res.success) { showToast(res.error || 'Error al guardar', 'error'); return; }
-            showToast('Credenciales actualizadas', 'success');
+        confirmarYGuardar(
+          'Guardar cambios',
+          'Se actualizar\u00e1n tus credenciales de acceso.' +
+          '<br><span style="font-size:.8rem;color:var(--texto-sec)">Necesitar\u00e1s el nuevo usuario y/o PIN la pr\u00f3xima vez que accedas.</span>',
+          function() {
+            App.state._formIsDirty = false;
+            // Actualizaci\u00f3n optimista de auth local \u2192 navegar ya
+            var authAct = Object.assign({}, App.state.auth, { usuario: nuevoUsuario });
+            if (nuevoPin) authAct.pin = nuevoPin;
+            App.state.auth = authAct;
+            _setStoredAuth(JSON.stringify(authAct));
             j.Usuario = nuevoUsuario;
-            if (nuevoPin) {
-              App.state.auth = { tipo: 'jugador', usuario: nuevoUsuario, pin: nuevoPin };
-              _setStoredAuth(JSON.stringify(App.state.auth));
-            } else if (App.state.auth) {
-              App.state.auth.usuario = nuevoUsuario;
-              _setStoredAuth(JSON.stringify(App.state.auth));
-            }
             App.goBack();
-          })
-          .catch(function(err) {
-            hideLoading();
-            showToast((err && err.message) || 'Error de conexi\u00f3n', 'error');
-          });
+            // Sincronizaci\u00f3n en segundo plano
+            App.sync.start();
+            server('actualizarCredencialesJugador', j.ID, nuevoUsuario, nuevoPin || null)
+              .then(function(res) {
+                App.sync.done();
+                if (!res.success) showToast(res.error || 'Error al guardar credenciales', 'error');
+                else showToast('Credenciales actualizadas', 'success');
+              })
+              .catch(function(err) {
+                App.sync.done();
+                showToast((err && err.message) || 'Error de conexi\u00f3n', 'error');
+              });
+          }
+        );
       },
     },
 
@@ -2866,6 +2894,21 @@ function _htmlWarnModal(msg, subMsg, confirmLabel, confirmCall) {
     '<button class="btn btn-secondary" style="flex:1" onclick="App.closeModal()">Cancelar</button>' +
     '<button class="btn btn-primary" style="flex:1" onclick="' + confirmCall + '">' + confirmLabel + '</button>' +
     '</div></div>';
+}
+
+// 4f-1: Confirmación genérica antes de guardar cambios sensibles
+function confirmarYGuardar(titulo, msgHtml, callback) {
+  App.state._pendingConfirmSave = callback;
+  App.openModal(titulo,
+    '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
+    '<div class="modal-confirm-icon" style="font-size:1.8rem;margin-bottom:10px">&#x1F4BE;</div>' +
+    '<div class="modal-confirm-msg">' + msgHtml + '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:20px">' +
+    '<button class="btn btn-secondary" style="flex:1" onclick="App.closeModal()">Cancelar</button>' +
+    '<button class="btn btn-primary" style="flex:1" ' +
+    'onclick="App.closeModal();var cb=App.state._pendingConfirmSave;App.state._pendingConfirmSave=null;if(cb)cb()">Guardar</button>' +
+    '</div></div>'
+  );
 }
 
 function _validarEmail(email) {

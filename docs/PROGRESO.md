@@ -28,7 +28,7 @@ justificaciones de ausencias/retrasos y notificaciones por email vía MailApp.
 | 4c — Justificaciones | Persistencia, asincronía, pre-justificación | ⏳ Pendiente |
 | 4d — Entrenadores: sustitución | Botón "Sustituir en otro equipo" (acceso puntual) | ✅ Completo |
 | 4e — Rediseño perfil jugador | Nueva vista inicial + Mi Equipo con ranking | ✅ Completo |
-| 4f — UX: confirmación y asincronía | Aviso antes de guardar + guardado en background | ⏳ Pendiente |
+| 4f — UX: confirmación y asincronía | Aviso antes de guardar + guardado en background | ✅ Completo |
 
 ---
 
@@ -304,12 +304,12 @@ Actualizar el estado y añadir notas de decisiones de diseño al completar cada 
 
 | # | Subtarea | Fichero/s afectado/s | Estado |
 |---|----------|----------------------|--------|
-| 4f-1 | **[JS]** Implementar función genérica `confirmarYGuardar(mensaje, callbackGuardado)` que muestra un modal de confirmación antes de ejecutar cualquier guardado destructivo | `app.html` | ⏳ |
-| 4f-2 | **[HTML/CSS]** Modal de confirmación genérico reutilizable (botones "Cancelar" / "Guardar de todas formas") — si ya existe un modal genérico, extenderlo | `Index.html`, `styles.html` | ⏳ |
-| 4f-3 | **[JS]** Aplicar `confirmarYGuardar` en `ajustesCuenta` (cambio Usuario/PIN del jugador) | `app.html` | ⏳ |
-| 4f-4 | **[JS]** Aplicar `confirmarYGuardar` en el formulario de edición de credenciales del admin (4a-3, 4a-4) | `app.html` | ⏳ |
-| 4f-5 | **[JS]** Revisar todas las llamadas a `google.script.run` que no usen `withSuccessHandler`/`withFailureHandler` y migrarlas al patrón asíncrono estándar del proyecto (mostrar loading, no bloquear UI) | `app.html` | ⏳ |
-| 4f-6 | **[JS]** Detectar cambios pendientes sin guardar al navegar entre vistas (dirty state): si el usuario tiene cambios sin guardar y navega a otra vista, mostrar aviso de que se perderán | `app.html` | ⏳ |
+| 4f-1 | **[JS]** Implementar función genérica `confirmarYGuardar(mensaje, callbackGuardado)` que muestra un modal de confirmación antes de ejecutar cualquier guardado destructivo | `app.html` | ✅ |
+| 4f-2 | **[HTML/CSS]** Modal de confirmación genérico reutilizable (botones "Cancelar" / "Guardar de todas formas") — si ya existe un modal genérico, extenderlo | `Index.html`, `styles.html` | ✅ (usa modal existente) |
+| 4f-3 | **[JS]** Aplicar `confirmarYGuardar` en `ajustesCuenta` (cambio Usuario/PIN del jugador) | `app.html` | ✅ |
+| 4f-4 | **[JS]** Aplicar `confirmarYGuardar` en el formulario de edición de credenciales del admin (4a-3, 4a-4) | `app.html` | ✅ |
+| 4f-5 | **[JS]** Revisar todas las llamadas a `google.script.run` que no usen `withSuccessHandler`/`withFailureHandler` y migrarlas al patrón asíncrono estándar del proyecto (mostrar loading, no bloquear UI) | `app.html` | ✅ (ya estaban todas migradas) |
+| 4f-6 | **[JS]** Detectar cambios pendientes sin guardar al navegar entre vistas (dirty state): si el usuario tiene cambios sin guardar y navega a otra vista, mostrar aviso de que se perderán | `app.html` | ✅ (`ajustes-cuenta` añadida a `_dirtyViews`) |
 
 ---
 
