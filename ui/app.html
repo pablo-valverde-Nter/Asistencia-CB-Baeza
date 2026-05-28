@@ -277,7 +277,9 @@ const App = {
     App.state.jugador = null;
     App.state.equiposVisor = [];
     App.state.motivosJustificacion = [];
-    document.getElementById('user-badge').textContent = '...';
+    document.getElementById('user-badge-avatar').textContent = '?';
+    document.getElementById('user-badge-name').textContent = '...';
+    document.getElementById('user-badge-role').textContent = '';
     
     // Limpiar caché
     App.cache.jugadores           = [];
@@ -318,14 +320,14 @@ const App = {
       App.state.jugador  = ctx.jugador || null;
       App.state.usuario  = null;
       var jCtx = ctx.jugador;
-      document.getElementById('user-badge').textContent = jCtx ? (jCtx.Nombre + ' ' + jCtx.Apellidos) : 'Jugador';
+      _updateUserBadge(jCtx ? (jCtx.Nombre + ' ' + jCtx.Apellidos) : 'Jugador', 'Jugador');
     } else {
       App.state.usuario = ctx.entrenador || null;
       App.state.jugador = null;
       var nombre = ctx.entrenador
         ? (ctx.entrenador.Nombre + ' ' + ctx.entrenador.Apellidos)
         : (ctx.esAdmin ? 'Admin' : '-');
-      document.getElementById('user-badge').textContent = nombre;
+      _updateUserBadge(nombre, ctx.esAdmin ? 'Administrador' : 'Entrenador');
     }
   },
 
@@ -3201,6 +3203,14 @@ function _iconEstado(e) {
 
 function _esc(s) {
   return (s || '').replace(/'/g, "\\'");
+}
+
+function _updateUserBadge(nombre, rol) {
+  var words = (nombre || '').trim().split(/\s+/);
+  var ini = words.slice(0, 2).map(function(w){ return w.charAt(0).toUpperCase(); }).join('');
+  document.getElementById('user-badge-avatar').textContent = ini || '?';
+  document.getElementById('user-badge-name').textContent = nombre || '';
+  document.getElementById('user-badge-role').textContent = rol || '';
 }
 
 // 6a: SVG donut chart pequeño (44×44) para tarjetas de equipo
