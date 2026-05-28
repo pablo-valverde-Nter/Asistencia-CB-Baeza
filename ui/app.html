@@ -388,7 +388,7 @@ const App = {
     var fabViews = {'equipos-admin':true,'jugadores-admin':true,'entrenadores-admin':true};
     var fab = document.getElementById('fab-btn');
     if (fabViews[view]) {
-      if (view === 'entrenadores-admin' && !App.state.esAdmin) fab.classList.add('hidden');
+      if ((view === 'entrenadores-admin' || view === 'equipos-admin') && !App.state.esAdmin) fab.classList.add('hidden');
       else fab.classList.remove('hidden');
     } else {
       fab.classList.add('hidden');
@@ -399,7 +399,8 @@ const App = {
     var _userBadge = document.getElementById('user-badge');
     if (_editViews[view]) {
       var isEntDetalleAjeno = (view === 'entrenador-detalle' && !App.state.esAdmin && App.state.usuario && App.state.usuario.ID !== App.state.detalleEntrenadorId);
-      if (isEntDetalleAjeno) _btnEdit.classList.add('hidden');
+      var isEqDetalleAjeno  = (view === 'equipo-detalle' && !App.state.esAdmin && !App.state.equipos.some(function(e) { return e.ID === App.state.detalleEquipoId; }));
+      if (isEntDetalleAjeno || isEqDetalleAjeno) _btnEdit.classList.add('hidden');
       else _btnEdit.classList.remove('hidden');
       _userBadge.classList.add('hidden');
     } else {
@@ -531,10 +532,9 @@ const App = {
             statsHtml + '</div>' +
             visorHtml + '<div class="eq-arrow">&#x203A;</div></div>';
         }).join('');
-        
-        // Botón "Añadir otro equipo" para entrenadores no-admin
-        if (!App.state.esAdmin && App.state.usuario) {
-          lista.innerHTML += '<button class="btn btn-secondary btn-full mt-16" onclick="App.views.equipos.buscarOtroEquipo()" style="margin-top:16px">+ A&ntilde;adir otro equipo</button>';
+        // Botón de sustitución puntual (solo entrenadores, no jugadores ni admins)
+        if (App.state.rol === 'entrenador') {
+          lista.innerHTML += '<div style="padding:12px 0 4px"><button class="btn btn-secondary btn-full" onclick="App.views.equipos.abrirSustituto()">&#x1F501; Sustituir en otro equipo</button></div>';
         }
       },
       abrirEquipo: function(id, nombre) {
@@ -542,64 +542,32 @@ const App = {
         App.state._equipoNombre = nombre;
         App.navigate('sesiones');
       },
-      buscarOtroEquipo: function() {
-        // Mostrar equipos a los que no está asignado
+
+      abrirSustituto: function() {
         var misIds = new Set(App.state.equipos.map(function(e) { return e.ID; }));
-        (App.state.equiposVisor || []).forEach(function(e) { misIds.add(e.ID); });
-        
-        var options = App.cache.equipos.filter(function(e) { return !misIds.has(e.ID); });
-        if (!options.length) {
-          showToast('Ya tienes acceso a todos los equipos', 'info');
+        var otros = App.cache.equipos.filter(function(e) { return !misIds.has(e.ID); });
+        if (!otros.length) {
+          showToast('No hay otros equipos en el club', 'info');
           return;
         }
-        var html = options.map(function(e) {
-          return '<div class="list-item" onclick="App.views.equipos._anadirOtroEquipo(\'' + e.ID + '\')">' +
-            '<div style="flex:1"><div class="li-name">' + e.Nombre + '</div><div class="li-sub">' + e.Categoria + ' &middot; ' + e.Modalidad + '</div></div>' +
-            '<button class="btn-icon" style="color:var(--morado)">+</button></div>';
+        var rows = otros.map(function(eq) {
+          return '<div class="sr-item" onclick="App.views.equipos._sustituirEnEquipo(\'' + eq.ID + '\',\'' + _esc(eq.Nombre) + '\')">' +
+            '<div class="li-avatar" style="flex-shrink:0">' + (eq.Nombre ? eq.Nombre[0] : '?') + '</div>' +
+            '<div><div class="li-name">' + eq.Nombre + '</div>' +
+            '<div class="li-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div></div>' +
+            '</div>';
         }).join('');
-        App.openModal('Añadir equipo (Visor)', html);
+        App.openModal('Sustituir en otro equipo',
+          '<div><p style="padding:12px 16px 4px;font-size:.82rem;color:var(--texto-sec)">Solo podrás gestionar sus sesiones y asistencia. No modifica tu asignación permanente.</p>' +
+          rows + '</div>'
+        );
       },
-      _anadirOtroEquipo: function(equipoId) {
-        // Mostrar tarjeta placeholder de carga
-        var lista = document.getElementById('equipos-lista');
-        var eq = App.cache.getEquipoById(equipoId);
-        if (eq) {
-          var loadingId = 'eq-loading-' + equipoId;
-          var placeholder = document.createElement('div');
-          placeholder.className = 'equipo-card';
-          placeholder.id = loadingId;
-          placeholder.style.opacity = '0.5';
-          placeholder.style.pointerEvents = 'none';
-          placeholder.innerHTML =
-            '<div class="eq-icon">&#x1F3C0;</div>' +
-            '<div style="flex:1"><div class="eq-nombre">' + eq.Nombre + '</div>' +
-            '<div class="eq-meta">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div>' +
-            '<div class="eq-stats"></div></div>' +
-            '<span class="chip-visor">&#x1F441; Visor</span>' +
-            '<span class="sc-status-badge" style="background:var(--texto-sec);animation:pulse 1.2s ease-in-out infinite alternate;margin-left:12px">Cargando   </span>';
-          lista.appendChild(placeholder);
-        }
+
+      _sustituirEnEquipo: function(id, nombre) {
         App.closeModal();
-        google.script.run
-          .withSuccessHandler(function(res) {
-            var ph = document.getElementById('eq-loading-' + equipoId);
-            if (ph) ph.remove();
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            showToast('Equipo añadido temporalmente', 'success');
-            // Añadir al estado local para esta sesión
-            var eqData = App.cache.getEquipoById(equipoId);
-            if (eqData) {
-              if (!App.state.equiposVisor) App.state.equiposVisor = [];
-              App.state.equiposVisor.push(eqData);
-              App.views.equipos.render();
-            }
-          })
-          .withFailureHandler(function() {
-            var ph = document.getElementById('eq-loading-' + equipoId);
-            if (ph) ph.remove();
-            showToast('Error de conexión', 'error');
-          })
-          .anadirEquipoVisor(App.state.auth, equipoId);
+        App.state.equipoSesionesId = id;
+        App.state._equipoNombre = nombre;
+        App.navigate('sesiones');
       },
     },
 
@@ -1194,12 +1162,15 @@ const App = {
           lista.innerHTML = '<div class="empty-state"><div class="ei">&#x1F3C6;</div><p>Sin equipos. Pulsa + para crear uno.</p></div>';
           return;
         }
+        var misIds = new Set(App.state.equipos.map(function(e) { return e.ID; }));
         lista.innerHTML = equipos.map(function(eq) {
+          var esMio = misIds.has(eq.ID);
+          var chipHtml = esMio ? '<span class="chip-mi-equipo">&#x2605; Mi equipo</span>' : '';
           return '<div class="list-item" onclick="App.views[\'equipo-detalle\'].cargar(\'' + eq.ID + '\')">' +
             '<div class="li-avatar">' + (eq.Nombre ? eq.Nombre[0] : '?') + '</div>' +
             '<div style="flex:1"><div class="li-name">' + eq.Nombre + '</div>' +
             '<div class="li-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div></div>' +
-            '<div class="li-arrow">&#x203A;</div></div>';
+            chipHtml + '<div class="li-arrow">&#x203A;</div></div>';
         }).join('');
       },
     },

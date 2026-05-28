@@ -26,7 +26,7 @@ justificaciones de ausencias/retrasos y notificaciones por email vía MailApp.
 | 4a — Bugs admin y credenciales | CSS, persistencia, edición segura | 🔄 En curso |
 | 4b — Rediseño vista sesión | Solo lectura + modo edición + estados justif. | ⏳ Pendiente |
 | 4c — Justificaciones | Persistencia, asincronía, pre-justificación | ⏳ Pendiente |
-| 4d — Entrenadores: sustitución | Botón "Añadir otro equipo" | ⏳ Pendiente |
+| 4d — Entrenadores: sustitución | Botón "Sustituir en otro equipo" (acceso puntual) | ✅ Completo |
 | 4e — Rediseño perfil jugador | Nueva vista inicial + Mi Equipo con ranking | ⏳ Pendiente |
 | 4f — UX: confirmación y asincronía | Aviso antes de guardar + guardado en background | ⏳ Pendiente |
 
@@ -259,19 +259,24 @@ Actualizar el estado y añadir notas de decisiones de diseño al completar cada 
 
 ---
 
-### FASE 4d — Entrenadores: añadir equipo para sustitución
+### FASE 4d — Entrenadores: sustitución puntual en otro equipo
 
-**Indicación original:**
-> "En la pestaña de equipos solo ven a sus equipos pero deben tener un botón que sea 'Añadir otro equipo', que le permitirá seleccionar uno de los otros equipos y añadirlo a esa pestaña de 'Equipos'. Esto es para que un entrenador pueda modificar sesiones de otros equipos que no son el suyo si va a hacer una sustitución."
+**Enfoque final (rediseñado):** Acceso puntual y efímero, sin persistir en Sheets. El entrenador pulsa "Sustituir en otro equipo", elige el equipo en un modal y navega directamente a sus sesiones. Puede registrar asistencia y añadirse como entrenador manualmente desde el formulario de sesión.
+
+**Cambios de permisos:** Los guards de sesiones y asistencia en `Code.gs` cambian de `requireAccesoGestionEquipo` (que bloqueaba a Visor) a `requireEntrenadorOAdmin` (cualquier entrenador autenticado puede gestionar sesiones). Los guards de equipo (`actualizarEquipo`, `eliminarEquipo`) se mantienen estrictos.
+
+**Cambios de UI en Gestión > Equipos:** Los equipos propios del entrenador se destacan con el chip verde "Mi equipo". El botón Editar solo aparece en equipos propios (o para admin). El FAB (añadir equipo) solo se muestra a admins.
 
 | # | Subtarea | Fichero/s afectado/s | Estado |
 |---|----------|----------------------|--------|
-| 4d-1 | **[HTML]** Añadir botón "Añadir otro equipo" en la vista de equipos del entrenador (solo visible para rol entrenador, no para jugador) | `Index.html`, `app.html` | ✅ |
-| 4d-2 | **[HTML]** Modal/selector de equipos: lista de equipos del club a los que el entrenador NO está ya asignado; al seleccionar uno, se añade a su vista temporal | `Index.html`, `app.html` | ✅ |
-| 4d-3 | **[CSS]** Estilos para el botón "Añadir otro equipo" y el modal de selección | `styles.html` | ✅ |
-| 4d-4 | **[JS]** Al pulsar "Añadir otro equipo", cargar la lista de equipos del club que no tiene asignados y mostrar el modal selector | `app.html` | ✅ |
-| 4d-5 | **[JS]** Al seleccionar un equipo en el modal, añadirlo a la vista de equipos del entrenador como tarjeta con chip "Sustitución" (sin modificar `Entrenadores_Equipos` en Sheets — solo en memoria de sesión, o bien usando el mecanismo de `añadirEquipoVisor` existente) | `app.html` | ✅ |
-| 4d-6 | **[Decisión de diseño]** Definir si la relación de sustitución es persistente (usando `añadirEquipoVisor`) o solo de sesión de app (en memoria). Preferencia inicial: usar `añadirEquipoVisor` existente para que sea reversible con `eliminarEquipoVisor` | — | ✅ |
+| 4d-1 | **[GS]** Cambiar guards de `generarSesionesSemana` y `crearSesionExtra` a `requireEntrenadorOAdmin` | `Code.gs` | ✅ |
+| 4d-2 | **[GS]** Eliminar guard de equipo en `actualizarSesion`, `eliminarSesion`, `registrarAsistenciaJugador`, `registrarAsistenciaEntrenador`, `guardarAsistenciaCompleta`, `getJustificacionesSesion` | `Code.gs` | ✅ |
+| 4d-3 | **[JS]** Botón "Sustituir en otro equipo" en vista de equipos del entrenador (solo rol entrenador) | `app.html` | ✅ |
+| 4d-4 | **[JS]** Modal selector de equipos (excluye los propios) + navegación a sesiones | `app.html` | ✅ |
+| 4d-5 | **[JS]** Ocultar FAB en `equipos-admin` si no es admin | `app.html` | ✅ |
+| 4d-6 | **[JS]** Ocultar botón Editar en `equipo-detalle` si no es el equipo propio y no es admin | `app.html` | ✅ |
+| 4d-7 | **[JS]** Chip "Mi equipo" (verde) en lista Gestión > Equipos para los equipos propios | `app.html` | ✅ |
+| 4d-8 | **[CSS]** Añadir estilo `.chip-mi-equipo` | `styles.html` | ✅ |
 
 ---
 
