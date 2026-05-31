@@ -396,7 +396,7 @@ const App = {
       'jugador-detalle':   'Perfil',
       'entrenador-detalle':'Perfil',
       'equipo-detalle':    'Equipo',
-      'perfil-jugador':          'Mi Perfil',
+      'perfil-jugador':          'CB Baeza',
       'mis-entrenamientos':      'Mis Entrenamientos',
       'detalle-sesion-jugador':  'Sesión',
       'mis-stats':               'Mis Estadísticas',
@@ -1986,7 +1986,7 @@ const App = {
         });
         document.getElementById('jug-dorsal').value   = '';
         document.getElementById('jug-fechanac').value = '';
-        ['jug-padre1-nombre','jug-padre1-email','jug-padre2-nombre','jug-padre2-email'].forEach(function(id) {
+        ['jug-padre1-nombre','jug-padre1-tel','jug-padre1-email','jug-padre2-nombre','jug-padre2-tel','jug-padre2-email'].forEach(function(id) {
           var el = document.getElementById(id); if (el) el.value = '';
         });
         var cZone = document.getElementById('jug-credenciales-zona');
@@ -2007,10 +2007,12 @@ const App = {
           document.getElementById('jug-fechanac').value  = j.FechaNac || '';
           document.getElementById('jug-tel').value       = j.Telefono || '';
           document.getElementById('jug-email').value     = j.Email || '';
-          var p1n = document.getElementById('jug-padre1-nombre'); if (p1n) p1n.value = j.NombrePadre1 || '';
-          var p1e = document.getElementById('jug-padre1-email');  if (p1e) p1e.value = j.EmailPadre1  || '';
-          var p2n = document.getElementById('jug-padre2-nombre'); if (p2n) p2n.value = j.NombrePadre2 || '';
-          var p2e = document.getElementById('jug-padre2-email');  if (p2e) p2e.value = j.EmailPadre2  || '';
+          var p1n = document.getElementById('jug-padre1-nombre'); if (p1n) p1n.value = j.NombrePadre1    || '';
+          var p1t = document.getElementById('jug-padre1-tel');    if (p1t) p1t.value = j.TelefonoPadre1 || '';
+          var p1e = document.getElementById('jug-padre1-email');  if (p1e) p1e.value = j.EmailPadre1     || '';
+          var p2n = document.getElementById('jug-padre2-nombre'); if (p2n) p2n.value = j.NombrePadre2    || '';
+          var p2t = document.getElementById('jug-padre2-tel');    if (p2t) p2t.value = j.TelefonoPadre2 || '';
+          var p2e = document.getElementById('jug-padre2-email');  if (p2e) p2e.value = j.EmailPadre2     || '';
           // Zona de credenciales: solo para admin
           var cZone = document.getElementById('jug-credenciales-zona');
           var pinZ  = document.getElementById('jug-pin-zona');
@@ -2037,17 +2039,21 @@ const App = {
           FechaNac:  document.getElementById('jug-fechanac').value,
           Telefono:  document.getElementById('jug-tel').value.trim(),
           Email:     document.getElementById('jug-email').value.trim(),
-          NombrePadre1: (document.getElementById('jug-padre1-nombre') || {value:''}).value.trim(),
-          EmailPadre1:  (document.getElementById('jug-padre1-email')  || {value:''}).value.trim(),
-          NombrePadre2: (document.getElementById('jug-padre2-nombre') || {value:''}).value.trim(),
-          EmailPadre2:  (document.getElementById('jug-padre2-email')  || {value:''}).value.trim(),
+          NombrePadre1:    (document.getElementById('jug-padre1-nombre') || {value:''}).value.trim(),
+          TelefonoPadre1: (document.getElementById('jug-padre1-tel')    || {value:''}).value.trim(),
+          EmailPadre1:    (document.getElementById('jug-padre1-email')  || {value:''}).value.trim(),
+          NombrePadre2:    (document.getElementById('jug-padre2-nombre') || {value:''}).value.trim(),
+          TelefonoPadre2: (document.getElementById('jug-padre2-tel')    || {value:''}).value.trim(),
+          EmailPadre2:    (document.getElementById('jug-padre2-email')  || {value:''}).value.trim(),
         };
         if (!datos.Nombre || !datos.Apellidos) { showToast('Nombre y apellidos son obligatorios', 'error'); return; }
         if (datos.Email && !_validarEmail(datos.Email)) { showToast('El email no tiene un formato válido', 'error'); return; }
         if (datos.Telefono && !_validarTel(datos.Telefono)) { showToast('El teléfono no tiene un formato válido (mín. 9 dígitos)', 'error'); return; }
         if (datos.FechaNac && datos.FechaNac > _hoy()) { showToast('La fecha de nacimiento no puede ser futura', 'error'); return; }
-        if (datos.EmailPadre1 && !_validarEmail(datos.EmailPadre1)) { showToast('El email del padre/madre 1 no es válido', 'error'); return; }
-        if (datos.EmailPadre2 && !_validarEmail(datos.EmailPadre2)) { showToast('El email del padre/madre 2 no es válido', 'error'); return; }
+        if (datos.EmailPadre1 && !_validarEmail(datos.EmailPadre1)) { showToast('El email del familiar 1 no es válido', 'error'); return; }
+        if (datos.TelefonoPadre1 && !_validarTel(datos.TelefonoPadre1)) { showToast('El teléfono del familiar 1 no es válido', 'error'); return; }
+        if (datos.EmailPadre2 && !_validarEmail(datos.EmailPadre2)) { showToast('El email del familiar 2 no es válido', 'error'); return; }
+        if (datos.TelefonoPadre2 && !_validarTel(datos.TelefonoPadre2)) { showToast('El teléfono del familiar 2 no es válido', 'error'); return; }
         // Credenciales (solo admin al editar)
         var jugId = App.state.formJugadorId;
         var credNuevo = null;
@@ -2617,6 +2623,34 @@ const App = {
           '<div class="stat-valor ' + (countA === 0 ? 'verde' : countA <= 3 ? 'naranja' : 'rojo') + '">' + countA + '</div>' +
           '<div class="stat-label">faltas totales</div></div></div>';
 
+        // Contacto jugador
+        var tieneContactoJug = j.Telefono || j.Email;
+        var tieneContactoFam = j.NombrePadre1 || j.TelefonoPadre1 || j.EmailPadre1 || j.NombrePadre2 || j.TelefonoPadre2 || j.EmailPadre2;
+        if (tieneContactoJug || tieneContactoFam) {
+          html += '<div class="stat-grid-1"><div class="stat-widget">';
+          if (tieneContactoJug) {
+            html += '<div class="stat-widget-title">Contacto</div>';
+            if (j.Telefono) html += '<div style="font-size:.82rem;padding:3px 0">\uD83D\uDCDE\uFE0F&nbsp;<a href="tel:' + _esc(j.Telefono) + '" style="color:var(--primary)">' + _esc(j.Telefono) + '</a></div>';
+            if (j.Email)    html += '<div style="font-size:.82rem;padding:3px 0">\u2709\uFE0F&nbsp;<a href="mailto:' + _esc(j.Email) + '" style="color:var(--primary)">' + _esc(j.Email) + '</a></div>';
+          }
+          if (tieneContactoFam) {
+            if (tieneContactoJug) html += '<div style="height:10px"></div>';
+            if (j.NombrePadre1 || j.TelefonoPadre1 || j.EmailPadre1) {
+              html += '<div class="stat-widget-title">Familiar 1</div>';
+              if (j.NombrePadre1) html += '<div style="font-size:.82rem;padding:2px 0;font-weight:600">' + _esc(j.NombrePadre1) + '</div>';
+              if (j.TelefonoPadre1) html += '<div style="font-size:.82rem;padding:2px 0">\uD83D\uDCDE\uFE0F&nbsp;<a href="tel:' + _esc(j.TelefonoPadre1) + '" style="color:var(--primary)">' + _esc(j.TelefonoPadre1) + '</a></div>';
+              if (j.EmailPadre1)    html += '<div style="font-size:.82rem;padding:2px 0">\u2709\uFE0F&nbsp;<a href="mailto:' + _esc(j.EmailPadre1) + '" style="color:var(--primary)">' + _esc(j.EmailPadre1) + '</a></div>';
+            }
+            if (j.NombrePadre2 || j.TelefonoPadre2 || j.EmailPadre2) {
+              html += '<div style="height:8px"></div><div class="stat-widget-title">Familiar 2</div>';
+              if (j.NombrePadre2) html += '<div style="font-size:.82rem;padding:2px 0;font-weight:600">' + _esc(j.NombrePadre2) + '</div>';
+              if (j.TelefonoPadre2) html += '<div style="font-size:.82rem;padding:2px 0">\uD83D\uDCDE\uFE0F&nbsp;<a href="tel:' + _esc(j.TelefonoPadre2) + '" style="color:var(--primary)">' + _esc(j.TelefonoPadre2) + '</a></div>';
+              if (j.EmailPadre2)    html += '<div style="font-size:.82rem;padding:2px 0">\u2709\uFE0F&nbsp;<a href="mailto:' + _esc(j.EmailPadre2) + '" style="color:var(--primary)">' + _esc(j.EmailPadre2) + '</a></div>';
+            }
+          }
+          html += '</div></div>';
+        }
+
         html += '<div style="padding-bottom:28px"></div>';
         document.getElementById('jugador-detalle-contenido').innerHTML = html;
       },
@@ -3041,50 +3075,116 @@ const App = {
         var j = App.state.jugador;
         if (!j) return;
         App.state._formIsDirty = false;
-        var uEl = document.getElementById('ajustes-usuario');
-        if (uEl) uEl.value = j.Usuario || '';
-        var pEl = document.getElementById('ajustes-pin'); if (pEl) pEl.value = '';
-        var pcEl = document.getElementById('ajustes-pin-confirm'); if (pcEl) pcEl.value = '';
-        // Dirty tracking (4f-6)
+        // Datos personales
+        var tEl = document.getElementById('ajustes-tel');         if (tEl) tEl.value = j.Telefono || '';
+        var eEl = document.getElementById('ajustes-email');        if (eEl) eEl.value = j.Email    || '';
+        // Familiares
+        var p1n = document.getElementById('ajustes-padre1-nombre'); if (p1n) p1n.value = j.NombrePadre1    || '';
+        var p1t = document.getElementById('ajustes-padre1-tel');    if (p1t) p1t.value = j.TelefonoPadre1 || '';
+        var p1e = document.getElementById('ajustes-padre1-email');  if (p1e) p1e.value = j.EmailPadre1     || '';
+        var p2n = document.getElementById('ajustes-padre2-nombre'); if (p2n) p2n.value = j.NombrePadre2    || '';
+        var p2t = document.getElementById('ajustes-padre2-tel');    if (p2t) p2t.value = j.TelefonoPadre2 || '';
+        var p2e = document.getElementById('ajustes-padre2-email');  if (p2e) p2e.value = j.EmailPadre2     || '';
+        // Credenciales
+        var uEl  = document.getElementById('ajustes-usuario');      if (uEl)  uEl.value  = j.Usuario || '';
+        var pEl  = document.getElementById('ajustes-pin');          if (pEl)  pEl.value  = '';
+        var pcEl = document.getElementById('ajustes-pin-confirm');  if (pcEl) pcEl.value = '';
+        // Código de seguridad
+        var cEl  = document.getElementById('ajustes-codigo-seg');   if (cEl)  cEl.value  = '';
+        // Dirty tracking
         var setDirty = function() { App.state._formIsDirty = true; };
-        if (uEl)  uEl.oninput  = setDirty;
-        if (pEl)  pEl.oninput  = setDirty;
-        if (pcEl) pcEl.oninput = setDirty;
+        ['ajustes-tel','ajustes-email',
+         'ajustes-padre1-nombre','ajustes-padre1-tel','ajustes-padre1-email',
+         'ajustes-padre2-nombre','ajustes-padre2-tel','ajustes-padre2-email',
+         'ajustes-usuario','ajustes-pin','ajustes-pin-confirm'].forEach(function(id) {
+          var el = document.getElementById(id); if (el) el.oninput = setDirty;
+        });
       },
       guardar: function() {
-        var nuevoUsuario = (document.getElementById('ajustes-usuario').value || '').trim().toLowerCase();
-        var nuevoPin     = (document.getElementById('ajustes-pin').value || '').trim();
-        var confirmarPin = (document.getElementById('ajustes-pin-confirm').value || '').trim();
         var j = App.state.jugador;
         if (!j) return;
+        // Datos personales
+        var nuevoTel    = (document.getElementById('ajustes-tel')           ? document.getElementById('ajustes-tel').value           : '').trim();
+        var nuevoEmail  = (document.getElementById('ajustes-email')         ? document.getElementById('ajustes-email').value         : '').trim();
+        var p1Nombre    = (document.getElementById('ajustes-padre1-nombre') ? document.getElementById('ajustes-padre1-nombre').value : '').trim();
+        var p1Tel       = (document.getElementById('ajustes-padre1-tel')    ? document.getElementById('ajustes-padre1-tel').value    : '').trim();
+        var p1Email     = (document.getElementById('ajustes-padre1-email')  ? document.getElementById('ajustes-padre1-email').value  : '').trim();
+        var p2Nombre    = (document.getElementById('ajustes-padre2-nombre') ? document.getElementById('ajustes-padre2-nombre').value : '').trim();
+        var p2Tel       = (document.getElementById('ajustes-padre2-tel')    ? document.getElementById('ajustes-padre2-tel').value    : '').trim();
+        var p2Email     = (document.getElementById('ajustes-padre2-email')  ? document.getElementById('ajustes-padre2-email').value  : '').trim();
+        // Credenciales
+        var nuevoUsuario = (document.getElementById('ajustes-usuario')      ? document.getElementById('ajustes-usuario').value       : '').trim().toLowerCase();
+        var nuevoPin     = (document.getElementById('ajustes-pin')          ? document.getElementById('ajustes-pin').value          : '').trim();
+        var confirmarPin = (document.getElementById('ajustes-pin-confirm')  ? document.getElementById('ajustes-pin-confirm').value  : '').trim();
+        // Código de seguridad
+        var codigoSeg    = (document.getElementById('ajustes-codigo-seg')   ? document.getElementById('ajustes-codigo-seg').value   : '').trim().toUpperCase();
+        // Validaciones
         if (!nuevoUsuario) { showToast('El usuario no puede estar vac\u00edo', 'error'); return; }
         if (nuevoPin && nuevoPin !== confirmarPin) { showToast('Los PINs no coinciden', 'error'); return; }
         if (nuevoPin && (nuevoPin.length < 4 || !/^\d+$/.test(nuevoPin))) { showToast('El PIN debe tener 4 d\u00edgitos num\u00e9ricos', 'error'); return; }
+        if (nuevoEmail && !_validarEmail(nuevoEmail)) { showToast('El email no tiene un formato v\u00e1lido', 'error'); return; }
+        if (nuevoTel && !_validarTel(nuevoTel)) { showToast('El tel\u00e9fono no tiene un formato v\u00e1lido', 'error'); return; }
+        if (p1Tel && !_validarTel(p1Tel)) { showToast('El tel\u00e9fono del familiar 1 no es v\u00e1lido', 'error'); return; }
+        if (p1Email && !_validarEmail(p1Email)) { showToast('El email del familiar 1 no es v\u00e1lido', 'error'); return; }
+        if (p2Tel && !_validarTel(p2Tel)) { showToast('El tel\u00e9fono del familiar 2 no es v\u00e1lido', 'error'); return; }
+        if (p2Email && !_validarEmail(p2Email)) { showToast('El email del familiar 2 no es v\u00e1lido', 'error'); return; }
+        if (!codigoSeg || codigoSeg.length < 4) { showToast('Introduce el c\u00f3digo de seguridad', 'error'); return; }
         confirmarYGuardar(
           'Guardar cambios',
-          'Se actualizar\u00e1n tus credenciales de acceso.' +
-          '<br><span style="font-size:.8rem;color:var(--texto-sec)">Necesitar\u00e1s el nuevo usuario y/o PIN la pr\u00f3xima vez que accedas.</span>',
+          'Se actualizar\u00e1 tu perfil y/o credenciales de acceso.' +
+          '<br><span style="font-size:.8rem;color:var(--texto-sec)">El c\u00f3digo de seguridad se verificar\u00e1 en el servidor.</span>',
           function() {
             App.state._formIsDirty = false;
-            // Actualizaci\u00f3n optimista de auth local \u2192 navegar ya
+            // Capturar auth ORIGINAL antes de modificar (bug fix: el servidor valida con el usuario antiguo)
+            var authOriginal = Object.assign({}, App.state.auth);
+            // Actualización optimista: auth local
             var authAct = Object.assign({}, App.state.auth, { usuario: nuevoUsuario });
             if (nuevoPin) authAct.pin = nuevoPin;
             App.state.auth = authAct;
             _setStoredAuth(JSON.stringify(authAct));
-            j.Usuario = nuevoUsuario;
+            // Actualización optimista: cache del jugador
+            j.Usuario        = nuevoUsuario;
+            j.Telefono       = nuevoTel;
+            j.Email          = nuevoEmail;
+            j.NombrePadre1   = p1Nombre;
+            j.TelefonoPadre1 = p1Tel;
+            j.EmailPadre1    = p1Email;
+            j.NombrePadre2   = p2Nombre;
+            j.TelefonoPadre2 = p2Tel;
+            j.EmailPadre2    = p2Email;
             App.goBack();
-            // Sincronizaci\u00f3n en segundo plano
+            var datosPersonales = {
+              Telefono: nuevoTel, Email: nuevoEmail,
+              NombrePadre1: p1Nombre, TelefonoPadre1: p1Tel, EmailPadre1: p1Email,
+              NombrePadre2: p2Nombre, TelefonoPadre2: p2Tel, EmailPadre2: p2Email,
+            };
+            // Sincronizar en segundo plano usando authOriginal para ambas llamadas
             App.sync.start();
-            server('actualizarCredencialesJugador', j.ID, nuevoUsuario, nuevoPin || null)
-              .then(function(res) {
-                App.sync.done();
-                if (!res.success) showToast(res.error || 'Error al guardar credenciales', 'error');
-                else showToast('Credenciales actualizadas', 'success');
-              })
-              .catch(function(err) {
-                App.sync.done();
-                showToast((err && err.message) || 'Error de conexi\u00f3n', 'error');
-              });
+            var _done1 = false, _done2 = false;
+            var _syncCheck = function() { if (_done1 && _done2) App.sync.done(); };
+            // 1. Datos personales (verificación de código en servidor)
+            new Promise(function(resolve, reject) {
+              google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
+                .actualizarPerfilJugador(authOriginal, j.ID, datosPersonales, codigoSeg);
+            }).then(function(res) {
+              _done1 = true; _syncCheck();
+              if (!res.success) showToast(res.error || 'Error al guardar datos', 'error');
+            }).catch(function(err) {
+              _done1 = true; _syncCheck();
+              showToast((err && err.message) || 'Error de conexi\u00f3n', 'error');
+            });
+            // 2. Credenciales (usando authOriginal + código de seguridad)
+            new Promise(function(resolve, reject) {
+              google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
+                .actualizarCredencialesJugador(authOriginal, j.ID, nuevoUsuario, nuevoPin || null, null, codigoSeg);
+            }).then(function(res) {
+              _done2 = true; _syncCheck();
+              if (!res.success) showToast(res.error || 'Error al guardar credenciales', 'error');
+              else showToast('Perfil actualizado', 'success');
+            }).catch(function(err) {
+              _done2 = true; _syncCheck();
+              showToast((err && err.message) || 'Error de conexi\u00f3n', 'error');
+            });
           }
         );
       },
@@ -3386,7 +3486,7 @@ function _iconEstado(e) {
 }
 
 function _esc(s) {
-  return (s || '').replace(/'/g, "\\'");
+  return (s == null ? '' : String(s)).replace(/'/g, "\\'");
 }
 
 function _updateUserBadge(nombre, rol) {

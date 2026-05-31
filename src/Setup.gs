@@ -20,7 +20,9 @@ const SCHEMA = {
   ],
   Jugadores: [
     'ID', 'Nombre', 'Apellidos', 'FechaNac', 'Telefono', 'Email', 'FotoURL', 'Dorsal',
-    'Usuario', 'PIN', 'CodigoPadres', 'EmailPadre1', 'EmailPadre2', 'NombrePadre1', 'NombrePadre2'
+    'Usuario', 'PIN', 'CodigoPadres',
+    'NombrePadre1', 'TelefonoPadre1', 'EmailPadre1',
+    'NombrePadre2', 'TelefonoPadre2', 'EmailPadre2'
   ],
   Jugadores_Equipos: [
     'ID', 'ID_Jugador', 'ID_Equipo', 'Tipo', 'Activo'

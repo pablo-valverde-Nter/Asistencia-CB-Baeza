@@ -302,13 +302,17 @@
       </div>
       <div class="form-section">
         <div class="form-section-title">Contacto familiar</div>
+        <p style="font-size:.75rem;color:var(--texto-sec);margin:0 0 10px">Familiar 1</p>
+        <div class="form-group"><label>Nombre</label><input type="text" id="jug-padre1-nombre" placeholder="Nombre completo"></div>
         <div class="form-row">
-          <div class="form-group"><label>Nombre padre/madre 1</label><input type="text" id="jug-padre1-nombre" placeholder="Nombre completo"></div>
-          <div class="form-group"><label>Email padre/madre 1</label><input type="email" id="jug-padre1-email" placeholder="padre@ejemplo.com"></div>
+          <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="jug-padre1-tel" placeholder="+34 600 000 000"></div>
+          <div class="form-group"><label>Email</label><input type="email" id="jug-padre1-email" placeholder="padre@ejemplo.com"></div>
         </div>
+        <p style="font-size:.75rem;color:var(--texto-sec);margin:12px 0 10px">Familiar 2</p>
+        <div class="form-group"><label>Nombre</label><input type="text" id="jug-padre2-nombre" placeholder="Nombre completo"></div>
         <div class="form-row">
-          <div class="form-group"><label>Nombre padre/madre 2</label><input type="text" id="jug-padre2-nombre" placeholder="Nombre completo"></div>
-          <div class="form-group"><label>Email padre/madre 2</label><input type="email" id="jug-padre2-email" placeholder="madre@ejemplo.com"></div>
+          <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="jug-padre2-tel" placeholder="+34 600 000 000"></div>
+          <div class="form-group"><label>Email</label><input type="email" id="jug-padre2-email" placeholder="madre@ejemplo.com"></div>
         </div>
       </div>
       <div class="form-section" id="jug-credenciales-zona" style="display:none">
@@ -518,25 +522,55 @@
     <!-- VISTA: AJUSTES CUENTA (jugador) -->
     <section id="view-ajustes-cuenta" class="view">
       <div class="form-section">
-        <div class="form-section-title">Cambiar usuario</div>
+        <div class="form-section-title">Datos personales</div>
+        <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ajustes-tel" placeholder="+34 600 000 000"></div>
+        <div class="form-group"><label>Email</label><input type="email" id="ajustes-email" placeholder="email@ejemplo.com"></div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">Contacto familiar</div>
+        <p style="font-size:.75rem;color:var(--texto-sec);margin:0 0 10px">Familiar 1</p>
+        <div class="form-group"><label>Nombre</label><input type="text" id="ajustes-padre1-nombre" placeholder="Nombre completo"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ajustes-padre1-tel" placeholder="+34 600 000 000"></div>
+          <div class="form-group"><label>Email</label><input type="email" id="ajustes-padre1-email" placeholder="padre@ejemplo.com"></div>
+        </div>
+        <p style="font-size:.75rem;color:var(--texto-sec);margin:12px 0 10px">Familiar 2</p>
+        <div class="form-group"><label>Nombre</label><input type="text" id="ajustes-padre2-nombre" placeholder="Nombre completo"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ajustes-padre2-tel" placeholder="+34 600 000 000"></div>
+          <div class="form-group"><label>Email</label><input type="email" id="ajustes-padre2-email" placeholder="madre@ejemplo.com"></div>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">Credenciales de acceso</div>
         <div class="form-group">
-          <label>Nuevo usuario</label>
+          <label>Usuario</label>
           <input type="text" id="ajustes-usuario" placeholder="nombre.apellido" autocomplete="username"
             style="text-transform:lowercase" oninput="this.value=this.value.toLowerCase().replace(/\s/g,'')">
           <small style="color:var(--texto-sec);font-size:.72rem">Solo letras, n&uacute;meros y puntos. M&aacute;x. 12 caracteres.</small>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nuevo PIN (4 d&iacute;gitos)</label>
+            <input type="password" id="ajustes-pin" placeholder="&bull;&bull;&bull;&bull;" maxlength="4"
+              style="text-align:center;letter-spacing:6px;font-size:1.2rem">
+          </div>
+          <div class="form-group">
+            <label>Confirmar PIN</label>
+            <input type="password" id="ajustes-pin-confirm" placeholder="&bull;&bull;&bull;&bull;" maxlength="4"
+              style="text-align:center;letter-spacing:6px;font-size:1.2rem">
+          </div>
+        </div>
+        <small style="color:var(--texto-sec);font-size:.72rem">Deja el PIN en blanco para mantener el actual.</small>
       </div>
       <div class="form-section">
-        <div class="form-section-title">Cambiar PIN</div>
+        <div class="form-section-title">C&oacute;digo de seguridad</div>
         <div class="form-group">
-          <label>Nuevo PIN (4 d&iacute;gitos)</label>
-          <input type="password" id="ajustes-pin" placeholder="&bull;&bull;&bull;&bull;" maxlength="4"
-            style="text-align:center;letter-spacing:6px;font-size:1.2rem">
-        </div>
-        <div class="form-group">
-          <label>Confirmar PIN</label>
-          <input type="password" id="ajustes-pin-confirm" placeholder="&bull;&bull;&bull;&bull;" maxlength="4"
-            style="text-align:center;letter-spacing:6px;font-size:1.2rem">
+          <label>C&oacute;digo de autorizaci&oacute;n</label>
+          <input type="password" id="ajustes-codigo-seg" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;" maxlength="10"
+            style="text-align:center;letter-spacing:6px;font-size:1.1rem;text-transform:uppercase"
+            oninput="this.value=this.value.toUpperCase().replace(/\s/g,'')">
+          <small style="color:var(--texto-sec);font-size:.72rem">El mismo c&oacute;digo que usas para justificar ausencias.</small>
         </div>
       </div>
       <div class="p-16" style="padding-bottom:32px">

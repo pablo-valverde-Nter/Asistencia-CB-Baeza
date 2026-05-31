@@ -231,7 +231,8 @@ const Equipos = {
     const campos = {};
     const permitidos = [
       'Nombre', 'Apellidos', 'FechaNac', 'Telefono', 'Email', 'FotoURL', 'Dorsal',
-      'EmailPadre1', 'EmailPadre2', 'NombrePadre1', 'NombrePadre2'
+      'EmailPadre1', 'EmailPadre2', 'NombrePadre1', 'NombrePadre2',
+      'TelefonoPadre1', 'TelefonoPadre2'
     ];
     permitidos.forEach(k => { if (datos[k] !== undefined) campos[k] = datos[k]; });
     return updateRow(CONFIG.SHEETS.JUGADORES, jugadorId, campos);
