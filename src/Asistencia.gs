@@ -188,9 +188,17 @@ const Asistencia = {
     const jugHdrs  = jugData[0];
     const jSesCol  = jugHdrs.indexOf('ID_Sesion');
     const jJugCol  = jugHdrs.indexOf('ID_Jugador');
-    const jEstCol  = jugHdrs.indexOf('Estado')        + 1;
-    const jInvCol  = jugHdrs.indexOf('EsInvitado')    + 1;
-    const jTsCol   = jugHdrs.indexOf('FechaRegistro') + 1;
+    const jEstCol      = jugHdrs.indexOf('Estado')             + 1;
+    const jInvCol      = jugHdrs.indexOf('EsInvitado')         + 1;
+    const jTsCol       = jugHdrs.indexOf('FechaRegistro')      + 1;
+    const jTienJustCol = jugHdrs.indexOf('TieneJustificacion') + 1;
+    const jTipoJustCol = jugHdrs.indexOf('TipoJustificacion')  + 1;
+    const jMotCatCol   = jugHdrs.indexOf('MotivoCategoria')    + 1;
+    const jMotDetCol   = jugHdrs.indexOf('MotivoDetalle')      + 1;
+    const jFecJustCol  = jugHdrs.indexOf('FechaJustificacion') + 1;
+    const jJustPorCol  = jugHdrs.indexOf('JustificadoPor')     + 1;
+    const jMsgGenCol   = jugHdrs.indexOf('MensajeGenerado')    + 1;
+    const jNotEntCol   = jugHdrs.indexOf('NotificadoEntrenador') + 1;
 
     // Mapa: jugadorId → número de fila en hoja (1-based)
     const jugRowMap = {};
@@ -209,6 +217,16 @@ const Asistencia = {
         jugSheet.getRange(rowNum, jEstCol).setValue(item.estado);
         jugSheet.getRange(rowNum, jInvCol).setValue(item.esInvitado || false);
         jugSheet.getRange(rowNum, jTsCol ).setValue(timestamp);
+        if (item.limpiarJustif) {
+          if (jTienJustCol > 0) jugSheet.getRange(rowNum, jTienJustCol).setValue(false);
+          if (jTipoJustCol > 0) jugSheet.getRange(rowNum, jTipoJustCol).setValue('');
+          if (jMotCatCol   > 0) jugSheet.getRange(rowNum, jMotCatCol  ).setValue('');
+          if (jMotDetCol   > 0) jugSheet.getRange(rowNum, jMotDetCol  ).setValue('');
+          if (jFecJustCol  > 0) jugSheet.getRange(rowNum, jFecJustCol ).setValue('');
+          if (jJustPorCol  > 0) jugSheet.getRange(rowNum, jJustPorCol ).setValue('');
+          if (jMsgGenCol   > 0) jugSheet.getRange(rowNum, jMsgGenCol  ).setValue('');
+          if (jNotEntCol   > 0) jugSheet.getRange(rowNum, jNotEntCol  ).setValue(false);
+        }
       } else {
         appendRow(CONFIG.SHEETS.ASIST_JUGADORES, {
           ID_Sesion:     sesionId,

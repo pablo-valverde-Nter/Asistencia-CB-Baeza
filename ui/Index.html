@@ -42,12 +42,20 @@
     <span id="header-title">CB Baeza</span>
     <button id="btn-edit" class="hidden" onclick="App.editarDetalle()">&#x270E;</button>
     <span id="sync-badge">&#x21BB;</span>
-    <div id="user-badge" onclick="App.confirmarCerrarSesion()">
+    <div id="user-badge" onclick="App.toggleUserMenu(event)">
       <div id="user-badge-avatar">?</div>
       <div id="user-badge-info">
         <div id="user-badge-name">&hellip;</div>
         <div id="user-badge-role"></div>
       </div>
+    </div>
+    <div id="user-menu" class="hidden">
+      <button class="user-menu-item" onclick="App.closeUserMenu();App.irAjustes()">
+        <span>&#x2699;&#xFE0F;</span><span>Ajustes</span>
+      </button>
+      <button class="user-menu-item user-menu-item-danger" onclick="App.closeUserMenu();App.confirmarCerrarSesion()">
+        <span>&#x1F6AA;</span><span>Cerrar Sesi&oacute;n</span>
+      </button>
     </div>
   </header>
 
@@ -97,10 +105,10 @@
       </div>
     </section>
 
-    <!-- TAB: EQUIPOS -->
+    <!-- TAB: INICIO (entrenador/admin) -->
     <section id="view-equipos" class="view">
-      <div class="section-hdr" style="padding-top:16px"><span class="section-label">Registrar Asistencia</span></div>
-      <div style="padding:4px 0" id="equipos-lista"></div>
+      <div id="equipos-perfil"></div>
+      <div id="equipos-lista" style="padding-bottom:8px"></div>
     </section>
 
     <!-- SESIONES DE UN EQUIPO -->
@@ -154,6 +162,10 @@
       <div id="sesion-ro-incid-bloque" style="display:none">
         <div class="sesion-ro-incid-hdr">&#x26A0; Incidencias sin justificar</div>
         <div id="sesion-ro-incid-lista"></div>
+      </div>
+      <div id="sesion-ro-justif-bloque" style="display:none">
+        <div class="sesion-ro-incid-hdr sesion-ro-justif-hdr">&#x2713; Incidencias justificadas</div>
+        <div id="sesion-ro-justif-lista"></div>
       </div>
       <div class="section-hdr">
         <span class="section-label">Jugadores</span>
@@ -466,10 +478,6 @@
             <span class="perfil-nav-icon">&#x1F3C6;</span>
             <span class="perfil-nav-label">Mi equipo</span>
           </button>
-          <button class="perfil-nav-btn" onclick="App.navigate('ajustes-cuenta')">
-            <span class="perfil-nav-icon">&#x2699;&#xFE0F;</span>
-            <span class="perfil-nav-label">Ajustes</span>
-          </button>
         </div>
       </div>
       <div id="perfil-stats"></div>
@@ -612,8 +620,8 @@
   <nav id="bottom-nav">
     <!-- Tabs para entrenadores/admins -->
     <button class="nav-tab active nav-tab-ent" data-view="equipos" onclick="App.navigate('equipos')">
-      <span class="nav-icon">&#x25C9;</span>
-      <span>Equipos</span>
+      <span class="nav-icon">&#x1F3E0;</span>
+      <span>Inicio</span>
       <span class="nav-indicator"></span>
     </button>
     <button class="nav-tab nav-tab-ent" data-view="gestion" onclick="App.navigate('gestion')">

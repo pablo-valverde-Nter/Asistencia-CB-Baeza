@@ -252,6 +252,22 @@ const App = {
       });
   },
 
+  toggleUserMenu: function(event) {
+    event.stopPropagation();
+    document.getElementById('user-menu').classList.toggle('hidden');
+  },
+  closeUserMenu: function() {
+    var m = document.getElementById('user-menu');
+    if (m) m.classList.add('hidden');
+  },
+  irAjustes: function() {
+    if (App.state.rol === 'jugador') {
+      App.navigate('ajustes-cuenta');
+    } else if (App.state.usuario && App.state.usuario.ID) {
+      App.views['entrenador-detalle'].cargar(App.state.usuario.ID);
+    }
+  },
+
   confirmarCerrarSesion() {
     App.openModal('Cerrar Sesión',
       '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
@@ -482,9 +498,30 @@ const App = {
   // ==============================================================
   views: {
 
-    // -- Tab Equipos ----------------------------------------
+    // -- Tab Inicio (entrenador/admin) ----------------------------------------
     equipos: {
       render: function() {
+        // Cabecera de perfil
+        var usuario = App.state.usuario;
+        var perfilEl = document.getElementById('equipos-perfil');
+        if (perfilEl) {
+          var ini = '', nombrePerfil = '', emailPerfil = '';
+          if (usuario) {
+            ini = (usuario.Nombre ? usuario.Nombre[0] : '') + (usuario.Apellidos ? usuario.Apellidos[0] : '');
+            nombrePerfil = usuario.Nombre + ' ' + usuario.Apellidos;
+            emailPerfil = usuario.Email || '';
+          } else if (App.state.esAdmin) {
+            ini = 'A'; nombrePerfil = 'Administrador';
+          }
+          var rolLabel = App.state.esAdmin ? 'Administrador' : 'Entrenador';
+          perfilEl.innerHTML = '<div class="equipos-perfil-bloque">' +
+            '<div class="eq-perfil-avatar">' + (ini || '?') + '</div>' +
+            '<div class="eq-perfil-nombre">' + (nombrePerfil || '') + '</div>' +
+            (emailPerfil ? '<div class="eq-perfil-email">' + emailPerfil + '</div>' : '') +
+            '<div class="eq-perfil-rol">' + rolLabel + '</div>' +
+            '</div>';
+        }
+
         var lista = document.getElementById('equipos-lista');
         var equipos;
         if (App.state.esAdmin) {
@@ -508,11 +545,11 @@ const App = {
           var sesiones = App.cache.getSesionesByEquipo(eq.ID);
           var ultimaGuardada = null;
           for (var i = sesiones.length - 1; i >= 0; i--) {
-            if (sesiones[i].Fecha < hoy && (sesiones[i].AsistenciaGuardada === true || sesiones[i].AsistenciaGuardada === 'TRUE')) {
+            if (sesiones[i].Fecha <= hoy && (sesiones[i].AsistenciaGuardada === true || sesiones[i].AsistenciaGuardada === 'TRUE')) {
               ultimaGuardada = sesiones[i]; break;
             }
           }
-          var statsHtml = '';
+          var statsHtml = '', statsLabel = '';
           var cP = 0, cA = 0, cR = 0;
           if (ultimaGuardada) {
             var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === ultimaGuardada.ID; });
@@ -520,6 +557,8 @@ const App = {
               cP = rs.filter(function(r) { return r.Estado === 'P'; }).length;
               cA = rs.filter(function(r) { return r.Estado === 'A'; }).length;
               cR = rs.filter(function(r) { return r.Estado === 'R'; }).length;
+              var fl = _fmtFecha(ultimaGuardada.Fecha);
+              statsLabel = 'Último entreno (' + fl.d + ' ' + fl.m + '):';
               statsHtml = '<div class="eq-stats">' +
                 (cP ? '<span class="eq-stat-chip p"><span class="dot"></span>' + cP + '</span>' : '') +
                 (cA ? '<span class="eq-stat-chip a"><span class="dot"></span>' + cA + '</span>' : '') +
@@ -530,23 +569,40 @@ const App = {
           // Chip Visor: el equipo es de solo lectura
           var esVisor = !App.state.esAdmin && !mainEqIds.has(eq.ID);
           var visorHtml = esVisor ? '<span class="chip-visor">&#x1F441; Visor</span>' : '';
-          return '<div class="equipo-card" onclick="App.views.equipos.abrirEquipo(\'' + eq.ID + '\',\'' + _esc(eq.Nombre) + '\')">' +
-            '<div class="eq-icon">&#x1F3C0;</div>' +
-            '<div style="flex:1"><div class="eq-nombre">' + eq.Nombre + '</div>' +
-            '<div class="eq-meta">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div>' +
-            statsHtml + '</div>' +
-            _pieCard(cP, cA, cR) +
-            visorHtml + '<div class="eq-arrow">&#x203A;</div></div>';
+          var eqId = eq.ID;
+          var eqNombre = _esc(eq.Nombre);
+          return '<div class="equipo-card-big">' +
+            '<div class="eq-big-hdr">' +
+              '<div class="eq-icon">&#x1F3C0;</div>' +
+              '<div style="flex:1"><div class="eq-nombre">' + eq.Nombre + '</div>' +
+              '<div class="eq-meta">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div></div>' +
+              visorHtml +
+            '</div>' +
+            '<div class="eq-big-stats">' +
+              (statsLabel ? '<div class="eq-last-label">' + statsLabel + '</div>' : '') +
+              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+                (statsHtml || '<span class="eq-no-stats">Sin sesiones registradas</span>') +
+                (ultimaGuardada && (cP + cA + cR) > 0 ? _pieCard(cP, cA, cR) : '') +
+              '</div>' +
+            '</div>' +
+            '<div class="eq-big-btns">' +
+              '<button class="btn-eq-asist" onclick="App.views.equipos.abrirEquipo(\'' + eqId + '\',\'' + eqNombre + '\')">&#x1F4CB; Registrar asistencia</button>' +
+              '<button class="btn-eq-stats" onclick="App.views.equipos.abrirEstadisticas(\'' + eqId + '\')">&#x1F4CA; Estad&iacute;sticas</button>' +
+            '</div>' +
+          '</div>';
         }).join('');
         // Botón de sustitución puntual (solo entrenadores, no jugadores ni admins)
         if (App.state.rol === 'entrenador') {
-          lista.innerHTML += '<div style="padding:12px 0 4px"><button class="btn btn-secondary btn-full" onclick="App.views.equipos.abrirSustituto()">&#x1F501; Sustituir en otro equipo</button></div>';
+          lista.innerHTML += '<div style="padding:12px 16px 4px"><button class="btn btn-secondary btn-full" onclick="App.views.equipos.abrirSustituto()">&#x1F501; Sustituir en otro equipo</button></div>';
         }
       },
       abrirEquipo: function(id, nombre) {
         App.state.equipoSesionesId = id;
         App.state._equipoNombre = nombre;
         App.navigate('sesiones');
+      },
+      abrirEstadisticas: function(id) {
+        App.views['equipo-detalle'].cargar(id);
       },
 
       abrirSustituto: function() {
@@ -799,6 +855,7 @@ const App = {
             tieneJustif: !!(reg && (reg.TieneJustificacion === true || reg.TieneJustificacion === 'TRUE')),
             tipoJustif: reg ? (reg.TipoJustificacion || '') : '',
             motivoJustif: reg ? (reg.MotivoCategoria || '') : '',
+            mensajeJustif: reg ? (reg.MensajeGenerado || '') : '',
           };
         });
 
@@ -835,7 +892,7 @@ const App = {
         document.getElementById('sesion-jugs').innerHTML = jugadores.length
           ? jugadores.map(function(item) {
               var j = item.jugador; var estado = item.estado || ''; var inv = item.esInvitado;
-              return '<div class="jug-card ' + estado + '" data-id="' + j.ID + '" data-estado="' + estado + '" data-inv="' + inv + '" onclick="App.views.sesion.toggleEstado(this)">' +
+              return '<div class="jug-card ' + estado + '" data-id="' + j.ID + '" data-estado="' + estado + '" data-inv="' + inv + '" data-justif="' + (item.tieneJustif ? 'true' : 'false') + '" data-tipo-justif="' + _esc(item.tipoJustif || '') + '" onclick="App.views.sesion.toggleEstado(this)">' +
                 '<div class="jug-dorsal">' + (j.Dorsal || '-') + '</div>' +
                 '<div style="flex:1;min-width:0"><div class="jug-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
                 '<div class="jug-tipo">' + (inv ? 'Invitado' : (j.Tipo || '')) + '</div>' +
@@ -860,11 +917,35 @@ const App = {
       },
 
       toggleEstado: function(card) {
+        if (card.dataset.justif === 'true') {
+          var tipoJustif = card.dataset.tipoJustif || 'incidencia';
+          App.state._pendingConfirmSave = function() { App.views.sesion._doToggleEstado(card); };
+          App.openModal('Asistencia justificada',
+            _htmlWarnModal(
+              'Este jugador tiene una incidencia justificada como <strong>' + _esc(tipoJustif) + '</strong>.',
+              '\u00bfConfirmas que quieres modificar el estado de todas formas?',
+              'Modificar',
+              'App.closeModal();var cb=App.state._pendingConfirmSave;App.state._pendingConfirmSave=null;if(cb)cb()'
+            )
+          );
+          return;
+        }
+        App.views.sesion._doToggleEstado(card);
+      },
+
+      _doToggleEstado: function(card) {
         var ciclo = {'':'P','P':'A','A':'R','R':'P'};
         var sig = ciclo[card.dataset.estado || ''];
         card.dataset.estado = sig;
         card.className = 'jug-card ' + sig;
         card.querySelector('.estado-chip').textContent = _iconEstado(sig);
+        // Reabrir la justificación para que el padre vuelva a justificar la nueva incidencia
+        if (card.dataset.justif === 'true') {
+          card.dataset.justif = 'false';
+          card.dataset.justifCleared = 'true';
+          var aviso = card.querySelector('.jug-justif-aviso');
+          if (aviso) aviso.remove();
+        }
         App.state._formIsDirty = true;
       },
 
@@ -872,7 +953,7 @@ const App = {
         var sesionId = App.state.sesionId;
         var jugadores = [];
         document.querySelectorAll('#sesion-jugs .jug-card').forEach(function(c) {
-          if (c.dataset.estado) jugadores.push({jugadorId:c.dataset.id, estado:c.dataset.estado, esInvitado:c.dataset.inv==='true'});
+          if (c.dataset.estado) jugadores.push({jugadorId:c.dataset.id, estado:c.dataset.estado, esInvitado:c.dataset.inv==='true', limpiarJustif: c.dataset.justifCleared === 'true'});
         });
         var entrenadores = [];
         document.querySelectorAll('#sesion-ents .ent-row').forEach(function(c) {
@@ -894,7 +975,13 @@ const App = {
         // Actualizar caché de forma optimista
         App.cache.asistJugadores = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
         jugadores.forEach(function(j) {
-          if (j.estado) App.cache.asistJugadores.push({ ID_Sesion: sesionId, ID_Jugador: j.jugadorId, Estado: j.estado, EsInvitado: j.esInvitado });
+          if (j.estado) {
+            var regOrig = jugBackup.find(function(r) { return r.ID_Jugador === j.jugadorId; });
+            var justifFields = j.limpiarJustif
+              ? { TieneJustificacion: false, TipoJustificacion: '', MotivoCategoria: '' }
+              : (regOrig ? { TieneJustificacion: regOrig.TieneJustificacion, TipoJustificacion: regOrig.TipoJustificacion, MotivoCategoria: regOrig.MotivoCategoria } : {});
+            App.cache.asistJugadores.push(Object.assign(justifFields, { ID_Sesion: sesionId, ID_Jugador: j.jugadorId, Estado: j.estado, EsInvitado: j.esInvitado }));
+          }
         });
         App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
         entrenadores.forEach(function(e) {
@@ -959,7 +1046,7 @@ const App = {
         if (!sesionId || App.state.currentView !== 'sesion') return;
         var jugadores = [];
         document.querySelectorAll('#sesion-jugs .jug-card').forEach(function(c) {
-          if (c.dataset.estado) jugadores.push({jugadorId:c.dataset.id, estado:c.dataset.estado, esInvitado:c.dataset.inv==='true'});
+          if (c.dataset.estado) jugadores.push({jugadorId:c.dataset.id, estado:c.dataset.estado, esInvitado:c.dataset.inv==='true', limpiarJustif: c.dataset.justifCleared === 'true'});
         });
         var entrenadores = [];
         document.querySelectorAll('#sesion-ents .ent-row').forEach(function(c) {
@@ -969,9 +1056,16 @@ const App = {
         App.sync.run('guardarAsistenciaCompleta', [sesionId, {jugadores:jugadores, entrenadores:entrenadores}])
           .then(function(res) {
             if (!res || !res.success) return;
+            var prevRecsAuto = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === sesionId; });
             App.cache.asistJugadores = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
             jugadores.forEach(function(j) {
-              if (j.estado) App.cache.asistJugadores.push({ ID_Sesion: sesionId, ID_Jugador: j.jugadorId, Estado: j.estado, EsInvitado: j.esInvitado });
+              if (j.estado) {
+                var regOrig = prevRecsAuto.find(function(r) { return r.ID_Jugador === j.jugadorId; });
+                var justifFields = j.limpiarJustif
+                  ? { TieneJustificacion: false, TipoJustificacion: '', MotivoCategoria: '' }
+                  : (regOrig ? { TieneJustificacion: regOrig.TieneJustificacion, TipoJustificacion: regOrig.TipoJustificacion, MotivoCategoria: regOrig.MotivoCategoria } : {});
+                App.cache.asistJugadores.push(Object.assign(justifFields, { ID_Sesion: sesionId, ID_Jugador: j.jugadorId, Estado: j.estado, EsInvitado: j.esInvitado }));
+              }
             });
             App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
             entrenadores.forEach(function(e) {
@@ -1159,6 +1253,45 @@ const App = {
           }
         }
 
+        // Bloque incidencias justificadas
+        var justificadas = data.jugadores.filter(function(item) {
+          return (item.estado === 'A' || item.estado === 'R') && item.tieneJustif;
+        });
+        App.views['sesion-guardada']._justifItems = justificadas.map(function(item) {
+          var j = item.jugador;
+          return {
+            nombre: j.Apellidos + ', ' + j.Nombre,
+            fecha: sesion.Fecha,
+            tipo: item.tipoJustif || (item.estado === 'A' ? 'Ausencia' : 'Retraso'),
+            motivo: item.motivoJustif || '',
+            mensaje: item.mensajeJustif || '(Sin mensaje generado)',
+          };
+        });
+        var justifBloque = document.getElementById('sesion-ro-justif-bloque');
+        var justifLista  = document.getElementById('sesion-ro-justif-lista');
+        if (justifBloque && justifLista) {
+          if (justificadas.length) {
+            justifBloque.style.display = '';
+            justifLista.innerHTML = justificadas.map(function(item, idx) {
+              var j = item.jugador;
+              var chipClass = item.estado === 'A' ? 'A' : 'R';
+              var tipoLabel = item.estado === 'A' ? 'Ausente' : 'Retraso';
+              return '<div class="justif-ro-item" onclick="App.views[\'sesion-guardada\'].verJustif(' + idx + ')">' +
+                '<div class="jrm-avatar" style="background:var(--verde);color:#fff;flex-shrink:0">' + (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '') + '</div>' +
+                '<div style="flex:1;min-width:0">' +
+                  '<div class="li-name" style="font-size:.86rem">' + _esc(j.Apellidos) + ', ' + _esc(j.Nombre) + '</div>' +
+                  (item.motivoJustif ? '<div style="font-size:.73rem;color:var(--texto-sec)">' + _esc(item.motivoJustif) + '</div>' : '') +
+                '</div>' +
+                '<span class="ro-chip ' + chipClass + '" style="font-size:.65rem;flex-shrink:0">' + tipoLabel + '</span>' +
+                '<span class="justif-badge" style="flex-shrink:0">&#x2713;</span>' +
+                '<button class="btn-justif-pdf" onclick="event.stopPropagation();App.views[\'sesion-guardada\'].descargarPDF(' + idx + ')" title="Descargar justificación en PDF">&#x21E9;&nbsp;PDF</button>' +
+                '</div>';
+            }).join('');
+          } else {
+            justifBloque.style.display = 'none';
+          }
+        }
+
         document.getElementById('sesion-ro-jugs').innerHTML = data.jugadores.length
           ? data.jugadores.map(function(item) {
               var j = item.jugador;
@@ -1193,6 +1326,57 @@ const App = {
                 '<span class="ro-chip ' + chipClass + '">' + chipLabel + '</span></div>';
             }).join('')
           : '<div class="empty-state" style="padding:20px"><p>Sin entrenadores</p></div>';
+      },
+
+      _justifItems: [],
+
+      verJustif: function(idx) {
+        var item = (App.views['sesion-guardada']._justifItems || [])[idx];
+        if (!item) return;
+        App.openModal('Justificaci\u00f3n \u2014 ' + item.nombre,
+          '<div style="padding:0 4px">' +
+          '<div style="font-size:.75rem;color:var(--texto-sec);margin-bottom:12px">' +
+          _esc(item.fecha) + ' &middot; ' + _esc(item.tipo) + (item.motivo ? ' &middot; ' + _esc(item.motivo) : '') +
+          '</div>' +
+          '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.85rem;line-height:1.6;margin:0;padding:12px;background:var(--fondo);border-radius:8px;border:1px solid var(--borde)">' + _esc(item.mensaje) + '</pre>' +
+          '<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">' +
+          '<button class="btn btn-secondary" onclick="App.closeModal()">Cerrar</button>' +
+          '<button class="btn btn-primary" onclick="App.views[\'sesion-guardada\'].descargarPDF(' + idx + ')">&#x21E9;&nbsp;PDF</button>' +
+          '</div></div>'
+        );
+      },
+
+      descargarPDF: function(idx) {
+        var item = (App.views['sesion-guardada']._justifItems || [])[idx];
+        if (!item) return;
+        var safeName = (item.nombre + '_' + item.fecha + '_' + item.tipo).replace(/[^a-zA-Z\u00c0-\u024f0-9_\-]/g, '_');
+        var titulo = 'Justificacion_' + safeName + '.pdf';
+        var msgHtml = _esc(item.mensaje).replace(/\n/g, '<br>');
+        var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + titulo + '</title>' +
+          '<style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;max-width:620px;margin:40px auto;color:#222;line-height:1.6;padding:0 16px}' +
+          'h2{font-size:1.15rem;border-bottom:2px solid #4CAF50;padding-bottom:8px;color:#2e7d32;margin-top:0}' +
+          '.meta{font-size:.85rem;color:#555;margin-bottom:20px;line-height:2}' +
+          '.msg{font-size:.92rem;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;padding:16px;white-space:pre-wrap}' +
+          '.footer{margin-top:32px;font-size:.75rem;color:#999;text-align:center}' +
+          '.print-btn{display:block;margin:28px auto 0;padding:10px 28px;background:#4CAF50;color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer}' +
+          '@media print{.print-btn{display:none}}</style>' +
+          '</head><body>' +
+          '<h2>Justificaci\u00f3n de incidencia \u2014 CB Baeza</h2>' +
+          '<div class="meta">' +
+          '<strong>Jugador:</strong> ' + _esc(item.nombre) + '<br>' +
+          '<strong>Fecha:</strong> ' + _esc(item.fecha) + '<br>' +
+          '<strong>Tipo:</strong> ' + _esc(item.tipo) + (item.motivo ? '<br><strong>Motivo:</strong> ' + _esc(item.motivo) : '') +
+          '</div>' +
+          '<div class="msg">' + msgHtml + '</div>' +
+          '<div class="footer">Generado autom\u00e1ticamente \u2014 CB Baeza</div>' +
+          '<button class="print-btn" onclick="window.print()">Guardar como PDF</button>' +
+          '<script>window.addEventListener(\'load\',function(){setTimeout(function(){window.print();},300);});<\/script>' +
+          '</body></html>';
+        var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var win = window.open(url, '_blank');
+        if (win) win.document.title = titulo;
+        setTimeout(function() { URL.revokeObjectURL(url); }, 60000);
       },
 
       editar: function() {
@@ -3304,5 +3488,7 @@ document.addEventListener('DOMContentLoaded', function() {
     hideLoading();
     _clientLog('dom_content_loaded_error', { error: e && e.message ? e.message : String(e) });
   }
+  // Cerrar menú de usuario al hacer clic fuera
+  document.addEventListener('click', function() { App.closeUserMenu(); });
 });
 </script>
