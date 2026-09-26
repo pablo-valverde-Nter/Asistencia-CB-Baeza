@@ -2,6 +2,9 @@
 // ================================================================
 // CB Baeza -- SPA principal
 // ================================================================
+const SUPABASE_REALTIME_URL = 'https://rodbxxlhyapmwrgbthqu.supabase.co';
+const SUPABASE_REALTIME_KEY = 'sb_publishable__M-suWx_NVSqviFGL64AOA_zfT-WxGB';
+
 const App = {
 
   state: {
@@ -170,6 +173,7 @@ const App = {
           return; 
         }
         App._applyBootstrapData(res);
+        App.realtime.start();
         _clientLog('init_cargarDatos_ok', { traceId: res.traceId || null, currentView: App.state.currentView });
         
         if (App.state.currentView === 'login') {
@@ -231,6 +235,7 @@ const App = {
           App.state.auth = auth;
           _setStoredAuth(JSON.stringify(auth));
           App._applyBootstrapData(res);
+          App.realtime.start();
           showToast('Sesión iniciada', 'success');
           document.getElementById(tipo === 'jugador' ? 'login-usuario' : 'login-email').value = '';
           document.getElementById('login-pin').value = '';
@@ -266,6 +271,7 @@ const App = {
 
   cerrarSesion(reason) {
     _clientLog('cerrarSesion', { reason: reason || 'manual_or_unknown', view: App.state.currentView || null });
+    App.realtime.stop();
     hideLoading(); // Garantiza que el overlay no quede visible si se llama durante la carga inicial
     App.state._authReqSeq++;
     App.state.auth = null;
@@ -419,6 +425,7 @@ const App = {
     }
 
     if (App.views[view] && App.views[view].render) App.views[view].render(params || {});
+    if (App.realtime) App.realtime.flushPending();
   },
 
   goBack() {
@@ -3012,6 +3019,187 @@ const App = {
   }, // fin views
 
 }; // fin App
+
+App.realtime = {
+  client: null,
+  channel: null,
+  started: false,
+  connected: false,
+  refreshing: false,
+  pending: false,
+  debounceTimer: null,
+  fallbackTimer: null,
+  retryTimer: null,
+  safeViews: new Set([
+    'equipos', 'gestion', 'sesiones', 'sesion-guardada', 'equipos-admin',
+    'jugadores-admin', 'entrenadores-admin', 'historial-equipo',
+    'jugador-detalle', 'entrenador-detalle', 'equipo-detalle',
+    'perfil-jugador', 'mis-entrenamientos', 'detalle-sesion-jugador',
+    'mis-stats', 'mi-equipo',
+  ]),
+
+  start: function() {
+    if (!App.state.auth || this.started) return;
+    this.started = true;
+
+    if (window.supabase && window.supabase.createClient) {
+      try {
+        this.client = window.supabase.createClient(SUPABASE_REALTIME_URL, SUPABASE_REALTIME_KEY, {
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+        });
+        var self = this;
+        this.channel = this.client
+          .channel('cb-baeza-app-sync')
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'app_sync_state',
+          }, function() {
+            self.requestRefresh(250);
+          })
+          .subscribe(function(status, error) {
+            if (status === 'SUBSCRIBED') {
+              self.connected = true;
+              self.requestRefresh(150);
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              self.connected = false;
+              _clientLog('realtime_disconnected', { status: status, error: error ? error.message : null });
+            }
+          });
+      } catch (error) {
+        this.connected = false;
+        _clientLog('realtime_start_failed', { error: error.message });
+      }
+    } else {
+      _clientLog('realtime_sdk_unavailable', {});
+    }
+
+    if (!this.fallbackTimer) {
+      var realtime = this;
+      this.fallbackTimer = setInterval(function() {
+        if (App.state.auth && !realtime.connected) realtime.requestRefresh(0);
+      }, 30000);
+    }
+
+    this._onVisibilityChange = function() {
+      if (document.visibilityState === 'visible' && App.state.auth) {
+        this.requestRefresh(100);
+      }
+    }.bind(this);
+    document.addEventListener('visibilitychange', this._onVisibilityChange);
+  },
+
+  stop: function() {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    if (this.fallbackTimer) clearInterval(this.fallbackTimer);
+    if (this.client && this.channel) this.client.removeChannel(this.channel);
+    if (this._onVisibilityChange) document.removeEventListener('visibilitychange', this._onVisibilityChange);
+    this.channel = null;
+    this.client = null;
+    this.started = false;
+    this.connected = false;
+    this.refreshing = false;
+    this.pending = false;
+    this.debounceTimer = null;
+    this.fallbackTimer = null;
+    this.retryTimer = null;
+    this._onVisibilityChange = null;
+  },
+
+  canRefreshNow: function() {
+    if (!App.state.auth || !this.safeViews.has(App.state.currentView) || App.state._formIsDirty) return false;
+    if (document.visibilityState === 'hidden') return false;
+    var modal = document.getElementById('modal-overlay');
+    if (modal && modal.classList.contains('open')) return false;
+    var justificationModal = document.getElementById('modal-justificacion');
+    if (justificationModal && !justificationModal.classList.contains('hidden')) return false;
+    return true;
+  },
+
+  requestRefresh: function(delay) {
+    if (!this.canRefreshNow()) {
+      this.pending = true;
+      return;
+    }
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    var self = this;
+    this.debounceTimer = setTimeout(function() {
+      self.debounceTimer = null;
+      self.refresh();
+    }, delay || 0);
+  },
+
+  flushPending: function() {
+    if (this.pending && this.canRefreshNow()) {
+      this.pending = false;
+      this.requestRefresh(100);
+    }
+  },
+
+  scheduleRetry: function() {
+    this.pending = false;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    var self = this;
+    this.retryTimer = setTimeout(function() {
+      self.retryTimer = null;
+      self.pending = true;
+      self.flushPending();
+    }, 15000);
+  },
+
+  refresh: function() {
+    if (!this.canRefreshNow()) {
+      this.pending = true;
+      return;
+    }
+    if (this.refreshing) {
+      this.pending = true;
+      return;
+    }
+
+    this.refreshing = true;
+    this.pending = false;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    var requestView = App.state.currentView;
+    var requestAuth = JSON.stringify(App.state.auth);
+    App.sync.start();
+    var self = this;
+
+    server('cargarDatos')
+      .then(function(res) {
+        if (JSON.stringify(App.state.auth) !== requestAuth) return;
+        if (!res || !res.success) {
+          if (res && res.stage === 'auth_context') App.cerrarSesion('realtime_auth_invalid');
+          else {
+            _clientLog('realtime_refresh_failed', { error: res && res.error ? res.error : null });
+            self.scheduleRetry();
+          }
+          return;
+        }
+        if (App.state.currentView !== requestView || !self.canRefreshNow()) {
+          self.pending = true;
+          return;
+        }
+        App._applyBootstrapData(res);
+        if (App.state.currentView === requestView && self.safeViews.has(requestView)) {
+          App.navigate(requestView, {}, false);
+        }
+      })
+      .catch(function(error) {
+        self.scheduleRetry();
+        _clientLog('realtime_refresh_network_error', { error: error && error.message ? error.message : null });
+      })
+      .then(function() {
+        App.sync.done();
+        self.refreshing = false;
+        self.flushPending();
+      });
+  },
+};
 
 // ================================================================
 // App.sync — Módulo de sincronización en segundo plano

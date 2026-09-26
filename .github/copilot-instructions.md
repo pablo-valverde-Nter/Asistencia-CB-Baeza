@@ -3,7 +3,7 @@
 ## Descripción del proyecto
 
 Aplicación web para la gestión de asistencia de entrenamientos del Club de Baloncesto Baeza.
-Desarrollada con **Google Apps Script** (GAS) + **HtmlService** (SPA) y **Google Sheets** como base de datos.
+Desarrollada con **Google Apps Script** (GAS) + **HtmlService** (SPA) y **Supabase PostgreSQL** como base de datos.
 El deporte es siempre **baloncesto** — no existe esa variable en ningún modelo.
 
 ---
@@ -14,9 +14,9 @@ El deporte es siempre **baloncesto** — no existe esa variable en ningún model
 |------|-----------|
 | Backend | Google Apps Script (`.gs`) — V8 runtime |
 | Frontend | HTML + CSS + JavaScript vanilla servido por `HtmlService` |
-| Base de datos | Google Sheets (una hoja de cálculo por entorno) |
+| Base de datos | Supabase PostgreSQL vía PostgREST; clave secreta guardada en Script Properties |
 | Comunicación cliente-servidor | `google.script.run` (asíncrono) |
-| Autenticación | `Session.getActiveUser().getEmail()` — Google OAuth |
+| Autenticación | Validación propia en Apps Script: email/PIN para entrenadores y usuario/PIN para jugadores |
 | Despliegue | Apps Script Web App (Execute as: Me, Access: Anyone with Google Account) |
 
 ---
@@ -25,25 +25,27 @@ El deporte es siempre **baloncesto** — no existe esa variable en ningún model
 
 ```
 src/
-  Config.gs          → ID del Spreadsheet, nombres de hojas, constantes
+  Config.gs          → nombres de tablas, permisos, roles y constantes
   Auth.gs            → Control de acceso: roles, permisos por equipo, email lookup
-  DataAccess.gs      → CRUD genérico sobre Sheets (getSheet, appendRow, updateRow, deleteRow)
+  Schema.gs          → esquema/allowlist de tablas y columnas Supabase
+  DataAccess.gs      → CRUD genérico sobre Supabase PostgREST
   Equipos.gs         → Lógica de equipos, jugadores y entrenadores
   Sesiones.gs        → Generación automática de sesiones + sesiones extra
   Asistencia.gs      → Registro y consulta de asistencia de jugadores y entrenadores
-  Informes.gs        → Exportación a Sheets y generación de estadísticas
   Code.gs            → doGet(), endpoints públicos (funciones llamadas por google.script.run)
 ui/
   Index.html         → Shell SPA: navegación + contenedor de vistas
-  styles.css         → Estilos globales; colores de estado: verde=#4CAF50 rojo=#F44336 amarillo=#FFC107
-  app.js             → Lógica SPA: routing, llamadas a google.script.run, renderizado de vistas
+  styles.html        → Estilos de la SPA
+  app.html           → Lógica SPA: routing, llamadas a google.script.run, renderizado de vistas
 ```
+
+No recrear utilidades de migración, datos semilla o inicialización de Google Sheets en el proyecto de producción.
 
 ---
 
-## Modelo de datos — Resumen de hojas (Google Sheets)
+## Modelo de datos — Tablas Supabase
 
-Todas las hojas usan la **primera fila como cabecera**. Los IDs son strings únicos generados con `Utilities.getUuid()`.
+Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS` conserva los nombres históricos de las tablas para el acceso PostgREST.
 
 | Hoja | Propósito |
 |------|-----------|
@@ -102,8 +104,8 @@ Todas las hojas usan la **primera fila como cabecera**. Los IDs son strings úni
 - Siempre usar **V8 runtime** (declarado en `appsscript.json`).
 - Todas las funciones expuestas al cliente deben estar en `Code.gs` y ser llamadas vía `google.script.run`.
 - Las funciones en otros `.gs` son internas — no exponer directamente.
-- Usar `SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID)` — nunca `getActiveSpreadsheet()` en producción.
-- Cachear objetos `Sheet` dentro de la misma ejecución; no obtenerlos repetidamente.
+- El acceso operativo a datos usa Supabase PostgREST desde Apps Script. Leer credenciales solo de Script Properties (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`); nunca exponer la clave al navegador.
+- La SPA recibe solo cambios de `public.app_sync_state` vía Supabase Realtime y recarga los datos mediante `cargarDatos(auth)`. No suscribir el navegador a tablas de negocio (contienen PIN, códigos familiares y datos personales); mantener la publishable key como única clave del cliente.
 - Manejar errores con `try/catch` y devolver objetos `{ success: false, error: message }`.
 - Los IDs siempre se generan con `Utilities.getUuid()`.
 - Las fechas se almacenan como strings `YYYY-MM-DD` para evitar problemas de zona horaria.
@@ -118,7 +120,7 @@ Todas las hojas usan la **primera fila como cabecera**. Los IDs son strings úni
 
 ### Nomenclatura
 - Funciones GAS: `camelCase` (ej. `getJugadoresByEquipo`, `registrarAsistencia`).
-- Hojas de Sheets: `PascalCase_ConGuion` como se define en `Config.gs`.
+- Tablas Supabase: usar nombres y columnas declarados en `Schema.gs`.
 - Variables locales: `camelCase`.
 - Constantes globales: `UPPER_SNAKE_CASE` dentro del objeto `CONFIG`.
 
@@ -149,24 +151,18 @@ Modalidades: `Masculino` | `Femenino` | `Mixto`
 
 ## Patrones de uso frecuente
 
-### Leer todos los registros de una hoja
+### Leer registros de una tabla Supabase
 ```javascript
 // En DataAccess.gs
-function getSheetData(sheetName) {
-  const sheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(sheetName);
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  return data.slice(1).map(row => {
-    const obj = {};
-    headers.forEach((h, i) => obj[h] = row[i]);
-    return obj;
-  });
+function getSheetData(tableName) {
+  assertSupabaseTable_(tableName);
+  return supabaseRequest_(tableName, 'get', 'select=*');
 }
 ```
 
 ### Llamada cliente → servidor con feedback
 ```javascript
-// En app.js
+// En app.html
 function guardarAsistencia(sesionId, asistencias) {
   showLoading(true);
   google.script.run

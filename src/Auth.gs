@@ -137,22 +137,6 @@ const Auth = {
   },
 
   /**
-   * Acceso de solo lectura: entrenador (Entrenador o Visor), admin o jugador autenticado.
-   */
-  requireAccesoLecturaEquipo(equipoId, auth) {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    if (Auth.isAdmin(auth) || Auth.isJugador(auth)) return;
-
-    const ent = Auth.getEntrenadorActual(auth);
-    if (!ent) throw new Error('No tienes acceso a este equipo.');
-
-    const rel = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', ent.ID)
-      .find(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
-    if (!rel) throw new Error('No tienes acceso a este equipo.');
-  },
-
-  /**
    * Verifica el CodigoPadres de un jugador para autorizar justificaciones.
    * @param {string} jugadorId
    * @param {string} codigo

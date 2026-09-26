@@ -56,21 +56,6 @@ function iniciarSesion(tipo, credencial, pin) {
   }
 }
 
-// ── Contexto inicial ──────────────────────────────────────────────────────────
-
-/**
- * Devuelve el contexto del usuario validado por email y PIN.
- * @param {Object} auth
- * @returns {Object}
- */
-function getContextoUsuario(auth) {
-  try {
-    return Auth.getContextoUsuario(auth);
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-}
-
 // ── Carga completa (una sola llamada → cliente trabaja en memoria) ─────────────
 
 /**
@@ -211,36 +196,6 @@ function cargarDatos(auth) {
   }
 }
 
-// ── Temporadas ────────────────────────────────────────────────────────────────
-
-function getTemporadaActiva(auth) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    const temporadas = getSheetData(CONFIG.SHEETS.TEMPORADAS);
-    const activa = temporadas.find(t => t.Activa === true || t.Activa === 'TRUE');
-    return { success: true, temporada: activa || null };
-  } catch (e) { return { success: false, error: e.message }; }
-}
-
-// ── Equipos ───────────────────────────────────────────────────────────────────
-
-function getEquipos(auth) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    return { success: true, equipos: Equipos.getEquipos() };
-  } catch (e) { return { success: false, error: e.message }; }
-}
-
-function getEquipoById(auth, equipoId) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    return { success: true, equipo: Equipos.getEquipoById(equipoId) };
-  } catch (e) { return { success: false, error: e.message }; }
-}
-
 function crearEquipo(auth, datos) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
@@ -269,22 +224,6 @@ function eliminarEquipo(auth, equipoId) {
 }
 
 // ── Jugadores ─────────────────────────────────────────────────────────────────
-
-function getJugadores(auth) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    return { success: true, jugadores: Equipos.getJugadores() };
-  } catch (e) { return { success: false, error: e.message }; }
-}
-
-function getJugadoresByEquipo(auth, equipoId) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    return { success: true, jugadores: Equipos.getJugadoresByEquipo(equipoId) };
-  } catch (e) { return { success: false, error: e.message }; }
-}
 
 function crearJugador(auth, datos) {
   try {
@@ -357,22 +296,6 @@ function actualizarCredencialesJugador(auth, jugadorId, nuevoUsuario, nuevoPin, 
 
 // ── Entrenadores ──────────────────────────────────────────────────────────────
 
-function getEntrenadores(auth) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    return { success: true, entrenadores: Equipos.getEntrenadores() };
-  } catch (e) { return { success: false, error: e.message }; }
-}
-
-function getEntrenadoresByEquipo(auth, equipoId) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    return { success: true, entrenadores: Equipos.getEntrenadoresByEquipo(equipoId) };
-  } catch (e) { return { success: false, error: e.message }; }
-}
-
 function crearEntrenador(auth, datos) {
   try {
     Auth.requireAdmin(auth);
@@ -432,37 +355,7 @@ function desasignarEntrenadorDeEquipo(auth, entrenadorId, equipoId) {
   }
 }
 
-/** Añade un equipo a la lista de Visor del entrenador autenticado */
-function anadirEquipoVisor(auth, equipoId) {
-  try {
-    Auth.requireEntrenadorOAdmin(auth);
-    const ent = Auth.getEntrenadorActual(auth);
-    if (!ent) throw new Error('No se encontró el entrenador.');
-    return { success: true, relacion: Equipos.anadirEquipoVisor(ent.ID, equipoId) };
-  } catch (e) { return { success: false, error: e.message }; }
-}
-
-/** Elimina un equipo de la lista de Visor del entrenador autenticado */
-function eliminarEquipoVisor(auth, equipoId) {
-  try {
-    Auth.requireEntrenadorOAdmin(auth);
-    const ent = Auth.getEntrenadorActual(auth);
-    if (!ent) throw new Error('No se encontró el entrenador.');
-    return { success: true, eliminado: Equipos.eliminarEquipoVisor(ent.ID, equipoId) };
-  } catch (e) { return { success: false, error: e.message }; }
-}
-
 // ── Sesiones ──────────────────────────────────────────────────────────────────
-
-function getSesionesByEquipo(auth, equipoId) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    return { success: true, sesiones: Sesiones.getSesionesByEquipo(equipoId) };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-}
 
 function generarSesionesSemana(auth, equipoId) {
   try {
@@ -482,15 +375,6 @@ function crearSesionExtra(auth, equipoId, datos) {
   }
 }
 
-function actualizarSesion(auth, sesionId, datos) {
-  try {
-    Auth.requireEntrenadorOAdmin(auth);
-    return { success: true, actualizado: Sesiones.actualizarSesion(sesionId, datos) };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-}
-
 function eliminarSesion(auth, sesionId) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
@@ -501,36 +385,6 @@ function eliminarSesion(auth, sesionId) {
 }
 
 // ── Asistencia ────────────────────────────────────────────────────────────────
-
-function getAsistenciaSesion(auth, sesionId) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
-    if (sesion) Auth.requireAccesoLecturaEquipo(sesion.ID_Equipo, auth);
-    return { success: true, asistencia: Asistencia.getAsistenciaSesion(sesionId) };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-}
-
-function registrarAsistenciaJugador(auth, sesionId, jugadorId, estado, esInvitado) {
-  try {
-    Auth.requireEntrenadorOAdmin(auth);
-    return { success: true, registro: Asistencia.registrarAsistenciaJugador(sesionId, jugadorId, estado, esInvitado) };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-}
-
-function registrarAsistenciaEntrenador(auth, sesionId, entrenadorId, asistio, esInvitado) {
-  try {
-    Auth.requireEntrenadorOAdmin(auth);
-    return { success: true, registro: Asistencia.registrarAsistenciaEntrenador(sesionId, entrenadorId, asistio, esInvitado) };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-}
 
 function guardarAsistenciaCompleta(auth, sesionId, asistencias) {
   try {
@@ -551,44 +405,6 @@ function enviarJustificacion(auth, sesionId, jugadorId, codigoPadres, tipoIncide
     if (!v.success) throw new Error(v.error);
     return Asistencia.registrarJustificacion(sesionId, jugadorId, codigoPadres, tipoIncidencia, motivo, detalle, horaIncorporacion);
   } catch (e) { return { success: false, error: e.message }; }
-}
-
-/** Devuelve las justificaciones de una sesión — solo entrenadores/admins */
-function getJustificacionesSesion(auth, sesionId) {
-  try {
-    Auth.requireEntrenadorOAdmin(auth);
-    return { success: true, justificaciones: Asistencia.getJustificacionesSesion(sesionId) };
-  } catch (e) { return { success: false, error: e.message }; }
-}
-
-// ── Informes ──────────────────────────────────────────────────────────────────
-
-function getEstadisticasEquipo(auth, equipoId, temporadaId) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    return { success: true, estadisticas: Informes.getEstadisticasEquipo(equipoId, temporadaId) };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-}
-
-/** Estadísticas de asistencia de un jugador concreto — todos los roles */
-function getEstadisticasJugador(auth, jugadorId) {
-  try {
-    const v = Auth.validate(auth);
-    if (!v.success) throw new Error(v.error);
-    return { success: true, estadisticas: Informes.getEstadisticasJugador(jugadorId) };
-  } catch (e) { return { success: false, error: e.message }; }
-}
-
-function exportarInformeASheets(auth, equipoId, temporadaId) {
-  try {
-    Auth.requireAdmin(auth);
-    return { success: true, url: Informes.exportarASheets(equipoId, temporadaId) };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
 }
 
 function setHorariosEquipo(auth, equipoId, horarios) {

@@ -1,14 +1,10 @@
 /**
  * Config.gs
  * Constantes globales de la aplicación CB Baeza — Gestión de Asistencia.
- * IMPORTANTE: Actualizar SPREADSHEET_ID tras crear el Google Spreadsheet.
  */
 
 const CONFIG = {
-  // ── Base de datos ────────────────────────────────────────────────────────────
-  SPREADSHEET_ID: '1wUUb0wpeYqMjJui5Qbs5OIDJdY8tMQxLXoFuO2jcoFc',
-
-  // ── Nombres de hojas ──────────────────────────────────────────────────────────
+  // ── Tablas Supabase ──────────────────────────────────────────────────────────
   SHEETS: {
     TEMPORADAS:           'Temporadas',
     EQUIPOS:              'Equipos',

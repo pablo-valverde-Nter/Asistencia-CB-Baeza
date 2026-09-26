@@ -20,18 +20,6 @@ const Sesiones = {
       .sort((a, b) => b.Fecha.localeCompare(a.Fecha));
   },
 
-  /**
-   * Devuelve las sesiones de un equipo en un rango de fechas (ambas inclusive).
-   * @param {string} equipoId
-   * @param {string} fechaDesde - YYYY-MM-DD
-   * @param {string} fechaHasta - YYYY-MM-DD
-   * @returns {Object[]}
-   */
-  getSesionesByRango(equipoId, fechaDesde, fechaHasta) {
-    return Sesiones.getSesionesByEquipo(equipoId)
-      .filter(s => s.Fecha >= fechaDesde && s.Fecha <= fechaHasta);
-  },
-
   // ══════════════════════════════════════════════════════════════════════════════
   // GENERACIÓN AUTOMÁTICA
   // ══════════════════════════════════════════════════════════════════════════════
@@ -135,21 +123,6 @@ const Sesiones = {
   },
 
   /**
-   * Actualiza fecha, horas o notas de una sesión existente.
-   * @param {string} sesionId
-   * @param {{ Fecha?, HoraInicio?, HoraFin?, Notas? }} datos
-   * @returns {boolean}
-   */
-  actualizarSesion(sesionId, datos) {
-    const campos = {};
-    if (datos.Fecha)      { Sesiones._validarFecha_(datos.Fecha); campos.Fecha = datos.Fecha; }
-    if (datos.HoraInicio) { Sesiones._validarHora_(datos.HoraInicio); campos.HoraInicio = datos.HoraInicio; }
-    if (datos.HoraFin)    { Sesiones._validarHora_(datos.HoraFin);    campos.HoraFin    = datos.HoraFin;    }
-    if (datos.Notas !== undefined) campos.Notas = datos.Notas;
-    return updateRow(CONFIG.SHEETS.SESIONES, sesionId, campos);
-  },
-
-  /**
    * Elimina una sesión y en cascada todas sus asistencias.
    * @param {string} sesionId
    * @returns {boolean}
@@ -158,29 +131,6 @@ const Sesiones = {
     deleteWhere(CONFIG.SHEETS.ASIST_JUGADORES,    'ID_Sesion', sesionId);
     deleteWhere(CONFIG.SHEETS.ASIST_ENTRENADORES, 'ID_Sesion', sesionId);
     return deleteRow(CONFIG.SHEETS.SESIONES, sesionId);
-  },
-
-  // ══════════════════════════════════════════════════════════════════════════════
-  // TRIGGERS
-  // ══════════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Instala un trigger semanal (lunes a las 6:00) para generar sesiones automáticamente.
-   * Ejecutar una sola vez desde el editor de Apps Script.
-   */
-  instalarTriggerSemanal() {
-    // Eliminar triggers previos del mismo tipo para evitar duplicados
-    ScriptApp.getProjectTriggers()
-      .filter(t => t.getHandlerFunction() === 'triggerGenerarSesiones')
-      .forEach(t => ScriptApp.deleteTrigger(t));
-
-    ScriptApp.newTrigger('triggerGenerarSesiones')
-      .timeBased()
-      .onWeekDay(ScriptApp.WeekDay.MONDAY)
-      .atHour(6)
-      .create();
-
-    Logger.log('✅ Trigger semanal instalado: lunes a las 6:00');
   },
 
   // ══════════════════════════════════════════════════════════════════════════════

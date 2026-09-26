@@ -1,189 +1,172 @@
 /**
  * DataAccess.gs
- * CRUD genérico sobre Google Sheets.
- * Todas las hojas tienen la primera fila como cabecera y una columna "ID".
+ * Acceso a Supabase PostgREST conservando la API CRUD usada por la app.
+ * Las credenciales se configuran en Script Properties, nunca en el cliente.
  */
 
-/**
- * Abre el Spreadsheet cacheando la referencia dentro de la misma ejecución.
- * @returns {GoogleAppsScript.Spreadsheet.Spreadsheet}
- */
-function getSpreadsheet_() {
-  if (!globalThis._ss) {
-    globalThis._ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+const SUPABASE_BATCH_SIZE = 500;
+const SUPABASE_BOOLEAN_FIELDS = new Set([
+  'Activa', 'Activo', 'EsAdmin', 'EsExtra', 'AsistenciaGuardada',
+  'EsInvitado', 'TieneJustificacion', 'NotificadoEntrenador', 'Asistio',
+]);
+
+function getSupabaseConfig_() {
+  const properties = PropertiesService.getScriptProperties();
+  const url = String(properties.getProperty('SUPABASE_URL') || '').replace(/\/+$/, '');
+  const key = properties.getProperty('SUPABASE_SECRET_KEY')
+    || properties.getProperty('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) {
+    throw new Error('Configura SUPABASE_URL y SUPABASE_SECRET_KEY en las propiedades del script.');
   }
-  return globalThis._ss;
+  return { url: url, key: key };
 }
 
-/**
- * Obtiene una hoja por nombre.
- * @param {string} sheetName
- * @returns {GoogleAppsScript.Spreadsheet.Sheet}
- */
-function getSheet_(sheetName) {
-  const sheet = getSpreadsheet_().getSheetByName(sheetName);
-  if (!sheet) throw new Error(`Hoja no encontrada: ${sheetName}`);
-  return sheet;
+function assertSupabaseTable_(tableName) {
+  if (!SCHEMA[tableName]) throw new Error(`Tabla no permitida: ${tableName}`);
 }
 
-/**
- * Lee todos los registros de una hoja y los devuelve como array de objetos.
- * Los valores de tipo Date (que Google Sheets devuelve al leer celdas de fecha)
- * se convierten automáticamente a strings 'YYYY-MM-DD' para evitar errores
- * en comparaciones y llamadas a métodos de string como localeCompare().
- * @param {string} sheetName
- * @returns {Object[]}
- */
+function supabaseRequest_(tableName, method, query, payload, prefer, range) {
+  assertSupabaseTable_(tableName);
+  const config = getSupabaseConfig_();
+  const queryString = query ? `?${query}` : '';
+  const headers = {
+    apikey: config.key,
+    Accept: 'application/json',
+  };
+  if (!config.key.startsWith('sb_secret_')) {
+    headers.Authorization = `Bearer ${config.key}`;
+  }
+  if (payload !== undefined) headers['Content-Type'] = 'application/json';
+  if (prefer) headers.Prefer = prefer;
+  if (range) {
+    headers['Range-Unit'] = 'items';
+    headers.Range = range;
+  }
+
+  const options = {
+    method: method,
+    headers: headers,
+    muteHttpExceptions: true,
+  };
+  if (payload !== undefined) options.payload = JSON.stringify(payload);
+
+  const response = UrlFetchApp.fetch(
+    `${config.url}/rest/v1/${encodeURIComponent(tableName)}${queryString}`,
+    options
+  );
+  const status = response.getResponseCode();
+  const body = response.getContentText();
+  if (status < 200 || status >= 300) {
+    let detail = body;
+    try {
+      const error = JSON.parse(body);
+      detail = error.message || error.details || error.hint || body;
+    } catch (ignored) {
+      // Keep the raw response when PostgREST does not return JSON.
+    }
+    throw new Error(`Supabase respondió HTTP ${status}: ${detail}`);
+  }
+  if (!body) return [];
+  return JSON.parse(body);
+}
+
+function supabaseFilter_(field, value) {
+  return `${encodeURIComponent(field)}=eq.${encodeURIComponent(String(value))}`;
+}
+
+function normalizeSupabaseValue_(field, value) {
+  if (value === '' && SUPABASE_BOOLEAN_FIELDS.has(field)) return null;
+  if (field === 'DiaSemana' && value === '') return null;
+  return value;
+}
+
 function getSheetData(sheetName) {
-  const sheet = getSheet_(sheetName);
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return [];
-  const headers = data[0];
-  const tz = Session.getScriptTimeZone();
-  return data.slice(1).map(row => {
-    const obj = {};
-    headers.forEach((h, i) => {
-      let val = row[i];
-      if (val instanceof Date) {
-        if (isNaN(val)) {
-          // Celda vacía o fecha inválida
-          val = '';
-        } else if (val.getFullYear() < 1900) {
-          // Valor de tipo hora (fracción de día): formatear como HH:mm
-          val = Utilities.formatDate(val, tz, 'HH:mm');
-        } else {
-          // Fecha normal: formatear como YYYY-MM-DD
-          val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
-        }
-      }
-      obj[h] = val;
-    });
-    return obj;
-  });
+  assertSupabaseTable_(sheetName);
+  const rows = [];
+  for (let offset = 0; ; offset += SUPABASE_BATCH_SIZE) {
+    const page = supabaseRequest_(
+      sheetName,
+      'get',
+      `select=*&limit=${SUPABASE_BATCH_SIZE}&offset=${offset}`,
+      undefined,
+      undefined,
+      `${offset}-${offset + SUPABASE_BATCH_SIZE - 1}`
+    );
+    rows.push(...page);
+    if (page.length < SUPABASE_BATCH_SIZE) break;
+  }
+  return rows;
 }
 
-/**
- * Busca un registro por su ID.
- * @param {string} sheetName
- * @param {string} id
- * @returns {Object|null}
- */
 function findById(sheetName, id) {
-  const rows = getSheetData(sheetName);
-  return rows.find(r => r.ID === id) || null;
+  const rows = supabaseRequest_(sheetName, 'get', `${supabaseFilter_('ID', id)}&select=*&limit=1`);
+  return rows[0] || null;
 }
 
-/**
- * Busca todos los registros donde field === value.
- * @param {string} sheetName
- * @param {string} field
- * @param {*} value
- * @returns {Object[]}
- */
 function findWhere(sheetName, field, value) {
-  return getSheetData(sheetName).filter(r => r[field] === value);
+  assertSupabaseTable_(sheetName);
+  if (!SCHEMA[sheetName].includes(field)) throw new Error(`Campo no permitido: ${field}`);
+  return supabaseRequest_(sheetName, 'get', `${supabaseFilter_(field, value)}&select=*`);
 }
 
-/**
- * Busca todos los registros donde field está incluido en un array de values.
- * @param {string} sheetName
- * @param {string} field
- * @param {*[]} values
- * @returns {Object[]}
- */
 function findWhereIn(sheetName, field, values) {
-  const set = new Set(values);
-  return getSheetData(sheetName).filter(r => set.has(r[field]));
+  assertSupabaseTable_(sheetName);
+  if (!SCHEMA[sheetName].includes(field)) throw new Error(`Campo no permitido: ${field}`);
+  const wanted = new Set(values.map(String));
+  if (!wanted.size) return [];
+  return getSheetData(sheetName).filter(row => wanted.has(String(row[field])));
 }
 
-/**
- * Añade una nueva fila a la hoja. Genera ID automático si no se proporciona.
- * @param {string} sheetName
- * @param {Object} rowData - Objeto con los campos a insertar (deben coincidir con cabeceras).
- * @returns {Object} El objeto insertado con su ID.
- */
 function appendRow(sheetName, rowData) {
-  const sheet = getSheet_(sheetName);
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-
-  if (!rowData.ID) {
-    rowData.ID = Utilities.getUuid();
-  }
-
-  const row = headers.map(h => (rowData[h] !== undefined ? rowData[h] : ''));
-  sheet.appendRow(row);
-  return rowData;
+  assertSupabaseTable_(sheetName);
+  if (!rowData.ID) rowData.ID = Utilities.getUuid();
+  const payload = {};
+  SCHEMA[sheetName].forEach(field => {
+    payload[field] = normalizeSupabaseValue_(field, rowData[field] !== undefined ? rowData[field] : '');
+  });
+  const inserted = supabaseRequest_(sheetName, 'post', '', payload, 'return=representation');
+  return inserted[0] || rowData;
 }
 
-/**
- * Actualiza un registro existente buscándolo por ID.
- * Solo sobreescribe los campos presentes en updatedData.
- * @param {string} sheetName
- * @param {string} id
- * @param {Object} updatedData
- * @returns {boolean} true si se encontró y actualizó, false si no existe.
- */
 function updateRow(sheetName, id, updatedData) {
-  const sheet = getSheet_(sheetName);
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const idCol = headers.indexOf('ID');
-
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idCol]) === String(id)) {
-      headers.forEach((h, j) => {
-        if (updatedData[h] !== undefined) {
-          sheet.getRange(i + 1, j + 1).setValue(updatedData[h]);
-        }
-      });
-      return true;
+  assertSupabaseTable_(sheetName);
+  const payload = {};
+  SCHEMA[sheetName].forEach(field => {
+    if (updatedData[field] !== undefined) {
+      payload[field] = normalizeSupabaseValue_(field, updatedData[field]);
     }
-  }
-  return false;
+  });
+  if (!Object.keys(payload).length) return Boolean(findById(sheetName, id));
+  const updated = supabaseRequest_(
+    sheetName,
+    'patch',
+    `${supabaseFilter_('ID', id)}&select=ID`,
+    payload,
+    'return=representation'
+  );
+  return updated.length > 0;
 }
 
-/**
- * Elimina la fila con el ID especificado.
- * @param {string} sheetName
- * @param {string} id
- * @returns {boolean} true si se encontró y borró, false si no existe.
- */
 function deleteRow(sheetName, id) {
-  const sheet = getSheet_(sheetName);
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const idCol = headers.indexOf('ID');
-
-  // Recorrer de abajo arriba para no desplazar índices al borrar
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][idCol]) === String(id)) {
-      sheet.deleteRow(i + 1);
-      return true;
-    }
-  }
-  return false;
+  const deleted = supabaseRequest_(
+    sheetName,
+    'delete',
+    `${supabaseFilter_('ID', id)}&select=ID`,
+    undefined,
+    'return=representation'
+  );
+  return deleted.length > 0;
 }
 
-/**
- * Elimina todas las filas donde field === value (borrado en cascada).
- * @param {string} sheetName
- * @param {string} field
- * @param {*} value
- * @returns {number} Número de filas eliminadas.
- */
 function deleteWhere(sheetName, field, value) {
-  const sheet = getSheet_(sheetName);
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const fieldCol = headers.indexOf(field);
-  if (fieldCol === -1) return 0;
-
-  let deleted = 0;
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][fieldCol]) === String(value)) {
-      sheet.deleteRow(i + 1);
-      deleted++;
-    }
-  }
-  return deleted;
+  assertSupabaseTable_(sheetName);
+  if (!SCHEMA[sheetName].includes(field)) return 0;
+  const deleted = supabaseRequest_(
+    sheetName,
+    'delete',
+    `${supabaseFilter_(field, value)}&select=ID`,
+    undefined,
+    'return=representation'
+  );
+  return deleted.length;
 }

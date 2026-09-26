@@ -1,11 +1,12 @@
 # Modelo de Datos — CB Baeza Asistencia
 
-Google Spreadsheet como base de datos. Cada hoja es una tabla. Primera fila = cabecera.
-IDs generados con `Utilities.getUuid()`. Fechas como `YYYY-MM-DD`. Horas como `HH:MM`.
+Supabase PostgreSQL es la base de datos operativa. Las tablas y columnas conservan los nombres
+del esquema lógico; consulta `supabase/schema.sql` para el DDL.
+Los IDs se generan con `Utilities.getUuid()`. Fechas como `YYYY-MM-DD`. Horas como `HH:MM`.
 
 ---
 
-## Hojas y esquemas
+## Tablas y esquemas
 
 ### `Temporadas`
 | Campo | Tipo | Descripción |
@@ -42,7 +43,7 @@ Un equipo puede tener varios registros (uno por día de entrenamiento semanal).
 | `HoraInicio` | String (HH:MM) | Hora de inicio del entrenamiento |
 | `HoraFin` | String (HH:MM) | Hora de fin del entrenamiento |
 
-**Ejemplo:** Un equipo que entrena lunes y miércoles tendrá 2 filas en esta hoja.
+**Ejemplo:** Un equipo que entrena lunes y miércoles tendrá 2 filas en esta tabla.
 
 ---
 

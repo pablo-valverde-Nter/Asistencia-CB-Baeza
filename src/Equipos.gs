@@ -11,31 +11,6 @@ const Equipos = {
   // ══════════════════════════════════════════════════════════════════════════════
 
   /**
-   * Devuelve todos los equipos de la temporada activa.
-   * @returns {Object[]}
-   */
-  getEquipos() {
-    const temporadas = getSheetData(CONFIG.SHEETS.TEMPORADAS);
-    const activa = temporadas.find(t => t.Activa === true || t.Activa === 'TRUE');
-    if (!activa) return [];
-    return findWhere(CONFIG.SHEETS.EQUIPOS, 'ID_Temporada', activa.ID);
-  },
-
-  /**
-   * Devuelve un equipo por ID con sus horarios, jugadores y entrenadores.
-   * @param {string} equipoId
-   * @returns {Object}
-   */
-  getEquipoById(equipoId) {
-    const equipo = findById(CONFIG.SHEETS.EQUIPOS, equipoId);
-    if (!equipo) throw new Error(`Equipo no encontrado: ${equipoId}`);
-    equipo.horarios     = Equipos.getHorariosByEquipo(equipoId);
-    equipo.jugadores    = Equipos.getJugadoresByEquipo(equipoId);
-    equipo.entrenadores = Equipos.getEntrenadoresByEquipo(equipoId);
-    return equipo;
-  },
-
-  /**
    * Crea un nuevo equipo en la temporada activa.
    * @param {{ Nombre: string, Categoria: string, Modalidad: string }} datos
    * @returns {Object} Equipo creado.
@@ -99,16 +74,6 @@ const Equipos = {
   // ══════════════════════════════════════════════════════════════════════════════
 
   /**
-   * Devuelve el patrón de horario semanal de un equipo.
-   * @param {string} equipoId
-   * @returns {Object[]}
-   */
-  getHorariosByEquipo(equipoId) {
-    return findWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', equipoId)
-      .sort((a, b) => Number(a.DiaSemana) - Number(b.DiaSemana));
-  },
-
-  /**
    * Reemplaza el horario semanal completo de un equipo.
    * Elimina las filas anteriores e inserta las nuevas.
    * @param {string} equipoId
@@ -128,38 +93,6 @@ const Equipos = {
   // ══════════════════════════════════════════════════════════════════════════════
   // JUGADORES
   // ══════════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Devuelve todos los jugadores del club (registro global).
-   * @returns {Object[]}
-   */
-  getJugadores() {
-    return getSheetData(CONFIG.SHEETS.JUGADORES);
-  },
-
-  /**
-   * Devuelve los jugadores asignados a un equipo (principal o secundario),
-   * enriquecidos con el tipo de relación.
-   * @param {string} equipoId
-   * @returns {Object[]}
-   */
-  getJugadoresByEquipo(equipoId) {
-    const relaciones = findWhere(CONFIG.SHEETS.JUGADORES_EQUIPOS, 'ID_Equipo', equipoId)
-      .filter(r => r.Activo === true || r.Activo === 'TRUE');
-
-    const jugadoresIds = relaciones.map(r => r.ID_Jugador);
-    const jugadores    = findWhereIn(CONFIG.SHEETS.JUGADORES, 'ID', jugadoresIds);
-
-    // Combinar jugador + tipo de relación
-    return jugadores.map(j => {
-      const rel = relaciones.find(r => r.ID_Jugador === j.ID);
-      return { ...j, Tipo: rel ? rel.Tipo : '' };
-    }).sort((a, b) => {
-      // Primero principales, luego secundarios; dentro de cada grupo, por apellidos
-      if (a.Tipo !== b.Tipo) return a.Tipo === CONFIG.TIPOS_JUGADOR_EQUIPO.PRINCIPAL ? -1 : 1;
-      return `${a.Apellidos} ${a.Nombre}`.localeCompare(`${b.Apellidos} ${b.Nombre}`);
-    });
-  },
 
   /**
    * Crea un nuevo jugador en el registro global.
@@ -327,44 +260,6 @@ const Equipos = {
   // ══════════════════════════════════════════════════════════════════════════════
 
   /**
-   * Devuelve todos los entrenadores del club.
-   * @returns {Object[]}
-   */
-  getEntrenadores() {
-    return getSheetData(CONFIG.SHEETS.ENTRENADORES);
-  },
-
-  /**
-   * Devuelve los entrenadores asignados activamente a un equipo.
-   * @param {string} equipoId
-   * @returns {Object[]}
-   */
-  /**
-   * Devuelve entrenadores asignados activamente a un equipo, enriquecidos con TipoRol.
-   * Por defecto solo devuelve TipoRol=Entrenador (los que aparecen en sesiones).
-   * @param {string} equipoId
-   * @param {boolean} [incluirVisores=false]
-   */
-  getEntrenadoresByEquipo(equipoId, incluirVisores) {
-    const relaciones = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Equipo', equipoId)
-      .filter(r => {
-        if (!(r.Activo === true || r.Activo === 'TRUE')) return false;
-        if (!incluirVisores && r.TipoRol === CONFIG.TIPOS_ROL_ENTRENADOR.VISOR) return false;
-        return true;
-      });
-
-    const entrenadorIds = relaciones.map(r => r.ID_Entrenador);
-    const entrenadores  = findWhereIn(CONFIG.SHEETS.ENTRENADORES, 'ID', entrenadorIds);
-
-    return entrenadores
-      .map(e => {
-        const rel = relaciones.find(r => r.ID_Entrenador === e.ID);
-        return { ...e, TipoRol: rel ? (rel.TipoRol || CONFIG.TIPOS_ROL_ENTRENADOR.ENTRENADOR) : CONFIG.TIPOS_ROL_ENTRENADOR.ENTRENADOR };
-      })
-      .sort((a, b) => `${a.Apellidos} ${a.Nombre}`.localeCompare(`${b.Apellidos} ${b.Nombre}`));
-  },
-
-  /**
    * Crea un nuevo entrenador en el registro global.
    * @param {{ Nombre, Apellidos, Email, Telefono }} datos
    * @returns {Object} Entrenador creado.
@@ -460,41 +355,6 @@ const Equipos = {
       Activo:        true,
       TipoRol:       tipoRol,
     });
-  },
-
-  /**
-   * Añade un equipo como Visor para el entrenador indicado.
-   * Si ya es Entrenador del equipo, no hace nada (no degrada el rol).
-   */
-  anadirEquipoVisor(entrenadorId, equipoId) {
-    const existentes = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
-      .filter(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
-
-    if (existentes.length > 0) {
-      // Si ya es Entrenador, no degradar a Visor
-      if (existentes[0].TipoRol === CONFIG.TIPOS_ROL_ENTRENADOR.ENTRENADOR) {
-        return existentes[0]; // ya tiene acceso completo
-      }
-      return existentes[0]; // ya es Visor
-    }
-
-    return appendRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, {
-      ID_Entrenador: entrenadorId,
-      ID_Equipo:     equipoId,
-      Activo:        true,
-      TipoRol:       CONFIG.TIPOS_ROL_ENTRENADOR.VISOR,
-    });
-  },
-
-  /**
-   * Elimina un equipo de la lista de Visor del entrenador.
-   * Solo elimina relaciones de tipo Visor; si es Entrenador, no hace nada.
-   */
-  eliminarEquipoVisor(entrenadorId, equipoId) {
-    const existentes = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
-      .filter(r => r.ID_Equipo === equipoId && r.TipoRol === CONFIG.TIPOS_ROL_ENTRENADOR.VISOR);
-    if (existentes.length === 0) return false;
-    return updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, existentes[0].ID, { Activo: false });
   },
 
   /**
