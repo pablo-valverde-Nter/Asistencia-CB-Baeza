@@ -42,11 +42,26 @@
     <span id="header-title">CB Baeza</span>
     <button id="btn-edit" class="hidden" onclick="App.editarDetalle()">&#x270E;</button>
     <span id="sync-badge">&#x21BB;</span>
-    <div id="user-badge" onclick="App.confirmarCerrarSesion()">
-      <div id="user-badge-avatar">?</div>
-      <div id="user-badge-info">
-        <div id="user-badge-name">&hellip;</div>
-        <div id="user-badge-role"></div>
+    <div id="user-menu-wrap">
+      <button id="user-badge" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu" onclick="App.toggleUserMenu(event)">
+        <span id="user-badge-avatar">?</span>
+        <span id="user-badge-info">
+          <span id="user-badge-name">&hellip;</span>
+          <span id="user-badge-role"></span>
+        </span>
+        <span class="user-badge-chevron" aria-hidden="true"></span>
+      </button>
+      <div id="user-menu" class="user-menu hidden" role="menu" aria-label="Opciones de usuario">
+        <button class="user-menu-item user-menu-player hidden" type="button" role="menuitem" onclick="event.stopPropagation();App.closeUserMenu();App.navigate('ajustes-cuenta')">
+          <span aria-hidden="true">&#x2699;</span>Ajustes
+        </button>
+        <button class="user-menu-item user-menu-coach hidden" type="button" role="menuitem" onclick="event.stopPropagation();App.irAlPerfilEntrenador()">
+          <span aria-hidden="true">&#x1F464;</span>Perfil
+        </button>
+        <div class="user-menu-divider"></div>
+        <button class="user-menu-item user-menu-logout" type="button" role="menuitem" onclick="event.stopPropagation();App.closeUserMenu();App.confirmarCerrarSesion()">
+          <span aria-hidden="true">&#x21AA;</span>Cerrar sesión
+        </button>
       </div>
     </div>
   </header>
@@ -109,18 +124,14 @@
       <div id="sesiones-subtitulo" style="padding:10px 16px 6px; background:var(--fondo); border-bottom:1px solid var(--borde); display:none">
         <span style="font-size:.76rem; color:var(--texto-sec)">Selecciona una sesi&oacute;n para registrar o revisar la asistencia</span>
       </div>
-      <div class="section-hdr">
-        <span class="section-label">Pr&oacute;ximas</span>
+      <div class="section-hdr sesiones-actions-hdr">
+        <span class="section-label">Entrenamientos</span>
         <div style="display:flex;gap:8px">
           <button class="btn btn-secondary btn-sm" onclick="App.views.sesiones.generarSemana()">+ Semana</button>
           <button class="btn btn-secondary btn-sm" onclick="App.views.sesiones.abrirExtra()">+ Extra</button>
         </div>
       </div>
-      <div id="sesiones-proximas"></div>
-      <div class="section-hdr" style="margin-top:8px">
-        <span class="section-label">Anteriores</span>
-      </div>
-      <div id="sesiones-pasadas"></div>
+      <div id="sesiones-calendar"></div>
     </section>
 
     <!-- ASISTENCIA DE SESION -->
@@ -457,18 +468,11 @@
         <div id="perfil-jugador-avatar" class="perfil-avatar">&#x1F3C0;</div>
         <div id="perfil-jugador-nombre" class="perfil-nombre"></div>
         <div id="perfil-jugador-equipo" class="perfil-equipo"></div>
-        <div class="perfil-nav-3">
-          <button class="perfil-nav-btn" onclick="App.navigate('mis-entrenamientos')">
-            <span class="perfil-nav-icon">&#x1F4CB;</span>
-            <span class="perfil-nav-label">Entrenamientos</span>
-          </button>
+        <div class="perfil-home-actions">
           <button class="perfil-nav-btn" onclick="App.navigate('mi-equipo')">
             <span class="perfil-nav-icon">&#x1F3C6;</span>
             <span class="perfil-nav-label">Mi equipo</span>
-          </button>
-          <button class="perfil-nav-btn" onclick="App.navigate('ajustes-cuenta')">
-            <span class="perfil-nav-icon">&#x2699;&#xFE0F;</span>
-            <span class="perfil-nav-label">Ajustes</span>
+            <span class="perfil-home-arrow" aria-hidden="true">&#x203A;</span>
           </button>
         </div>
       </div>
@@ -477,14 +481,7 @@
 
     <!-- VISTA: MIS ENTRENAMIENTOS (jugador) -->
     <section id="view-mis-entrenamientos" class="view">
-      <div class="section-hdr">
-        <span class="section-label">Pr&oacute;ximas</span>
-      </div>
-      <div id="mis-sesiones-proximas"></div>
-      <div class="section-hdr" style="margin-top:8px">
-        <span class="section-label">Anteriores</span>
-      </div>
-      <div id="mis-sesiones-pasadas"></div>
+      <div id="mis-entrenamientos-calendar"></div>
     </section>
 
     <!-- VISTA: DETALLE SESI&Oacute;N JUGADOR -->
@@ -623,7 +620,7 @@
     </button>
     <!-- Tabs para jugadores -->
     <button class="nav-tab hidden nav-tab-jug" data-view="perfil-jugador" onclick="App.navigate('perfil-jugador')">
-      <span class="nav-icon">&#x1F464;</span>
+      <span class="nav-icon">&#x1F3E0;</span>
       <span>Inicio</span>
       <span class="nav-indicator"></span>
     </button>

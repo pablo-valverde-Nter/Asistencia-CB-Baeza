@@ -73,6 +73,28 @@ input, select, textarea { font-family: inherit; }
   transition: background .15s;
 }
 #user-badge:active { background: rgba(255,255,255,.32); }
+#user-menu-wrap { position: relative; flex-shrink: 0; }
+.user-badge-chevron {
+  width: 7px; height: 7px; border-right: 1.5px solid rgba(255,255,255,.85);
+  border-bottom: 1.5px solid rgba(255,255,255,.85);
+  transform: translateY(-2px) rotate(45deg); transition: transform .15s;
+}
+#user-menu-wrap.open .user-badge-chevron { transform: translateY(2px) rotate(225deg); }
+.user-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 120;
+  width: 190px; padding: 5px; border: 1px solid var(--borde); border-radius: 9px;
+  background: var(--blanco); color: var(--texto); box-shadow: 0 5px 18px rgba(0,0,0,.2);
+}
+.user-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px;
+  padding: 8px 10px; border-radius: 6px; color: inherit; font-size: .82rem;
+  font-weight: 600; text-align: left;
+}
+.user-menu-item > span { width: 18px; color: var(--texto-sec); font-size: 1rem; text-align: center; }
+.user-menu-item:hover, .user-menu-item:focus-visible { background: var(--fondo); outline: none; }
+.user-menu-logout { color: var(--rojo); }
+.user-menu-logout > span { color: var(--rojo); }
+.user-menu-divider { height: 1px; margin: 4px 5px; background: var(--borde); }
 #user-badge-avatar {
   width: 28px; height: 28px; border-radius: 50%;
   background: rgba(255,255,255,.28); color: var(--morado);
@@ -205,6 +227,126 @@ input, select, textarea { font-family: inherit; }
 .section-label {
   font-size: .75rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: .7px; color: var(--texto-sec);
+}
+
+/* -- Calendario mensual de entrenamientos -- */
+.sesiones-actions-hdr { padding-top: 10px; }
+.calendar-wrap { padding: 8px 16px 24px; }
+.calendar-weekly { margin-bottom: 16px; padding: 10px 0 12px; border-bottom: 1px solid var(--borde); }
+.calendar-weekly-heading { display: flex; align-items: center; justify-content: space-between; padding-bottom: 6px; }
+.calendar-weekly-heading h2 { font-size: .88rem; font-weight: 750; }
+.calendar-weekly-heading > div > span { display: block; margin-top: 2px; color: var(--texto-sec); font-size: .68rem; }
+.calendar-weekly-total { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; background: var(--morado-s); color: var(--morado); font-size: .72rem; font-weight: 800; }
+.calendar-weekly-list { display: grid; }
+.calendar-weekly-item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 48px; padding: 7px 8px 7px 12px; border-bottom: 1px solid var(--borde); border-left: 2px solid var(--morado-m); text-align: left; }
+.calendar-weekly-item:last-child { border-bottom: none; }
+.calendar-weekly-item:disabled { opacity: .58; cursor: default; }
+.calendar-weekly-item.p, .calendar-weekly-item.registered { border-left-color: var(--verde); }
+.calendar-weekly-item.a, .calendar-weekly-item.pending { border-left-color: var(--rojo); }
+.calendar-weekly-item.r { border-left-color: #D59000; }
+.calendar-weekly-item.unmarked { border-left-color: #A5A5A5; }
+.calendar-weekly-item.justified { border-left-color: #147D77; }
+.calendar-weekly-date { flex: 0 0 48px; color: var(--texto-sec); font-size: .68rem; font-weight: 700; text-transform: capitalize; }
+.calendar-weekly-copy { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.calendar-weekly-copy strong { overflow: hidden; font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-weekly-copy small { color: var(--texto-sec); font-size: .66rem; }
+.calendar-weekly-state { color: var(--texto-sec); font-size: .62rem; white-space: nowrap; }
+.calendar-weekly-empty { padding: 10px 0 2px; color: var(--texto-sec); font-size: .76rem; }
+.calendar-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 0 14px;
+}
+.calendar-nav {
+  display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0;
+  border: 1px solid var(--borde); border-radius: 50%; background: var(--blanco);
+  color: var(--morado); font-size: 1.55rem; line-height: 1;
+  transition: background .15s, transform .15s;
+}
+.calendar-nav-icon { display: block; line-height: 1; transform: translateY(-2px); }
+.calendar-nav:active { background: var(--morado-s); transform: scale(.94); }
+.calendar-month { text-align: center; }
+.calendar-month h2 { font-size: 1.12rem; font-weight: 750; color: var(--texto); }
+.calendar-month span { display: block; margin-top: 2px; color: var(--texto-sec); font-size: .72rem; }
+.calendar-weekdays, .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.calendar-weekdays { padding-bottom: 5px; }
+.calendar-weekdays span {
+  display: grid; place-items: center; height: 28px;
+  color: var(--texto-sec); font-size: .68rem; font-weight: 700;
+}
+.calendar-grid {
+  overflow: hidden; border: 1px solid var(--borde); border-radius: 12px;
+  background: var(--borde); gap: 1px;
+}
+.calendar-day {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  gap: 4px; min-width: 0; height: 52px; padding: 6px 2px 4px;
+  background: var(--blanco); color: var(--texto); font-size: .78rem;
+  transition: background .15s, color .15s;
+}
+.calendar-day.outside { background: #F4F4F5; }
+.calendar-day.today .calendar-day-number {
+  display: grid; place-items: center; width: 23px; height: 23px;
+  border-radius: 50%; background: var(--morado-s); color: var(--morado); font-weight: 800;
+}
+.calendar-day.selected { background: var(--morado); color: var(--blanco); }
+.calendar-day.selected .calendar-day-number { color: var(--blanco); }
+.calendar-day.selected.today .calendar-day-number { background: rgba(255,255,255,.2); }
+.calendar-day-number { min-height: 19px; line-height: 19px; }
+.calendar-dots { display: flex; align-items: center; justify-content: center; gap: 3px; height: 5px; }
+.calendar-dot { display: block; width: 5px; height: 5px; border-radius: 50%; background: var(--morado-m); }
+.calendar-dot.p, .calendar-dot.registered { background: var(--verde); }
+.calendar-dot.a, .calendar-dot.pending { background: var(--rojo); }
+.calendar-dot.r { background: #D59000; }
+.calendar-dot.unmarked { background: #A5A5A5; }
+.calendar-dot.loading { background: var(--texto-sec); }
+.calendar-indicators { position: absolute; top: 3px; right: 4px; display: flex; align-items: center; gap: 3px; }
+.calendar-alert { display: grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; background: var(--rojo); color: var(--blanco); font-size: .58rem; font-weight: 900; line-height: 1; }
+.calendar-count { color: var(--texto-sec); font-size: .55rem; line-height: 1; }
+.calendar-day.selected .calendar-count { color: rgba(255,255,255,.8); }
+.calendar-agenda { padding-top: 18px; }
+.calendar-agenda-heading { display: flex; align-items: center; justify-content: space-between; padding-bottom: 10px; }
+.calendar-kicker { color: var(--texto-sec); font-size: .62rem; font-weight: 800; }
+.calendar-agenda-heading h3 { margin-top: 2px; font-size: .98rem; font-weight: 750; }
+.calendar-agenda-total {
+  display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 7px;
+  border-radius: 14px; background: var(--morado-s); color: var(--morado); font-size: .76rem; font-weight: 800;
+}
+.calendar-events { display: grid; gap: 7px; }
+.calendar-event {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 62px;
+  padding: 9px 10px; border: 1px solid var(--borde); border-left: 3px solid var(--morado-m);
+  border-radius: 8px; background: var(--blanco); text-align: left;
+  transition: background .15s, transform .15s;
+}
+.calendar-event:active:not(:disabled) { background: var(--morado-xs); transform: translateY(1px); }
+.calendar-event:disabled { opacity: .58; cursor: default; }
+.calendar-event.p, .calendar-event.registered { border-left-color: var(--verde); }
+.calendar-event.a, .calendar-event.pending { border-left-color: var(--rojo); }
+.calendar-event.r { border-left-color: #D59000; }
+.calendar-event.unmarked { border-left-color: #A5A5A5; }
+.calendar-event.justified { border-left-color: #147D77; }
+.calendar-event-time { flex: 0 0 42px; color: var(--morado); font-size: .76rem; font-weight: 800; }
+.calendar-event-copy { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.calendar-event-copy strong { overflow: hidden; font-size: .79rem; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-event-copy small { color: var(--texto-sec); font-size: .68rem; }
+.calendar-event-stats { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; font-weight: 700; }
+.calendar-event-stats .p { color: var(--verde); }
+.calendar-event-stats .a { color: var(--rojo); }
+.calendar-event-stats .r { color: #A36B00; }
+.calendar-event-status { color: var(--texto-sec); font-size: .64rem; white-space: nowrap; }
+.calendar-event-status .justif-badge { margin-left: 0; }
+.calendar-event-unjustified { display: inline-flex; align-items: center; gap: 4px; color: var(--rojo); font-weight: 700; }
+.calendar-event-arrow { color: var(--texto-sec); font-size: 1.15rem; line-height: 1; }
+.calendar-empty { padding: 17px 12px; border-radius: 8px; background: #F1F1F2; color: var(--texto-sec); font-size: .78rem; text-align: center; }
+
+@media (max-width: 360px) {
+  .calendar-wrap { padding-right: 12px; padding-left: 12px; }
+  .calendar-weekly-item { gap: 6px; }
+  .calendar-weekly-date { flex-basis: 44px; }
+  .calendar-weekly-state { max-width: 58px; overflow: hidden; text-overflow: ellipsis; }
+  .calendar-day { height: 46px; }
+  .calendar-event { gap: 7px; padding-right: 7px; padding-left: 8px; }
+  .calendar-event-status { max-width: 58px; overflow: hidden; text-overflow: ellipsis; }
 }
 
 /* ── Asistencia: jugador card ── */
@@ -850,19 +992,18 @@ input, select, textarea { font-family: inherit; }
   left: 50%; position: relative; transform: translateX(-50%);
 }
 /* ── 4e-2: 3 botones horizontales navegación perfil ── */
-.perfil-nav-3 {
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
-}
+.perfil-home-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .perfil-nav-btn {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 6px; padding: 14px 6px; border-radius: var(--r);
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px;
+  padding: 10px 14px; border-radius: var(--r);
   background: var(--blanco); box-shadow: var(--sombra-lg);
   border: 1.5px solid var(--borde); transition: transform .12s, box-shadow .12s;
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .perfil-nav-btn:active { transform: scale(.96); box-shadow: var(--sombra); }
-.perfil-nav-icon  { font-size: 1.6rem; line-height: 1; }
-.perfil-nav-label { font-size: .72rem; font-weight: 700; color: var(--texto); text-align: center; line-height: 1.25; }
+.perfil-nav-icon  { font-size: 1.3rem; line-height: 1; }
+.perfil-nav-label { font-size: .8rem; font-weight: 700; color: var(--texto); text-align: left; line-height: 1.25; }
+.perfil-home-arrow { margin-left: auto; color: var(--texto-sec); font-size: 1.2rem; line-height: 1; }
 
 /* ── 4e-4: Ranking asistencia (mi-equipo) ── */
 .ranking-medal { font-size: 1.1rem; flex-shrink: 0; width: 22px; text-align: center; }

@@ -51,6 +51,7 @@ const App = {
     motivosJustificacion: [],
     _loginTipo:           'entrenador',
     sesionJugadorId:      null,
+    calendar:             {},
   },
 
   // ── Cache en memoria: cargado una vez al inicio, actualizado tras cada escritura ──
@@ -121,6 +122,239 @@ const App = {
       entrenadores.forEach(function(e) {
         App.cache.entrenadoresEquipos.push({ ID: 'ee_'+e.ID+'_'+equipoId, ID_Equipo: equipoId, ID_Entrenador: e.ID, Activo: true });
       });
+    },
+  },
+
+  calendar: {
+    render: function(scope, containerId, sesiones, mode, jugadorId) {
+      var container = document.getElementById(containerId);
+      if (!container) return;
+      var hoy = _hoy();
+      var hoyDate = new Date(hoy + 'T12:00:00');
+      var inicioSemana = new Date(hoyDate);
+      inicioSemana.setDate(inicioSemana.getDate() - ((inicioSemana.getDay() + 6) % 7));
+      var finSemana = new Date(inicioSemana);
+      finSemana.setDate(finSemana.getDate() + 6);
+      function claveFecha(fecha) {
+        return fecha.getFullYear() + '-' + String(fecha.getMonth() + 1).padStart(2, '0') + '-' + String(fecha.getDate()).padStart(2, '0');
+      }
+      var desdeSemana = claveFecha(inicioSemana);
+      var hastaSemana = claveFecha(finSemana);
+      var sesionesSemana = sesiones.filter(function(s) {
+        return s.Fecha >= desdeSemana && s.Fecha <= hastaSemana;
+      }).sort(function(a, b) {
+        return a.Fecha === b.Fecha
+          ? String(a.HoraInicio || '').localeCompare(String(b.HoraInicio || ''))
+          : a.Fecha.localeCompare(b.Fecha);
+      });
+      var rangoSemana = inicioSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) +
+        ' - ' + finSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+      var state = App.state.calendar[scope];
+      if (!state) {
+        var mesActual = new Date();
+        state = App.state.calendar[scope] = {
+          year: mesActual.getFullYear(),
+          month: mesActual.getMonth(),
+          selected: hoy,
+        };
+        if (!sesiones.some(function(s) { return s.Fecha === hoy; })) {
+          var primeraDelMes = sesiones.find(function(s) {
+            return s.Fecha.slice(0, 7) === hoy.slice(0, 7);
+          });
+          if (primeraDelMes) state.selected = primeraDelMes.Fecha;
+        }
+      }
+
+      var primero = new Date(state.year, state.month, 1);
+      var totalDias = new Date(state.year, state.month + 1, 0).getDate();
+      var desplazamiento = (primero.getDay() + 6) % 7;
+      var celdas = Math.ceil((desplazamiento + totalDias) / 7) * 7;
+      var claveMes = state.year + '-' + String(state.month + 1).padStart(2, '0');
+      var totalMes = sesiones.filter(function(s) { return s.Fecha.slice(0, 7) === claveMes; }).length;
+      var porFecha = {};
+      sesiones.forEach(function(s) {
+        if (!porFecha[s.Fecha]) porFecha[s.Fecha] = [];
+        porFecha[s.Fecha].push(s);
+      });
+      Object.keys(porFecha).forEach(function(fecha) {
+        porFecha[fecha].sort(function(a, b) {
+          return String(a.HoraInicio || '').localeCompare(String(b.HoraInicio || ''));
+        });
+      });
+
+      var tituloMes = primero.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+      var diasSemana = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+      var sesionesSemanaHtml = sesionesSemana.map(function(s) {
+        var fechaSesion = new Date(s.Fecha + 'T12:00:00');
+        var diaSesion = fechaSesion.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' });
+        var tituloSesion = 'Entrenamiento';
+        var estadoSesion = '';
+        var claseEstado = 'scheduled';
+        if (mode === 'player') {
+          var registro = App.cache.asistJugadores.find(function(r) {
+            return r.ID_Sesion === s.ID && r.ID_Jugador === jugadorId;
+          });
+          var estadoJugador = registro && registro.Estado ? String(registro.Estado) : '';
+          var etiquetasJugador = { P: 'Presente', A: 'Ausente', R: 'Retraso' };
+          var justificada = registro && (registro.TieneJustificacion === true || registro.TieneJustificacion === 'TRUE');
+          var equipoSesion = App.cache.getEquipoById(s.ID_Equipo);
+          tituloSesion = equipoSesion ? _esc(equipoSesion.Nombre) : tituloSesion;
+          estadoSesion = justificada ? 'Justificada' : (etiquetasJugador[estadoJugador] || (s.Fecha >= hoy ? 'Pr&oacute;ximo' : 'Sin registrar'));
+          claseEstado = justificada ? 'justified' : (estadoJugador ? estadoJugador.toLowerCase() : 'unmarked');
+        } else {
+          var asistenciaGuardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada;
+          estadoSesion = s._loading ? 'Creando' : (asistenciaGuardada ? 'Registrada' : (s.Fecha < hoy ? 'Pendiente' : 'Pr&oacute;ximo'));
+          claseEstado = s._loading ? 'loading' : (asistenciaGuardada ? 'registered' : (s.Fecha < hoy ? 'pending' : 'scheduled'));
+        }
+        var abrir = mode === 'player'
+          ? "App.views['mis-entrenamientos'].abrirDetalle('" + s.ID + "')"
+          : "App.views.sesiones.abrirSesion('" + s.ID + "')";
+        return '<button class="calendar-weekly-item ' + claseEstado + '" onclick="' + abrir + '"' + (s._loading ? ' disabled' : '') + '>' +
+          '<span class="calendar-weekly-date">' + diaSesion + '</span>' +
+          '<span class="calendar-weekly-copy"><strong>' + tituloSesion + '</strong><small>' + s.HoraInicio + ' - ' + s.HoraFin + '</small></span>' +
+          '<span class="calendar-weekly-state">' + estadoSesion + '</span><span class="calendar-event-arrow">&#8250;</span></button>';
+      }).join('');
+      var html = '<div class="calendar-wrap">' +
+        '<section class="calendar-weekly" aria-label="Sesiones de esta semana">' +
+        '<div class="calendar-weekly-heading"><div><h2>Sesiones de esta semana</h2><span>' + rangoSemana + '</span></div>' +
+        '<span class="calendar-weekly-total">' + sesionesSemana.length + '</span></div>' +
+        (sesionesSemana.length
+          ? '<div class="calendar-weekly-list">' + sesionesSemanaHtml + '</div>'
+          : '<p class="calendar-weekly-empty">No hay todav&iacute;a entrenamientos para esta semana.</p>') +
+        '</section>' +
+        '<div class="calendar-toolbar">' +
+        '<button class="calendar-nav" aria-label="Mes anterior" onclick="App.calendar.move(\'' + scope + '\',-1)"><span class="calendar-nav-icon" aria-hidden="true">&#8249;</span></button>' +
+        '<div class="calendar-month"><h2>' + tituloMes + '</h2><span>' + totalMes + ' entrenamientos</span></div>' +
+        '<button class="calendar-nav" aria-label="Mes siguiente" onclick="App.calendar.move(\'' + scope + '\',1)"><span class="calendar-nav-icon" aria-hidden="true">&#8250;</span></button>' +
+        '</div>' +
+        '<div class="calendar-weekdays">' + diasSemana.map(function(d) { return '<span>' + d + '</span>'; }).join('') + '</div>' +
+        '<div class="calendar-grid">';
+
+      for (var i = 0; i < celdas; i++) {
+        var numero = i - desplazamiento + 1;
+        if (numero < 1 || numero > totalDias) {
+          html += '<div class="calendar-day outside" aria-hidden="true"></div>';
+          continue;
+        }
+        var fecha = state.year + '-' + String(state.month + 1).padStart(2, '0') + '-' + String(numero).padStart(2, '0');
+        var eventos = porFecha[fecha] || [];
+        var clases = ['calendar-day'];
+        if (fecha === hoy) clases.push('today');
+        if (fecha === state.selected) clases.push('selected');
+        if (eventos.length) clases.push('has-events');
+        var marcas = eventos.slice(0, 3).map(function(s) {
+          var clase = 'scheduled';
+          if (mode === 'player') {
+            var reg = App.cache.asistJugadores.find(function(r) {
+              return r.ID_Sesion === s.ID && r.ID_Jugador === jugadorId;
+            });
+            clase = reg && reg.Estado ? String(reg.Estado).toLowerCase() : 'unmarked';
+          } else if (s._loading) {
+            clase = 'loading';
+          } else if (s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada) {
+            clase = 'registered';
+          } else if (fecha < hoy) {
+            clase = 'pending';
+          }
+          return '<i class="calendar-dot ' + clase + '"></i>';
+        }).join('');
+        var tieneNoJustificada = mode === 'player' && eventos.some(function(s) {
+          var registro = App.cache.asistJugadores.find(function(r) {
+            return r.ID_Sesion === s.ID && r.ID_Jugador === jugadorId;
+          });
+          var incidencia = registro && (registro.Estado === 'A' || registro.Estado === 'R');
+          var justificada = registro && (registro.TieneJustificacion === true || registro.TieneJustificacion === 'TRUE');
+          return incidencia && !justificada;
+        });
+        var indicadores = (eventos.length > 1 ? '<span class="calendar-count">' + eventos.length + '</span>' : '') +
+          (tieneNoJustificada ? '<span class="calendar-alert" title="Ausencia o retraso sin justificar">!</span>' : '');
+        var etiquetaFecha = new Date(state.year, state.month, numero).toLocaleDateString('es-ES', {
+          weekday: 'long', day: 'numeric', month: 'long'
+        });
+        html += '<button class="' + clases.join(' ') + '" aria-label="' + etiquetaFecha + (eventos.length ? ', ' + eventos.length + ' entrenamientos' : '') + (tieneNoJustificada ? ', ausencia o retraso sin justificar' : '') + '" aria-pressed="' + (fecha === state.selected) + '" onclick="App.calendar.select(\'' + scope + '\',\'' + fecha + '\')">' +
+          '<span class="calendar-day-number">' + numero + '</span>' +
+          (indicadores ? '<span class="calendar-indicators" aria-hidden="true">' + indicadores + '</span>' : '') +
+          (eventos.length ? '<span class="calendar-dots">' + marcas + '</span>' : '') +
+          '</button>';
+      }
+
+      var selectedDate = new Date(state.selected + 'T12:00:00');
+      var agendaLabel = selectedDate.toLocaleDateString('es-ES', {
+        weekday: 'long', day: 'numeric', month: 'long'
+      });
+      var seleccionados = porFecha[state.selected] || [];
+      html += '</div><div class="calendar-agenda"><div class="calendar-agenda-heading">' +
+        '<div><span class="calendar-kicker">D&#205;A SELECCIONADO</span><h3>' + agendaLabel + '</h3></div>' +
+        '<span class="calendar-agenda-total">' + seleccionados.length + '</span></div>';
+
+      if (!seleccionados.length) {
+        html += '<div class="calendar-empty">No hay entrenamientos este d&#237;a</div>';
+      } else {
+        html += '<div class="calendar-events">' + seleccionados.map(function(s) {
+          var label = '';
+          var eventClass = 'scheduled';
+          var subline = s.HoraInicio + ' - ' + s.HoraFin;
+          var tituloEvento = 'Entrenamiento';
+          if (mode === 'player') {
+            var reg = App.cache.asistJugadores.find(function(r) {
+              return r.ID_Sesion === s.ID && r.ID_Jugador === jugadorId;
+            });
+            var justificada = reg && (reg.TieneJustificacion === true || reg.TieneJustificacion === 'TRUE');
+            var estado = reg && reg.Estado ? String(reg.Estado) : '';
+            var etiquetas = { P: 'Presente', A: 'Ausente', R: 'Retraso' };
+            label = justificada ? 'Justificada' : (etiquetas[estado] || (s.Fecha >= hoy ? 'Pr&oacute;ximo' : 'Sin registrar'));
+            eventClass = justificada ? 'justified' : (estado ? estado.toLowerCase() : 'unmarked');
+            if (estado === 'A' || estado === 'R') {
+              label = justificada
+                ? '<span class="justif-badge">Justificada</span>'
+                : '<span class="calendar-event-unjustified"><span class="calendar-alert" aria-hidden="true">!</span>' + label + '</span>';
+            }
+            var equipo = App.cache.getEquipoById(s.ID_Equipo);
+            if (equipo) tituloEvento = _esc(equipo.Nombre);
+          } else {
+            var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada;
+            label = s._loading ? 'Creando' : (guardada ? 'Registrada' : (s.Fecha < hoy ? 'Pendiente' : 'Pr&oacute;ximo'));
+            eventClass = s._loading ? 'loading' : (guardada ? 'registered' : (s.Fecha < hoy ? 'pending' : 'scheduled'));
+          }
+          var stats = mode === 'coach' && s._statsJug
+            ? '<small class="calendar-event-stats"><span class="p">P ' + s._statsJug.P + '</span><span class="a">A ' + s._statsJug.A + '</span><span class="r">R ' + s._statsJug.R + '</span></small>'
+            : '';
+          var click = mode === 'player'
+            ? "App.views['mis-entrenamientos'].abrirDetalle('" + s.ID + "')"
+            : "App.views.sesiones.abrirSesion('" + s.ID + "')";
+          var disabled = s._loading ? ' disabled' : '';
+          return '<button class="calendar-event ' + eventClass + '" onclick="' + click + '"' + disabled + '>' +
+            '<span class="calendar-event-time">' + s.HoraInicio + '</span>' +
+            '<span class="calendar-event-copy"><strong>' + tituloEvento + '</strong><small>' + subline + '</small>' + stats + '</span>' +
+            '<span class="calendar-event-status">' + label + '</span><span class="calendar-event-arrow">&#8250;</span></button>';
+        }).join('') + '</div>';
+      }
+      html += '</div></div>';
+      container.innerHTML = html;
+    },
+
+    move: function(scope, amount) {
+      var state = App.state.calendar[scope];
+      if (!state) return;
+      var next = new Date(state.year, state.month + amount, 1);
+      state.year = next.getFullYear();
+      state.month = next.getMonth();
+      var day = Number(state.selected.slice(-2));
+      var maxDay = new Date(state.year, state.month + 1, 0).getDate();
+      state.selected = state.year + '-' + String(state.month + 1).padStart(2, '0') + '-' + String(Math.min(day, maxDay)).padStart(2, '0');
+      this.refresh(scope);
+    },
+
+    select: function(scope, date) {
+      var state = App.state.calendar[scope];
+      if (!state) return;
+      state.selected = date;
+      this.refresh(scope);
+    },
+
+    refresh: function(scope) {
+      if (scope === 'player') App.views['mis-entrenamientos'].render();
+      else App.views.sesiones.render();
     },
   },
 
@@ -258,6 +492,7 @@ const App = {
   },
 
   confirmarCerrarSesion() {
+    App.closeUserMenu();
     App.openModal('Cerrar Sesión',
       '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
       '<div class="modal-confirm-icon">&#x26A0;</div>' +
@@ -267,6 +502,47 @@ const App = {
       '<button class="btn btn-destructive" style="flex:1" onclick="App.closeModal();App.cerrarSesion()">Cerrar Sesión</button>' +
       '</div></div>'
     );
+  },
+
+  toggleUserMenu(event) {
+    if (event) event.stopPropagation();
+    var wrap = document.getElementById('user-menu-wrap');
+    var menu = document.getElementById('user-menu');
+    var button = document.getElementById('user-badge');
+    if (!wrap || !menu || !button) return;
+    var abrir = !wrap.classList.contains('open');
+    wrap.classList.toggle('open', abrir);
+    menu.classList.toggle('hidden', !abrir);
+    button.setAttribute('aria-expanded', String(abrir));
+    if (!App._userMenuListenersInstalled) {
+      document.addEventListener('click', function(e) {
+        if (!e.target.closest || !e.target.closest('#user-menu-wrap')) App.closeUserMenu();
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') App.closeUserMenu();
+      });
+      App._userMenuListenersInstalled = true;
+    }
+  },
+
+  closeUserMenu() {
+    var wrap = document.getElementById('user-menu-wrap');
+    var menu = document.getElementById('user-menu');
+    var button = document.getElementById('user-badge');
+    if (wrap) wrap.classList.remove('open');
+    if (menu) menu.classList.add('hidden');
+    if (button) button.setAttribute('aria-expanded', 'false');
+  },
+
+  irAlPerfilEntrenador() {
+    App.closeUserMenu();
+    var entrenador = App.state.usuario;
+    if (!entrenador || !entrenador.ID) {
+      showToast('No se encontró el perfil del entrenador', 'error');
+      return;
+    }
+    App.state.detalleEntrenadorId = entrenador.ID;
+    App.navigate('entrenador-detalle');
   },
 
   cerrarSesion(reason) {
@@ -338,6 +614,7 @@ const App = {
   },
 
   navigate(view, params, push) {
+    App.closeUserMenu();
     if (App.state.currentView === 'sesion' && view !== 'sesion') App.views.sesion._stopAutoSave();
     if (push === undefined) push = true;
     if (view === 'login') {
@@ -386,7 +663,7 @@ const App = {
       'jugador-detalle':   'Perfil',
       'entrenador-detalle':'Perfil',
       'equipo-detalle':    'Equipo',
-      'perfil-jugador':          'Mi Perfil',
+      'perfil-jugador':          'CB Baeza',
       'mis-entrenamientos':      'Mis Entrenamientos',
       'detalle-sesion-jugador':  'Sesión',
       'mis-stats':               'Mis Estadísticas',
@@ -412,10 +689,8 @@ const App = {
       var isEqDetalleAjeno  = (view === 'equipo-detalle' && !App.state.esAdmin && !App.state.equipos.some(function(e) { return e.ID === App.state.detalleEquipoId; }));
       if (isEntDetalleAjeno || isEqDetalleAjeno) _btnEdit.classList.add('hidden');
       else _btnEdit.classList.remove('hidden');
-      _userBadge.classList.add('hidden');
     } else {
       _btnEdit.classList.add('hidden');
-      _userBadge.classList.remove('hidden');
     }
 
     // Ocultar controles de administración para el rol jugador
@@ -589,22 +864,18 @@ const App = {
       render: function() {
         var id = App.state.equipoSesionesId;
         if (!id) return;
-        var eq = App.cache.getEquipoById(id);
+        var sesiones = App.cache.getSesionesByEquipo(id);
         document.getElementById('sesiones-equipo-hdr').innerHTML =
           '<h2>' + (App.state._equipoNombre || 'Equipo') + '</h2>' +
           '<div class="sesiones-desc">Registro de asistencia a entrenamientos</div>';
         // 5d-1: mostrar subtítulo informativo
         var sub = document.getElementById('sesiones-subtitulo');
         if (sub) sub.style.display = '';
-        App.views.sesiones._renderListas(App.cache.getSesionesByEquipo(id));
+        App.views.sesiones._renderListas(sesiones);
       },
 
       _renderListas: function(sesiones) {
         var hoy = _hoy();
-        var prox        = sesiones.filter(function(s) { return s.Fecha >= hoy; }).reverse();
-        var todasPasadas = sesiones.filter(function(s) { return s.Fecha < hoy; });
-        var pasadas      = todasPasadas.slice(-10).reverse();
-
         // Pre-computar stats desde caché para sesiones ya guardadas
         sesiones.forEach(function(s) {
           var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE';
@@ -620,52 +891,7 @@ const App = {
           }
         });
 
-        function htmlSesion(s) {
-          // Tarjeta placeholder mientras se crea la sesión en el servidor
-          if (s._loading) {
-            var fl = _fmtFecha(s.Fecha);
-            return '<div class="sesion-card" style="opacity:0.5;pointer-events:none">' +
-              '<div class="sc-fecha"><div class="dia">' + fl.d + '</div><div class="mes">' + fl.m + '</div></div>' +
-              '<div class="sc-info" style="flex:1"><div class="dia-n">' + fl.dn + '</div>' +
-              '<div class="hora">' + s.HoraInicio + '&ndash;' + s.HoraFin + '</div></div>' +
-              '<span class="sc-status-badge" style="background:var(--texto-sec);animation:pulse 1.2s ease-in-out infinite alternate">Creando\u2026</span>' +
-              '</div>';
-          }
-          var f = _fmtFecha(s.Fecha);
-          var extra = (s.EsExtra === true || s.EsExtra === 'TRUE') ? '<span class="badge-extra">Extra</span>' : '';
-          var badgeHtml = '';
-          var statsHtml = '';
-          var sinRegistrar = '';
-          var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada;
-          if (guardada) {
-            badgeHtml = '<span class="sc-status-badge registrada">Registrada</span>';
-            if (s._statsJug) {
-              statsHtml = '<div class="sc-stats">&#10003;' + s._statsJug.P + ' &middot; &#10007;' + s._statsJug.A +
-                (s._statsJug.R ? ' &middot; &#8987;' + s._statsJug.R : '') + '</div>';
-            }
-          } else if (s.Fecha < hoy) {
-            badgeHtml = '<span class="sc-status-badge pendiente">!</span>';
-            sinRegistrar = ' sin-registrar';
-          }
-          return '<div class="sesion-card' + sinRegistrar + '" onclick="App.views.sesiones.abrirSesion(\'' + s.ID + '\')">' +
-            '<div class="sc-fecha"><div class="dia">' + f.d + '</div><div class="mes">' + f.m + '</div></div>' +
-            '<div class="sc-info" style="flex:1"><div class="dia-n">' + f.dn + '</div>' +
-            '<div class="hora">' + s.HoraInicio + '&ndash;' + s.HoraFin + '</div>' +
-            statsHtml + '</div>' +
-            badgeHtml + extra + '</div>';
-        }
-
-        document.getElementById('sesiones-proximas').innerHTML = prox.length
-          ? prox.map(htmlSesion).join('')
-          : '<div class="empty-state" style="padding:24px"><p>Sin sesiones proximas. Pulsa &quot;+ Semana&quot;.</p></div>';
-
-        var pasadasHtml = pasadas.length
-          ? pasadas.map(htmlSesion).join('')
-          : '<div style="padding:12px 16px;font-size:.8rem;color:var(--texto-sec)">Sin sesiones anteriores</div>';
-        if (todasPasadas.length > 10) {
-          pasadasHtml += '<button class="btn btn-secondary btn-full btn-sm" style="margin:12px 16px;width:calc(100% - 32px)" onclick="App.navigate(\'historial-equipo\')">Ver historial completo \u2192</button>';
-        }
-        document.getElementById('sesiones-pasadas').innerHTML = pasadasHtml;
+        App.calendar.render('team', 'sesiones-calendar', sesiones, 'coach');
       },
 
       abrirSesion: function(sesionId) {
@@ -1178,7 +1404,7 @@ const App = {
               var alertBadge = (esIncidencia && !item.tieneJustif)
                 ? '<span class="sin-justif-chip">&#x26A0;</span>' : '';
               var justifBadge = (esIncidencia && item.tieneJustif)
-                ? '<span class="justif-badge" style="font-size:.6rem;padding:2px 5px">&#x2713;</span>' : '';
+                ? '<span class="justif-badge" style="font-size:.6rem;padding:2px 5px"></span>' : '';
               return '<div class="jug-ro-mini ' + estado + '">' +
                 '<div class="jrm-avatar">' + (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '') + '</div>' +
                 '<div class="jrm-info"><span class="jrm-nombre">' + j.Apellidos + ', ' + j.Nombre + '</span>' +
@@ -2673,33 +2899,7 @@ const App = {
         var todasSesiones = App.cache.sesiones
           .filter(function(s) { return equipoIds.indexOf(s.ID_Equipo) >= 0; })
           .sort(function(a, b) { return a.Fecha < b.Fecha ? -1 : 1; });
-        var hoy = _hoy();
-        var proximas = todasSesiones.filter(function(s) { return s.Fecha >= hoy; });
-        var pasadas   = todasSesiones.filter(function(s) { return s.Fecha < hoy; }).reverse().slice(0, 20);
-
-        function htmlCard(s) {
-          var f = _fmtFecha(s.Fecha);
-          var reg = App.cache.asistJugadores.find(function(r) { return r.ID_Sesion === s.ID && r.ID_Jugador === j.ID; });
-          var estado = reg ? reg.Estado : 'sin';
-          var eq = App.cache.getEquipoById(s.ID_Equipo);
-          var claseEstado = estado === 'sin' ? 'estado-sin' : 'estado-' + estado;
-          var icono = estado === 'P' ? '\u2713' : estado === 'A' ? '\u2717' : estado === 'R' ? '\u23f3' : '?';
-          var justifBadge = (reg && (reg.TieneJustificacion === true || reg.TieneJustificacion === 'TRUE'))
-            ? '<span class="justif-badge">Justificada</span>' : '';
-          return '<div class="sesion-jug-card ' + claseEstado + '" onclick="App.views[\'mis-entrenamientos\'].abrirDetalle(\'' + s.ID + '\')">' +
-            '<div class="sjc-estado ' + (estado === 'sin' ? 'sin' : estado) + '">' + icono + '</div>' +
-            '<div style="flex:1">' +
-            '<div style="font-weight:700;font-size:.9rem">' + f.dn + ', ' + f.d + ' ' + f.m + '</div>' +
-            '<div style="font-size:.76rem;color:var(--texto-sec)">' + s.HoraInicio + '\u2013' + s.HoraFin + (eq ? ' \u00b7 ' + eq.Nombre : '') + '</div>' +
-            '</div>' + justifBadge + '</div>';
-        }
-
-        document.getElementById('mis-sesiones-proximas').innerHTML = proximas.length
-          ? proximas.map(htmlCard).join('')
-          : '<div class="empty-state" style="padding:20px"><p>Sin entrenamientos pr\u00f3ximos</p></div>';
-        document.getElementById('mis-sesiones-pasadas').innerHTML = pasadas.length
-          ? pasadas.map(htmlCard).join('')
-          : '<div class="empty-state" style="padding:20px"><p>Sin sesiones anteriores</p></div>';
+        App.calendar.render('player', 'mis-entrenamientos-calendar', todasSesiones, 'player', j.ID);
       },
       abrirDetalle: function(sesionId) {
         App.state.sesionJugadorId = sesionId;
@@ -2746,7 +2946,7 @@ const App = {
           actHtml = '<button class="btn btn-primary btn-full" onclick="App.views.justificacion.abrir(\'' + id + '\',\'' + estado + '\')">' +
             btnTexto + '</button>';
         } else if (tienJustif) {
-          actHtml = '<div class="justif-badge" style="display:inline-flex;font-size:.82rem;padding:6px 12px">\u2713 Justificaci\u00f3n enviada</div>' +
+          actHtml = '<div class="justif-badge" style="display:inline-flex;font-size:.82rem;padding:6px 12px">Justificaci\u00f3n enviada</div>' +
             (reg.MotivoDetalle ? '<p style="margin-top:10px;font-size:.82rem;color:var(--texto-sec)">' + _esc(reg.MotivoDetalle) + '</p>' : '');
         }
         document.getElementById('detalle-sesion-jug-actions').innerHTML = actHtml;
@@ -3395,10 +3595,20 @@ function _esc(s) {
 
 function _updateUserBadge(nombre, rol) {
   var words = (nombre || '').trim().split(/\s+/);
-  var ini = words.slice(0, 2).map(function(w){ return w.charAt(0).toUpperCase(); }).join('');
+  var persona = App.state.rol === 'jugador' ? App.state.jugador : App.state.usuario;
+  var nombreCorto = persona
+    ? [persona.Nombre, persona.Apellidos].map(function(parte) { return String(parte || '').trim().split(/\s+/)[0]; }).filter(Boolean).join(' ')
+    : words.slice(0, 2).join(' ');
+  var ini = (nombreCorto || nombre || '').trim().split(/\s+/).slice(0, 2)
+    .map(function(w) { return w.charAt(0).toUpperCase(); }).join('');
   document.getElementById('user-badge-avatar').textContent = ini || '?';
-  document.getElementById('user-badge-name').textContent = nombre || '';
+  document.getElementById('user-badge-name').textContent = nombreCorto || nombre || '';
   document.getElementById('user-badge-role').textContent = rol || '';
+  var esJugador = App.state.rol === 'jugador';
+  var opcionAjustes = document.querySelector('.user-menu-player');
+  var opcionPerfil = document.querySelector('.user-menu-coach');
+  if (opcionAjustes) opcionAjustes.classList.toggle('hidden', !esJugador);
+  if (opcionPerfil) opcionPerfil.classList.toggle('hidden', esJugador || !App.state.usuario || !App.state.usuario.ID);
 }
 
 // 6a: SVG donut chart pequeño (44×44) para tarjetas de equipo
