@@ -272,9 +272,10 @@ function desasignarJugadorDeEquipo(auth, jugadorId, equipoId) {
 
 /**
  * Actualiza las credenciales (Usuario y/o PIN) de un jugador.
- * El propio jugador puede cambiar las suyas; entrenadores/admins pueden cambiar cualquiera.
+ * El propio jugador puede cambiar las suyas (requiere codigoSeguridad = CodigoPadres).
+ * Entrenadores/admins pueden cambiar cualquiera sin código de seguridad.
  */
-function actualizarCredencialesJugador(auth, jugadorId, nuevoUsuario, nuevoPin, nuevoCodigoPadres) {
+function actualizarCredencialesJugador(auth, jugadorId, nuevoUsuario, nuevoPin, nuevoCodigoPadres, codigoSeguridad) {
   try {
     const v = Auth.validate(auth);
     if (!v.success) throw new Error(v.error);
@@ -282,6 +283,10 @@ function actualizarCredencialesJugador(auth, jugadorId, nuevoUsuario, nuevoPin, 
       const jugadorActual = Auth.getJugadorActual(auth);
       if (!jugadorActual || jugadorActual.ID !== jugadorId) {
         throw new Error('Solo puedes modificar tus propias credenciales.');
+      }
+      // Los jugadores deben verificar el código de seguridad (CodigoPadres)
+      if (!Auth.verificarCodigoPadres(jugadorId, codigoSeguridad)) {
+        throw new Error('Código de seguridad incorrecto.');
       }
       // Los jugadores no pueden cambiar su propio CodigoPadres
       if (nuevoCodigoPadres) throw new Error('Solo un administrador puede cambiar el código de familias.');
@@ -291,6 +296,38 @@ function actualizarCredencialesJugador(auth, jugadorId, nuevoUsuario, nuevoPin, 
       if (nuevoCodigoPadres && !Auth.isAdmin(auth)) throw new Error('Solo un administrador puede cambiar el código de familias.');
     }
     return { success: true, actualizado: Equipos.actualizarCredencialesJugador(jugadorId, nuevoUsuario, nuevoPin, nuevoCodigoPadres) };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+/**
+ * Permite a un jugador actualizar sus propios datos de contacto y familiares.
+ * Requiere verificación del CodigoPadres como código de seguridad.
+ * Entrenadores/admins pueden actualizar cualquier jugador sin código.
+ */
+function actualizarPerfilJugador(auth, jugadorId, datos, codigoSeguridad) {
+  try {
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
+    if (Auth.isJugador(auth)) {
+      const jugadorActual = Auth.getJugadorActual(auth);
+      if (!jugadorActual || jugadorActual.ID !== jugadorId) {
+        throw new Error('Solo puedes modificar tu propio perfil.');
+      }
+      // Verificar código de seguridad (CodigoPadres)
+      if (!Auth.verificarCodigoPadres(jugadorId, codigoSeguridad)) {
+        throw new Error('Código de seguridad incorrecto.');
+      }
+      // Filtrar solo los campos que un jugador puede editar
+      const camposPermitidos = ['Telefono', 'Email',
+        'NombrePadre1', 'TelefonoPadre1', 'EmailPadre1',
+        'NombrePadre2', 'TelefonoPadre2', 'EmailPadre2'];
+      const datosFiltrados = {};
+      camposPermitidos.forEach(k => { if (datos[k] !== undefined) datosFiltrados[k] = datos[k]; });
+      return { success: true, actualizado: Equipos.actualizarJugador(jugadorId, datosFiltrados) };
+    } else {
+      Auth.requireEntrenadorOAdmin(auth);
+      return { success: true, actualizado: Equipos.actualizarJugador(jugadorId, datos) };
+    }
   } catch (e) { return { success: false, error: e.message }; }
 }
 

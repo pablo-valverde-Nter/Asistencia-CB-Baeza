@@ -53,10 +53,27 @@ input, select, textarea { font-family: inherit; }
 
 /* ── Header ── */
 #app-header {
+  position: relative;
   height: var(--hdr-h); background: var(--morado); color: var(--blanco);
   display: flex; align-items: center; padding: 0 16px; gap: 10px;
   flex-shrink: 0; z-index: 100;
 }
+#user-menu {
+  position: absolute; top: var(--hdr-h); right: 0;
+  background: var(--blanco); border-radius: 0 0 var(--r) var(--r);
+  box-shadow: 0 6px 20px rgba(0,0,0,.2); border: 1px solid var(--borde);
+  z-index: 200; min-width: 190px; overflow: hidden;
+}
+.user-menu-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; width: 100%; background: none; border: none;
+  text-align: left; font-size: .86rem; font-weight: 600; cursor: pointer;
+  color: var(--texto); border-bottom: 1px solid var(--borde);
+  -webkit-tap-highlight-color: transparent; transition: background .12s;
+}
+.user-menu-item:last-child { border-bottom: none; }
+.user-menu-item:active { background: var(--fondo); }
+.user-menu-item-danger { color: var(--rojo); }
 #btn-back {
   display: none; align-items: center; justify-content: center;
   width: 36px; height: 36px; border-radius: 50%; color: var(--blanco);
@@ -187,6 +204,71 @@ input, select, textarea { font-family: inherit; }
 .equipo-card .eq-nombre { font-size: .95rem; font-weight: 700; }
 .equipo-card .eq-meta   { font-size: .74rem; color: var(--texto-sec); margin-top: 2px; }
 .equipo-card .eq-arrow  { margin-left: auto; color: var(--morado-m); font-size: 1rem; }
+
+/* ── Inicio: perfil entrenador/admin ── */
+.equipos-perfil-bloque {
+  text-align: center; padding: 28px 16px 22px;
+  background: linear-gradient(135deg, #4A148C 0%, #7B1FA2 100%);
+  color: #fff;
+}
+.eq-perfil-avatar {
+  width: 80px; height: 80px; border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.2rem; font-weight: 800; margin: 0 auto 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+}
+.eq-perfil-nombre {
+  font-size: 1.1rem; font-weight: 800; margin-bottom: 4px;
+}
+.eq-perfil-email {
+  font-size: .76rem; opacity: .8; margin-bottom: 6px;
+}
+.eq-perfil-rol {
+  display: inline-block; font-size: .68rem; font-weight: 700;
+  background: rgba(255,255,255,0.2); border-radius: 20px;
+  padding: 3px 12px; letter-spacing: .5px; text-transform: uppercase;
+}
+
+/* ── Inicio: tarjeta equipo grande ── */
+.equipo-card-big {
+  margin: 10px 16px;
+  background: var(--blanco); border-radius: var(--r); box-shadow: var(--sombra-lg);
+  border-left: 5px solid var(--morado); overflow: hidden;
+}
+.eq-big-hdr {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px 10px;
+}
+.equipo-card-big .eq-nombre { font-size: 1.05rem; font-weight: 800; color: var(--texto); }
+.equipo-card-big .eq-meta   { font-size: .72rem; color: var(--texto-sec); margin-top: 3px; text-transform: uppercase; letter-spacing: .4px; }
+.eq-big-stats {
+  padding: 0 16px 12px;
+  border-bottom: 1px solid var(--borde);
+}
+.eq-last-label {
+  font-size: .7rem; color: var(--texto-sec); margin-bottom: 6px; font-weight: 600;
+}
+.eq-no-stats {
+  font-size: .75rem; color: var(--texto-sec); font-style: italic;
+}
+.eq-big-btns {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  padding: 10px 14px 14px;
+}
+.btn-eq-asist, .btn-eq-stats {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 9px 6px; border-radius: 8px; font-size: .74rem; font-weight: 700;
+  cursor: pointer; border: none; transition: transform .1s, opacity .1s;
+  -webkit-tap-highlight-color: transparent; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
+}
+.btn-eq-asist:active, .btn-eq-stats:active { transform: scale(.96); opacity: .85; }
+.btn-eq-asist { background: var(--morado); color: #fff; }
+.btn-eq-stats {
+  background: var(--morado-s); color: var(--morado);
+  border: 1.5px solid var(--morado-m);
+}
 
 /* ── Cabecera coloreada (equipo/sesion) ── */
 .vista-header {
@@ -1139,6 +1221,21 @@ input, select, textarea { font-family: inherit; }
   font-size: .7rem; font-weight: 800; color: var(--rojo);
   text-transform: uppercase; letter-spacing: .5px;
 }
+.sesion-ro-justif-hdr { color: var(--verde); }
+.justif-ro-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-bottom: 1px solid var(--borde);
+  cursor: pointer; transition: background .15s;
+}
+.justif-ro-item:hover { background: var(--verde-s); }
+.justif-ro-item:last-child { border-bottom: none; }
+.btn-justif-pdf {
+  flex-shrink: 0; background: none; border: 1px solid var(--borde);
+  border-radius: 6px; padding: 4px 8px; font-size: .65rem;
+  color: var(--texto-sec); cursor: pointer; white-space: nowrap;
+  margin-left: 4px;
+}
+.btn-justif-pdf:hover { background: var(--verde-s); color: var(--verde); border-color: var(--verde); }
 
 /* ── 6a: Pie chart mini en equipo-card ── */
 .eq-pie-svg { flex-shrink: 0; margin: 0 2px; }
