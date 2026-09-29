@@ -104,7 +104,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - Siempre usar **V8 runtime** (declarado en `appsscript.json`).
 - Todas las funciones expuestas al cliente deben estar en `Code.gs` y ser llamadas vía `google.script.run`.
 - Las funciones en otros `.gs` son internas — no exponer directamente.
-- El acceso operativo a datos usa Supabase PostgREST desde Apps Script. Leer credenciales solo de Script Properties (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`); nunca exponer la clave al navegador.
+- El acceso operativo a datos usa Supabase PostgREST desde Apps Script. `src/Config.gs → SUPABASE_ENV` selecciona DEV o PRO por versión; las URL y claves están en Script Properties (`SUPABASE_DEV_URL`, `SUPABASE_DEV_SECRET_KEY`, `SUPABASE_DEV_PUBLISHABLE_KEY` y sus equivalentes PRO). Nunca exponer una Secret key al navegador ni guardarla en el repositorio. El navegador puede recibir solo la URL y Publishable key del entorno seleccionado para Realtime.
 - La SPA recibe solo cambios de `public.app_sync_state` vía Supabase Realtime y recarga los datos mediante `cargarDatos(auth)`. No suscribir el navegador a tablas de negocio (contienen PIN, códigos familiares y datos personales); mantener la publishable key como única clave del cliente.
 - Manejar errores con `try/catch` y devolver objetos `{ success: false, error: message }`.
 - Los IDs siempre se generan con `Utilities.getUuid()`.

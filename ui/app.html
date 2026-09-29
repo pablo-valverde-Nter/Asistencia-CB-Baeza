@@ -2,9 +2,6 @@
 // ================================================================
 // CB Baeza -- SPA principal
 // ================================================================
-const SUPABASE_REALTIME_URL = 'https://rodbxxlhyapmwrgbthqu.supabase.co';
-const SUPABASE_REALTIME_KEY = 'sb_publishable__M-suWx_NVSqviFGL64AOA_zfT-WxGB';
-
 const App = {
 
   state: {
@@ -36,7 +33,17 @@ const App = {
     _jugadorPendiente:  null,
     _tipoJugSelec:      'Principal',
     _formIsDirty:            false,
+    _pendingDirtyNavigation: null,
+    _equipoFormDirty:        false,
+    _jugadorDraftRestore:    false,
+    _entrenadorDraftRestore: false,
+    _ajustesDraftRestore:    false,
     _sesionAutoSaveTimer:    null,
+    _sesionAutoSaving:       false,
+    _sesionManualSaving:     false,
+    _sesionAutoSavePromise:  null,
+    _sesionEditVersion:      0,
+    _sesionDraftRestore:     null,
     _authReqSeq:             0,
     _pendingConfirmSave:     null,
     _credGuardadoConfirmado: false,
@@ -71,6 +78,16 @@ const App = {
     getJugadorById(id)     { return this.jugadores.find(function(j)  { return j.ID === id; }) || null; },
     getEntrenadorById(id)  { return this.entrenadores.find(function(e){ return e.ID === id; }) || null; },
     getEquipoById(id)      { return this.equipos.find(function(e)     { return e.ID === id; }) || null; },
+    getEstadoAsistencia(registro) {
+      if (!registro) return null;
+      var estado = String(registro.Estado || '').trim().toUpperCase();
+      if (estado === 'P' || estado === 'A' || estado === 'R') return estado;
+      if (registro.TieneJustificacion !== true && registro.TieneJustificacion !== 'TRUE') return null;
+      var tipo = String(registro.TipoJustificacion || '').trim().toLowerCase();
+      if (tipo === 'a' || tipo.indexOf('ausen') === 0) return 'A';
+      if (tipo === 'r' || tipo.indexOf('retras') === 0) return 'R';
+      return null;
+    },
 
     getJugadoresByEquipo(equipoId) {
       var self = this;
@@ -190,11 +207,12 @@ const App = {
         var tituloSesion = 'Entrenamiento';
         var estadoSesion = '';
         var claseEstado = 'scheduled';
+        var notificacionSesion = '';
         if (mode === 'player') {
           var registro = App.cache.asistJugadores.find(function(r) {
             return r.ID_Sesion === s.ID && r.ID_Jugador === jugadorId;
           });
-          var estadoJugador = registro && registro.Estado ? String(registro.Estado) : '';
+          var estadoJugador = App.cache.getEstadoAsistencia(registro) || '';
           var etiquetasJugador = { P: 'Presente', A: 'Ausente', R: 'Retraso' };
           var justificada = registro && (registro.TieneJustificacion === true || registro.TieneJustificacion === 'TRUE');
           var equipoSesion = App.cache.getEquipoById(s.ID_Equipo);
@@ -205,6 +223,10 @@ const App = {
           var asistenciaGuardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada;
           estadoSesion = s._loading ? 'Creando' : (asistenciaGuardada ? 'Registrada' : (s.Fecha < hoy ? 'Pendiente' : 'Pr&oacute;ximo'));
           claseEstado = s._loading ? 'loading' : (asistenciaGuardada ? 'registered' : (s.Fecha < hoy ? 'pending' : 'scheduled'));
+          var justificadasSesion = App.notifications.sessionJustificationCount(s);
+          notificacionSesion = justificadasSesion
+            ? '<span class="session-justif-badge" aria-label="' + justificadasSesion + ' justificaciones pendientes de guardar"><span aria-hidden="true">&#x26A0;</span>' + justificadasSesion + '</span>'
+            : '';
         }
         var abrir = mode === 'player'
           ? "App.views['mis-entrenamientos'].abrirDetalle('" + s.ID + "')"
@@ -212,16 +234,20 @@ const App = {
         return '<button class="calendar-weekly-item ' + claseEstado + '" onclick="' + abrir + '"' + (s._loading ? ' disabled' : '') + '>' +
           '<span class="calendar-weekly-date">' + diaSesion + '</span>' +
           '<span class="calendar-weekly-copy"><strong>' + tituloSesion + '</strong><small>' + s.HoraInicio + ' - ' + s.HoraFin + '</small></span>' +
-          '<span class="calendar-weekly-state">' + estadoSesion + '</span><span class="calendar-event-arrow">&#8250;</span></button>';
+          notificacionSesion + '<span class="calendar-weekly-state">' + estadoSesion + '</span><span class="calendar-event-arrow">&#8250;</span></button>';
       }).join('');
       var html = '<div class="calendar-wrap">' +
         '<section class="calendar-weekly" aria-label="Sesiones de esta semana">' +
         '<div class="calendar-weekly-heading"><div><h2>Sesiones de esta semana</h2><span>' + rangoSemana + '</span></div>' +
         '<span class="calendar-weekly-total">' + sesionesSemana.length + '</span></div>' +
+        (mode === 'coach'
+          ? '<button class="calendar-generate-week" onclick="App.views.sesiones.generarSemana()"><span aria-hidden="true">+</span> Generar semana</button>'
+          : '') +
         (sesionesSemana.length
           ? '<div class="calendar-weekly-list">' + sesionesSemanaHtml + '</div>'
           : '<p class="calendar-weekly-empty">No hay todav&iacute;a entrenamientos para esta semana.</p>') +
         '</section>' +
+        '<section class="calendar-month-panel" aria-label="Calendario y entrenamientos del día">' +
         '<div class="calendar-toolbar">' +
         '<button class="calendar-nav" aria-label="Mes anterior" onclick="App.calendar.move(\'' + scope + '\',-1)"><span class="calendar-nav-icon" aria-hidden="true">&#8249;</span></button>' +
         '<div class="calendar-month"><h2>' + tituloMes + '</h2><span>' + totalMes + ' entrenamientos</span></div>' +
@@ -248,7 +274,8 @@ const App = {
             var reg = App.cache.asistJugadores.find(function(r) {
               return r.ID_Sesion === s.ID && r.ID_Jugador === jugadorId;
             });
-            clase = reg && reg.Estado ? String(reg.Estado).toLowerCase() : 'unmarked';
+            var estadoJugador = App.cache.getEstadoAsistencia(reg);
+            clase = estadoJugador ? estadoJugador.toLowerCase() : 'unmarked';
           } else if (s._loading) {
             clase = 'loading';
           } else if (s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada) {
@@ -262,7 +289,8 @@ const App = {
           var registro = App.cache.asistJugadores.find(function(r) {
             return r.ID_Sesion === s.ID && r.ID_Jugador === jugadorId;
           });
-          var incidencia = registro && (registro.Estado === 'A' || registro.Estado === 'R');
+          var estadoRegistro = App.cache.getEstadoAsistencia(registro);
+          var incidencia = estadoRegistro === 'A' || estadoRegistro === 'R';
           var justificada = registro && (registro.TieneJustificacion === true || registro.TieneJustificacion === 'TRUE');
           return incidencia && !justificada;
         });
@@ -283,9 +311,12 @@ const App = {
         weekday: 'long', day: 'numeric', month: 'long'
       });
       var seleccionados = porFecha[state.selected] || [];
-      html += '</div><div class="calendar-agenda"><div class="calendar-agenda-heading">' +
-        '<div><span class="calendar-kicker">D&#205;A SELECCIONADO</span><h3>' + agendaLabel + '</h3></div>' +
-        '<span class="calendar-agenda-total">' + seleccionados.length + '</span></div>';
+      html += '</div><div class="calendar-agenda"><div class="calendar-agenda-reveal"><div class="calendar-agenda-inner">' +
+        '<div class="calendar-agenda-heading"><div><span class="calendar-kicker">D&#205;A SELECCIONADO</span><h3>' + agendaLabel + '</h3>' +
+        '<span class="calendar-agenda-count">' + seleccionados.length + (seleccionados.length === 1 ? ' entrenamiento' : ' entrenamientos') + '</span></div>' +
+        (mode === 'coach'
+          ? '<button class="calendar-add-session" onclick="App.views.sesiones.abrirExtra(\'' + state.selected + '\')"><span aria-hidden="true">+</span> Añadir entrenamiento</button>'
+          : '') + '</div>';
 
       if (!seleccionados.length) {
         html += '<div class="calendar-empty">No hay entrenamientos este d&#237;a</div>';
@@ -300,7 +331,7 @@ const App = {
               return r.ID_Sesion === s.ID && r.ID_Jugador === jugadorId;
             });
             var justificada = reg && (reg.TieneJustificacion === true || reg.TieneJustificacion === 'TRUE');
-            var estado = reg && reg.Estado ? String(reg.Estado) : '';
+            var estado = App.cache.getEstadoAsistencia(reg) || '';
             var etiquetas = { P: 'Presente', A: 'Ausente', R: 'Retraso' };
             label = justificada ? 'Justificada' : (etiquetas[estado] || (s.Fecha >= hoy ? 'Pr&oacute;ximo' : 'Sin registrar'));
             eventClass = justificada ? 'justified' : (estado ? estado.toLowerCase() : 'unmarked');
@@ -323,13 +354,17 @@ const App = {
             ? "App.views['mis-entrenamientos'].abrirDetalle('" + s.ID + "')"
             : "App.views.sesiones.abrirSesion('" + s.ID + "')";
           var disabled = s._loading ? ' disabled' : '';
+          var justifCount = mode === 'coach' ? App.notifications.sessionJustificationCount(s) : 0;
+          var justifBadge = justifCount
+            ? '<span class="session-justif-badge" aria-label="' + justifCount + ' justificaciones pendientes de guardar"><span aria-hidden="true">&#x26A0;</span>' + justifCount + '</span>'
+            : '';
           return '<button class="calendar-event ' + eventClass + '" onclick="' + click + '"' + disabled + '>' +
-            '<span class="calendar-event-time">' + s.HoraInicio + '</span>' +
-            '<span class="calendar-event-copy"><strong>' + tituloEvento + '</strong><small>' + subline + '</small>' + stats + '</span>' +
-            '<span class="calendar-event-status">' + label + '</span><span class="calendar-event-arrow">&#8250;</span></button>';
+            '<span class="calendar-event-time"><strong>' + s.HoraInicio + '</strong><small>' + s.HoraFin + '</small></span>' +
+            '<span class="calendar-event-copy"><strong>' + tituloEvento + '</strong>' + stats + '</span>' +
+            justifBadge + '<span class="calendar-event-status">' + label + '</span><span class="calendar-event-arrow">&#8250;</span></button>';
         }).join('') + '</div>';
       }
-      html += '</div></div>';
+      html += '</div></div></div></div></section></div>';
       container.innerHTML = html;
     },
 
@@ -355,6 +390,178 @@ const App = {
     refresh: function(scope) {
       if (scope === 'player') App.views['mis-entrenamientos'].render();
       else App.views.sesiones.render();
+    },
+  },
+
+  notifications: {
+    _identity: function() {
+      var usuario = App.state.usuario || {};
+      return String(usuario.ID || usuario.Email || App.state.auth && (App.state.auth.email || App.state.auth.usuario) || 'entrenador');
+    },
+
+    _storageKey: function() {
+      return 'cb-baeza-notifications-v1:' + this._identity();
+    },
+
+    _state: function() {
+      var key = this._storageKey();
+      try {
+        var state = JSON.parse(localStorage.getItem(key) || '{}');
+        return {
+          read: Array.isArray(state.read) ? state.read : [],
+          deleted: Array.isArray(state.deleted) ? state.deleted : [],
+        };
+      } catch (e) {
+        return { read: [], deleted: [] };
+      }
+    },
+
+    _save: function(state) {
+      try { localStorage.setItem(this._storageKey(), JSON.stringify(state)); } catch (e) {}
+    },
+
+    _key: function(registro) {
+      return String(registro.ID || (registro.ID_Sesion + ':' + registro.ID_Jugador));
+    },
+
+    items: function(teamId) {
+      return App.cache.asistJugadores.filter(function(registro) {
+        if (registro.TieneJustificacion !== true && registro.TieneJustificacion !== 'TRUE') return false;
+        var sesion = App.cache.sesiones.find(function(s) { return s.ID === registro.ID_Sesion; });
+        return sesion && (!teamId || sesion.ID_Equipo === teamId);
+      }).map(function(registro) {
+        var sesion = App.cache.sesiones.find(function(s) { return s.ID === registro.ID_Sesion; });
+        var jugador = App.cache.getJugadorById(registro.ID_Jugador);
+        var equipo = sesion ? App.cache.getEquipoById(sesion.ID_Equipo) : null;
+        return {
+          key: App.notifications._key(registro),
+          registro: registro,
+          sesion: sesion,
+          jugador: jugador,
+          equipo: equipo,
+          fecha: registro.FechaJustificacion || registro.FechaRegistro || ''
+        };
+      }).filter(function(item) { return item.jugador && item.sesion; })
+        .sort(function(a, b) { return a.fecha < b.fecha ? 1 : -1; });
+    },
+
+    unreadCount: function(teamId) {
+      var state = this._state();
+      return this.items(teamId).filter(function(item) {
+        return state.read.indexOf(item.key) < 0 && state.deleted.indexOf(item.key) < 0;
+      }).length;
+    },
+
+    sessionJustificationCount: function(sesion) {
+      if (!sesion || sesion.AsistenciaGuardada === true || sesion.AsistenciaGuardada === 'TRUE' || sesion._asistRegistrada) return 0;
+      return App.cache.asistJugadores.filter(function(r) {
+        return r.ID_Sesion === sesion.ID && (r.TieneJustificacion === true || r.TieneJustificacion === 'TRUE');
+      }).length;
+    },
+
+    _refreshHome: function() {
+      if (App.state.currentView === 'equipos') App.views.equipos.render();
+    },
+
+    markRead: function(teamId, index) {
+      var item = this.items(teamId)[index];
+      if (!item) return;
+      var state = this._state();
+      if (state.read.indexOf(item.key) < 0) state.read.push(item.key);
+      this._save(state);
+      this._refreshHome();
+      this.renderInbox(teamId);
+    },
+
+    markAllRead: function(teamId) {
+      var state = this._state();
+      this.items(teamId).forEach(function(item) {
+        if (state.read.indexOf(item.key) < 0) state.read.push(item.key);
+      });
+      this._save(state);
+      this._refreshHome();
+      this.renderInbox(teamId);
+    },
+
+    deleteOne: function(teamId, index) {
+      var item = this.items(teamId)[index];
+      if (!item) return;
+      var state = this._state();
+      if (state.deleted.indexOf(item.key) < 0) state.deleted.push(item.key);
+      this._save(state);
+      this._refreshHome();
+      this.renderInbox(teamId);
+    },
+
+    deleteAll: function(teamId) {
+      var state = this._state();
+      this.items(teamId).forEach(function(item) {
+        if (state.deleted.indexOf(item.key) < 0) state.deleted.push(item.key);
+      });
+      this._save(state);
+      this._refreshHome();
+      this.renderInbox(teamId);
+    },
+
+    openItem: function(teamId, index) {
+      var item = this.items(teamId)[index];
+      if (!item) return;
+      var state = this._state();
+      if (state.read.indexOf(item.key) < 0) state.read.push(item.key);
+      this._save(state);
+      App.closeModal();
+      App.state.equipoSesionesId = item.sesion.ID_Equipo;
+      App.state._equipoNombre = item.equipo ? item.equipo.Nombre : 'Equipo';
+      App.views.sesiones.abrirSesion(item.sesion.ID);
+    },
+
+    openInbox: function(teamId) {
+      var equipo = App.cache.getEquipoById(teamId);
+      App.openModal('Notificaciones' + (equipo ? ' · ' + equipo.Nombre : ''), '<div id="notification-inbox"></div>');
+      this.renderInbox(teamId);
+    },
+
+    renderInbox: function(teamId) {
+      var container = document.getElementById('notification-inbox');
+      if (!container) return;
+      var state = this._state();
+      var all = this.items(teamId).filter(function(item) { return state.deleted.indexOf(item.key) < 0; });
+      var html = '<div class="notification-toolbar">' +
+        '<button type="button" onclick="App.notifications.markAllRead(\'' + teamId + '\')">Marcar todas leídas</button>' +
+        '<button type="button" onclick="App.notifications.deleteAll(\'' + teamId + '\')">Borrar todas</button></div>';
+      if (!all.length) {
+        html += '<div class="notification-empty">No hay notificaciones</div>';
+      } else {
+        html += '<div class="notification-list">' + all.map(function(item) {
+          var idx = App.notifications.items(teamId).findIndex(function(entry) { return entry.key === item.key; });
+          var leida = state.read.indexOf(item.key) >= 0;
+          var fecha = _fmtFecha(item.sesion.Fecha);
+          var tipo = item.registro.TipoJustificacion || 'Justificación';
+          return '<article class="notification-item' + (leida ? ' read' : ' unread') + '" data-notification-index="' + idx + '">' +
+            '<button type="button" class="notification-open" onclick="App.notifications.openItem(\'' + teamId + '\',' + idx + ')">' +
+              '<span class="notification-icon" aria-hidden="true">&#x1F4EC;</span>' +
+              '<span class="notification-copy"><strong>' + _esc(item.jugador.Apellidos + ', ' + item.jugador.Nombre) + '</strong>' +
+              '<span>' + _esc(tipo) + ' · ' + _esc(fecha.dn + ' ' + fecha.d + ' ' + fecha.m) + ' · ' + _esc(item.sesion.HoraInicio) + '</span></span>' +
+              '<span class="notification-unread-dot" aria-hidden="true"></span>' +
+            '</button>' +
+            (!leida ? '<button type="button" class="notification-action" aria-label="Marcar como leída" title="Marcar como leída" onclick="App.notifications.markRead(\'' + teamId + '\',' + idx + ')">&#x2713;</button>' : '') +
+            '<button type="button" class="notification-action notification-delete" aria-label="Borrar notificación" title="Borrar" onclick="App.notifications.deleteOne(\'' + teamId + '\',' + idx + ')">&#x1F5D1;</button>' +
+          '</article>';
+        }).join('') + '</div>';
+      }
+      container.innerHTML = html;
+      container.querySelectorAll('.notification-item').forEach(function(row) {
+        var startX = null;
+        row.addEventListener('touchstart', function(event) {
+          startX = event.changedTouches[0].clientX;
+        }, { passive: true });
+        row.addEventListener('touchend', function(event) {
+          if (startX !== null && event.changedTouches[0].clientX - startX > 70) {
+            App.notifications.deleteOne(teamId, Number(row.dataset.notificationIndex));
+          }
+          startX = null;
+        }, { passive: true });
+      });
     },
   },
 
@@ -596,6 +803,7 @@ const App = {
   },
 
   _applyBootstrapData(res) {
+    App.realtime.config = res.supabaseRealtime || null;
     App.cache.jugadores           = res.jugadores           || [];
     App.cache.entrenadores        = res.entrenadores        || [];
     App.cache.equipos             = res.equipos             || [];
@@ -606,6 +814,7 @@ const App = {
     App.cache.temporadas          = res.temporadas          || [];
     App.cache.asistJugadores      = res.asistJugadores      || [];
     App.cache.asistEntrenadores   = res.asistEntrenadores   || [];
+    App.state._todosEntrenadores = App.cache.entrenadores;
 
     var ctx = res.contexto || {};
     App.state.rol          = ctx.rol || 'entrenador';
@@ -631,6 +840,21 @@ const App = {
 
   navigate(view, params, push) {
     App.closeUserMenu();
+    var currentView = App.state.currentView;
+    var nestedTeamForm = currentView === 'equipo-form' && (view === 'jugador-form' || view === 'entrenador-form');
+    if (currentView !== view && App.state._formIsDirty && push !== false && !nestedTeamForm) {
+      App.state._pendingDirtyNavigation = { view: view, params: params, push: push };
+      App.openModal('Cambios sin guardar',
+        '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
+        '<div class="modal-confirm-icon">&#x26A0;</div>' +
+        '<div class="modal-confirm-msg">¿Salir sin guardar?<br><br>Los cambios realizados se perderán.</div>' +
+        '<div style="display:flex;gap:8px;margin-top:20px">' +
+        '<button class="btn btn-secondary" style="flex:1" onclick="App._cancelDirtyNavigation()">Seguir editando</button>' +
+        '<button class="btn btn-destructive" style="flex:1" onclick="App._confirmDirtyNavigation()">Salir sin guardar</button>' +
+        '</div></div>');
+      return;
+    }
+    if (nestedTeamForm) App.state._equipoFormDirty = App.state._formIsDirty;
     if (App.state.currentView === 'sesion' && view !== 'sesion') App.views.sesion._stopAutoSave();
     if (push === undefined) push = true;
     if (view === 'login') {
@@ -697,26 +921,31 @@ const App = {
       fab.classList.add('hidden');
     }
 
-    var _editViews = {'jugador-detalle':true,'entrenador-detalle':true,'equipo-detalle':true};
-    var _btnEdit   = document.getElementById('btn-edit');
     var _userBadge = document.getElementById('user-badge');
-    if (_editViews[view]) {
-      var isEntDetalleAjeno = (view === 'entrenador-detalle' && !App.state.esAdmin && App.state.usuario && App.state.usuario.ID !== App.state.detalleEntrenadorId);
-      var isEqDetalleAjeno  = (view === 'equipo-detalle' && !App.state.esAdmin && !App.state.equipos.some(function(e) { return e.ID === App.state.detalleEquipoId; }));
-      if (isEntDetalleAjeno || isEqDetalleAjeno) _btnEdit.classList.add('hidden');
-      else _btnEdit.classList.remove('hidden');
-    } else {
-      _btnEdit.classList.add('hidden');
-    }
 
     // Ocultar controles de administración para el rol jugador
     if (App.state.rol === 'jugador') {
       fab.classList.add('hidden');
-      _btnEdit.classList.add('hidden');
     }
 
     if (App.views[view] && App.views[view].render) App.views[view].render(params || {});
+    if (view === 'equipo-form' && (currentView === 'jugador-form' || currentView === 'entrenador-form')) {
+      App.state._formIsDirty = App.state._equipoFormDirty;
+    }
     if (App.realtime) App.realtime.flushPending();
+  },
+
+  _cancelDirtyNavigation() {
+    App.state._pendingDirtyNavigation = null;
+    App.closeModal();
+  },
+
+  _confirmDirtyNavigation() {
+    var pending = App.state._pendingDirtyNavigation;
+    App.state._pendingDirtyNavigation = null;
+    App.state._formIsDirty = false;
+    App.closeModal();
+    if (pending) App.navigate(pending.view, pending.params, pending.push);
   },
 
   goBack() {
@@ -739,6 +968,18 @@ const App = {
   _goBackReal() {
     var prev = App.state.viewHistory.pop();
     if (prev) App.navigate(prev, {}, false);
+  },
+
+  puedeEditarDetalle(view) {
+    if (App.state.rol === 'jugador') return false;
+    if (view === 'jugador-detalle') return true;
+    if (view === 'entrenador-detalle') {
+      return App.state.esAdmin || (App.state.usuario && App.state.usuario.ID === App.state.detalleEntrenadorId);
+    }
+    if (view === 'equipo-detalle') {
+      return App.state.esAdmin || App.state.equipos.some(function(e) { return e.ID === App.state.detalleEquipoId; });
+    }
+    return false;
   },
 
   editarDetalle() {
@@ -836,9 +1077,9 @@ const App = {
           if (ultimaGuardada) {
             var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === ultimaGuardada.ID; });
             if (rs.length) {
-              cP = rs.filter(function(r) { return r.Estado === 'P'; }).length;
-              cA = rs.filter(function(r) { return r.Estado === 'A'; }).length;
-              cR = rs.filter(function(r) { return r.Estado === 'R'; }).length;
+              cP = rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'P'; }).length;
+              cA = rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'A'; }).length;
+              cR = rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'R'; }).length;
               var fl = _fmtFecha(ultimaGuardada.Fecha);
               statsLabel = 'Último entreno (' + fl.d + ' ' + fl.m + '):';
               statsHtml = '<div class="eq-stats">' +
@@ -853,6 +1094,9 @@ const App = {
           var visorHtml = esVisor ? '<span class="chip-visor">&#x1F441; Visor</span>' : '';
           var eqId = eq.ID;
           var eqNombre = _esc(eq.Nombre);
+          var unread = esVisor ? 0 : App.notifications.unreadCount(eq.ID);
+          var notificationHtml = esVisor ? '' : '<button type="button" class="eq-notifications" aria-label="Notificaciones de ' + eqNombre + (unread ? ': ' + unread + ' nuevas' : '') + '" title="Notificaciones" onclick="App.notifications.openInbox(\'' + eqId + '\')">' +
+            '<span aria-hidden="true">&#x1F4EC;</span>' + (unread ? '<span class="eq-notifications-count">' + unread + '</span>' : '') + '</button>';
           return '<div class="equipo-card-big">' +
             '<div class="eq-big-hdr">' +
               '<div class="eq-icon">&#x1F3C0;</div>' +
@@ -861,11 +1105,13 @@ const App = {
               visorHtml +
             '</div>' +
             '<div class="eq-big-stats">' +
-              (statsLabel ? '<div class="eq-last-label">' + statsLabel + '</div>' : '') +
-              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-                (statsHtml || '<span class="eq-no-stats">Sin sesiones registradas</span>') +
-                (ultimaGuardada && (cP + cA + cR) > 0 ? _pieCard(cP, cA, cR) : '') +
-              '</div>' +
+              '<div class="eq-big-stats-row"><div class="eq-big-stats-main">' +
+                (statsLabel ? '<div class="eq-last-label">' + statsLabel + '</div>' : '') +
+                '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+                  (statsHtml || '<span class="eq-no-stats">Sin sesiones registradas</span>') +
+                  (ultimaGuardada && (cP + cA + cR) > 0 ? _pieCard(cP, cA, cR) : '') +
+                '</div>' +
+              '</div>' + notificationHtml + '</div>' +
             '</div>' +
             '<div class="eq-big-btns">' +
               '<button class="btn-eq-asist" onclick="App.views.equipos.abrirEquipo(\'' + eqId + '\',\'' + eqNombre + '\')">&#x1F4CB; Registrar asistencia</button>' +
@@ -921,12 +1167,6 @@ const App = {
         var id = App.state.equipoSesionesId;
         if (!id) return;
         var sesiones = App.cache.getSesionesByEquipo(id);
-        document.getElementById('sesiones-equipo-hdr').innerHTML =
-          '<h2>' + (App.state._equipoNombre || 'Equipo') + '</h2>' +
-          '<div class="sesiones-desc">Registro de asistencia a entrenamientos</div>';
-        // 5d-1: mostrar subtítulo informativo
-        var sub = document.getElementById('sesiones-subtitulo');
-        if (sub) sub.style.display = '';
         App.views.sesiones._renderListas(sesiones);
       },
 
@@ -939,9 +1179,9 @@ const App = {
             var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === s.ID; });
             if (rs.length) {
               s._statsJug = {
-                P: rs.filter(function(r) { return r.Estado === 'P'; }).length,
-                A: rs.filter(function(r) { return r.Estado === 'A'; }).length,
-                R: rs.filter(function(r) { return r.Estado === 'R'; }).length
+                P: rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'P'; }).length,
+                A: rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'A'; }).length,
+                R: rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'R'; }).length
               };
             }
           }
@@ -961,6 +1201,8 @@ const App = {
         var id = App.state.equipoSesionesId;
         var horarios = App.cache.getHorariosByEquipo(id);
         if (!horarios.length) { showToast('El equipo no tiene horario configurado', 'error'); return; }
+        var operationToken = App.operation.begin('generate-week:' + id);
+        if (!operationToken) return;
 
         // Calcular lunes de la semana actual (local, mismo criterio que _hoy())
         var hoyDate = new Date();
@@ -985,23 +1227,23 @@ const App = {
         server('generarSesionesSemana', id)
           .then(function(res) {
             App.cache.sesiones = App.cache.sesiones.filter(function(s) { return tempIds.indexOf(s.ID) < 0; });
-            if (!res.success) { showToast(res.error, 'error'); App.views.sesiones.render(); return; }
+            if (!res || res.success === false) throw new Error(res && res.error || 'No se pudieron generar las sesiones');
             var creadas = res.sesiones && res.sesiones.creadas ? res.sesiones.creadas : [];
             creadas.forEach(function(s) { App.cache.upsert('sesiones', s); });
-            showToast('Creadas ' + creadas.length + ' sesiones', 'success');
             App.views.sesiones.render();
+            App.operation.succeed(operationToken);
           })
-          .catch(function() {
+          .catch(function(error) {
             App.cache.sesiones = App.cache.sesiones.filter(function(s) { return tempIds.indexOf(s.ID) < 0; });
-            showToast('Error al generar sesiones', 'error');
             App.views.sesiones.render();
+            App.operation.fail(operationToken, (error && error.message) || 'Error al generar sesiones');
           });
       },
 
-      abrirExtra: function() {
+      abrirExtra: function(fecha) {
         App.openModal('Nueva sesion extra',
           '<div style="padding:16px">' +
-          '<div class="form-group"><label>Fecha</label><input type="date" id="ext-fecha" value="' + _hoy() + '"></div>' +
+          '<div class="form-group"><label>Fecha</label><input type="date" id="ext-fecha" value="' + (fecha || _hoy()) + '"></div>' +
           '<div class="form-row">' +
           '<div class="form-group"><label>Inicio</label><input type="time" id="ext-inicio" value="18:00"></div>' +
           '<div class="form-group"><label>Fin</label><input type="time" id="ext-fin" value="19:30"></div>' +
@@ -1023,6 +1265,8 @@ const App = {
         if (!datos.Fecha || !datos.HoraInicio || !datos.HoraFin) {
           showToast('Fecha y horas son obligatorias', 'error'); return;
         }
+        var operationToken = App.operation.begin('session-create:' + App.state.equipoSesionesId);
+        if (!operationToken) return;
         App.closeModal();
 
         // Añadir tarjeta placeholder al listado inmediatamente
@@ -1039,17 +1283,24 @@ const App = {
         });
         App.views.sesiones.render();
 
-        App.sync.run('crearSesionExtra', [App.state.equipoSesionesId, datos], function() {
-          // Rollback: eliminar placeholder
+        App.sync.start();
+        server('crearSesionExtra', App.state.equipoSesionesId, datos).then(function(res) {
+          if (!res || res.success === false || !res.sesion) throw new Error(res && res.error || 'No se pudo crear la sesión');
+          App.cache.sesiones = App.cache.sesiones.filter(function(s) { return s.ID !== tempId; });
+          App.cache.upsert('sesiones', res.sesion);
+          App.sync.done();
+          App.views.sesiones.render();
+          App.operation.succeed(operationToken);
+        }).catch(function(error) {
+          App.sync.done();
           App.cache.sesiones = App.cache.sesiones.filter(function(s) { return s.ID !== tempId; });
           App.views.sesiones.render();
-        }).then(function(res) {
-          App.cache.sesiones = App.cache.sesiones.filter(function(s) { return s.ID !== tempId; });
-          if (res && res.success && res.sesion) {
-            App.cache.upsert('sesiones', res.sesion);
-            showToast('Sesión creada', 'success');
-          }
-          App.views.sesiones.render();
+          App.views.sesiones.abrirExtra(datos.Fecha);
+          document.getElementById('ext-fecha').value = datos.Fecha;
+          document.getElementById('ext-inicio').value = datos.HoraInicio;
+          document.getElementById('ext-fin').value = datos.HoraFin;
+          document.getElementById('ext-notas').value = datos.Notas;
+          App.operation.fail(operationToken, (error && error.message) || 'Error al crear la sesión');
         });
       },
     },
@@ -1063,6 +1314,25 @@ const App = {
         var sesion = App.cache.sesiones.find(function(s) { return s.ID === id; });
         if (!sesion) { showToast('Sesión no encontrada', 'error'); return; }
         App.views.sesion._render(App.views.sesion._buildFromCache(sesion));
+      },
+
+      _estadoJustificacion: function(tipo) {
+        var valor = String(tipo || '').trim().toLowerCase();
+        if (valor === 'a' || valor.indexOf('ausen') === 0) return 'A';
+        if (valor === 'r' || valor.indexOf('retras') === 0) return 'R';
+        return null;
+      },
+
+      _estadoAsistencia: function(registro) {
+        return App.cache.getEstadoAsistencia(registro);
+      },
+
+      _estadoTarjeta: function(card) {
+        var estado = String(card.dataset.estado || '').trim().toUpperCase();
+        if (estado === 'P' || estado === 'A' || estado === 'R') return estado;
+        return card.dataset.justif === 'true'
+          ? App.views.sesion._estadoJustificacion(card.dataset.tipoJustif)
+          : null;
       },
 
       // Construye el objeto asistencia completo desde App.cache sin tocar el servidor.
@@ -1081,11 +1351,12 @@ const App = {
           .filter(Boolean);
         var jugConEstado = jugEquipo.concat(invitadosJug).map(function(j) {
           var reg = mapaJug[j.ID];
+          var tieneJustif = !!(reg && (reg.TieneJustificacion === true || reg.TieneJustificacion === 'TRUE'));
           return {
             jugador: j,
-            estado: reg ? reg.Estado : null,
+            estado: App.views.sesion._estadoAsistencia(reg),
             esInvitado: !!reg && (reg.EsInvitado === true || reg.EsInvitado === 'TRUE'),
-            tieneJustif: !!(reg && (reg.TieneJustificacion === true || reg.TieneJustificacion === 'TRUE')),
+            tieneJustif: tieneJustif,
             tipoJustif: reg ? (reg.TipoJustificacion || '') : '',
             motivoJustif: reg ? (reg.MotivoCategoria || '') : '',
             mensajeJustif: reg ? (reg.MensajeGenerado || '') : '',
@@ -1124,7 +1395,9 @@ const App = {
 
         document.getElementById('sesion-jugs').innerHTML = jugadores.length
           ? jugadores.map(function(item) {
-              var j = item.jugador; var estado = item.estado || ''; var inv = item.esInvitado;
+              var j = item.jugador;
+              var estado = item.estado || (item.tieneJustif ? App.views.sesion._estadoJustificacion(item.tipoJustif) : '') || '';
+              var inv = item.esInvitado;
               return '<div class="jug-card ' + estado + '" data-id="' + j.ID + '" data-estado="' + estado + '" data-inv="' + inv + '" data-justif="' + (item.tieneJustif ? 'true' : 'false') + '" data-tipo-justif="' + _esc(item.tipoJustif || '') + '" onclick="App.views.sesion.toggleEstado(this)">' +
                 '<div class="jug-dorsal">' + (j.Dorsal || '-') + '</div>' +
                 '<div style="flex:1;min-width:0"><div class="jug-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
@@ -1141,11 +1414,37 @@ const App = {
               return '<div class="ent-row" data-id="' + e.ID + '" data-inv="' + inv + '">' +
                 '<div><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
                 '<div class="ent-sub">' + (inv ? 'Invitado' : '') + '</div></div>' +
-                '<label class="toggle-sw"><input type="checkbox" ' + (asistio ? 'checked' : '') + ' onchange="App.state._formIsDirty=true">' +
+                '<label class="toggle-sw"><input type="checkbox" ' + (asistio ? 'checked' : '') + ' onchange="App.state._formIsDirty=true;App.state._sesionEditVersion++">' +
                 '<div class="toggle-sl"></div></label></div>';
             }).join('')
           : '<div class="empty-state" style="padding:20px"><p>Sin entrenadores asignados</p></div>';
-        App.state._formIsDirty = false;
+        var draft = App.state._sesionDraftRestore;
+        if (draft && draft.sesionId === sesion.ID) {
+          document.querySelectorAll('#sesion-jugs .jug-card').forEach(function(card) {
+            var saved = draft.jugadores.find(function(item) { return item.jugadorId === card.dataset.id; });
+            if (!saved) return;
+            card.dataset.estado = saved.estado || '';
+            card.dataset.inv = String(!!saved.esInvitado);
+            card.className = 'jug-card ' + (saved.estado || '');
+            var chip = card.querySelector('.estado-chip');
+            if (chip) chip.textContent = _iconEstado(saved.estado || '');
+            if (saved.limpiarJustif) {
+              card.dataset.justif = 'false';
+              card.dataset.justifCleared = 'true';
+              var aviso = card.querySelector('.jug-justif-aviso');
+              if (aviso) aviso.remove();
+            }
+          });
+          document.querySelectorAll('#sesion-ents .ent-row').forEach(function(row) {
+            var saved = draft.entrenadores.find(function(item) { return item.entrenadorId === row.dataset.id; });
+            var checkbox = row.querySelector('input[type="checkbox"]');
+            if (saved && checkbox) checkbox.checked = !!saved.asistio;
+          });
+          App.state._sesionDraftRestore = null;
+          App.state._formIsDirty = true;
+        } else {
+          App.state._formIsDirty = false;
+        }
         App.views.sesion._startAutoSave();
       },
 
@@ -1180,13 +1479,47 @@ const App = {
           if (aviso) aviso.remove();
         }
         App.state._formIsDirty = true;
+        App.state._sesionEditVersion++;
+      },
+
+      _applyAttendanceCache: function(sesionId, jugadores, entrenadores) {
+        var registrosPrevios = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === sesionId; });
+        App.cache.asistJugadores = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
+        jugadores.forEach(function(jugador) {
+          if (!jugador.estado) return;
+          var original = registrosPrevios.find(function(r) { return r.ID_Jugador === jugador.jugadorId; });
+          var justificacion = jugador.limpiarJustif
+            ? { TieneJustificacion: false, TipoJustificacion: '', MotivoCategoria: '' }
+            : (original ? { TieneJustificacion: original.TieneJustificacion, TipoJustificacion: original.TipoJustificacion, MotivoCategoria: original.MotivoCategoria } : {});
+          App.cache.asistJugadores.push(Object.assign(justificacion, {
+            ID_Sesion: sesionId, ID_Jugador: jugador.jugadorId, Estado: jugador.estado, EsInvitado: jugador.esInvitado
+          }));
+        });
+        App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
+        entrenadores.forEach(function(entrenador) {
+          App.cache.asistEntrenadores.push({
+            ID_Sesion: sesionId, ID_Entrenador: entrenador.entrenadorId,
+            Asistio: entrenador.asistio, EsInvitado: entrenador.esInvitado
+          });
+        });
+        var conteos = { P: 0, A: 0, R: 0 };
+        jugadores.forEach(function(jugador) { if (conteos[jugador.estado] !== undefined) conteos[jugador.estado]++; });
+        var sesion = App.cache.sesiones.find(function(item) { return item.ID === sesionId; });
+        if (sesion) {
+          sesion.AsistenciaGuardada = true;
+          sesion._asistRegistrada = true;
+          sesion._statsJug = conteos;
+          sesion._statsEnt = entrenadores.filter(function(item) { return item.asistio; }).length;
+        }
       },
 
       guardar: function() {
         var sesionId = App.state.sesionId;
+        if (!sesionId || App.state._sesionManualSaving) return;
         var jugadores = [];
         document.querySelectorAll('#sesion-jugs .jug-card').forEach(function(c) {
-          if (c.dataset.estado) jugadores.push({jugadorId:c.dataset.id, estado:c.dataset.estado, esInvitado:c.dataset.inv==='true', limpiarJustif: c.dataset.justifCleared === 'true'});
+          var estado = App.views.sesion._estadoTarjeta(c);
+          if (estado) jugadores.push({jugadorId:c.dataset.id, estado:estado, esInvitado:c.dataset.inv==='true', limpiarJustif: c.dataset.justifCleared === 'true'});
         });
         var entrenadores = [];
         document.querySelectorAll('#sesion-ents .ent-row').forEach(function(c) {
@@ -1199,57 +1532,36 @@ const App = {
           return;
         }
 
-        // Backup para rollback si el servidor falla
-        var jugBackup = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === sesionId; });
-        var entBackup = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion === sesionId; });
-        var sesionObj = App.cache.sesiones.find(function(s) { return s.ID === sesionId; });
-        var sesionBackup = sesionObj ? Object.assign({}, sesionObj) : null;
-
-        // Actualizar caché de forma optimista
-        App.cache.asistJugadores = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
-        jugadores.forEach(function(j) {
-          if (j.estado) {
-            var regOrig = jugBackup.find(function(r) { return r.ID_Jugador === j.jugadorId; });
-            var justifFields = j.limpiarJustif
-              ? { TieneJustificacion: false, TipoJustificacion: '', MotivoCategoria: '' }
-              : (regOrig ? { TieneJustificacion: regOrig.TieneJustificacion, TipoJustificacion: regOrig.TipoJustificacion, MotivoCategoria: regOrig.MotivoCategoria } : {});
-            App.cache.asistJugadores.push(Object.assign(justifFields, { ID_Sesion: sesionId, ID_Jugador: j.jugadorId, Estado: j.estado, EsInvitado: j.esInvitado }));
-          }
-        });
-        App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
-        entrenadores.forEach(function(e) {
-          App.cache.asistEntrenadores.push({ ID_Sesion: sesionId, ID_Entrenador: e.entrenadorId, Asistio: e.asistio, EsInvitado: e.esInvitado });
-        });
-        if (sesionObj) {
-          var countP = 0, countA = 0, countR = 0;
-          jugadores.forEach(function(j) {
-            if (j.estado === 'P') countP++;
-            else if (j.estado === 'A') countA++;
-            else if (j.estado === 'R') countR++;
-          });
-          sesionObj.AsistenciaGuardada = true;
-          sesionObj._asistRegistrada = true;
-          sesionObj._statsJug = { P: countP, A: countA, R: countR };
-          sesionObj._statsEnt = entrenadores.filter(function(e) { return e.asistio; }).length;
-        }
-
-        // Navegar al listado inmediatamente, sin esperar al servidor
+        var token = App.operation.begin('attendance:' + sesionId);
+        if (!token) return;
+        var draft = { sesionId: sesionId, jugadores: jugadores, entrenadores: entrenadores };
+        var historyBefore = App.state.viewHistory.slice();
         App.state._formIsDirty = false;
         App.state.sesionId = null;
+        App.state._sesionManualSaving = true;
         App.views.sesion._stopAutoSave();
-        showToast('Asistencia guardada', 'success');
         var _hIdx = App.state.viewHistory.lastIndexOf('sesiones');
         App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'sesion'; });
         App.navigate('sesiones', null, false);
-
-        // Sincronizar con el servidor en segundo plano
-        App.sync.run('guardarAsistenciaCompleta', [sesionId, {jugadores:jugadores, entrenadores:entrenadores}], function() {
-          // Rollback si el servidor falla
-          App.cache.asistJugadores = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
-          jugBackup.forEach(function(r) { App.cache.asistJugadores.push(r); });
-          App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
-          entBackup.forEach(function(r) { App.cache.asistEntrenadores.push(r); });
-          if (sesionObj && sesionBackup) Object.assign(sesionObj, sesionBackup);
+        var pendingAutoSave = App.state._sesionAutoSavePromise || Promise.resolve();
+        Promise.resolve(pendingAutoSave).catch(function() {}).then(function() {
+          return server('guardarAsistenciaCompleta', sesionId, { jugadores: jugadores, entrenadores: entrenadores });
+        }).then(function(result) {
+          if (!result || result.success === false) throw new Error(result && result.error || 'No se pudo guardar la asistencia');
+          App.views.sesion._applyAttendanceCache(sesionId, jugadores, entrenadores);
+          App.state._sesionManualSaving = false;
+          App.state._sesionAutoSaving = false;
+          App.state._sesionAutoSavePromise = null;
+          App.state._formIsDirty = false;
+          App.operation.succeed(token);
+          App.views.sesiones.render();
+        }).catch(function(error) {
+          App.state._sesionManualSaving = false;
+          App.state.sesionId = sesionId;
+          App.state._sesionDraftRestore = draft;
+          App.state.viewHistory = historyBefore;
+          App.navigate('sesion', {}, false);
+          App.operation.fail(token, (error && error.message) || 'No se pudo guardar la asistencia');
         });
       },
 
@@ -1267,59 +1579,55 @@ const App = {
           App.state._sesionAutoSaveTimer = null;
         }
       },
-      _actualizarTs: function() {
+      _actualizarTs: function(error) {
         var ts = document.getElementById('sesion-autosave-ts');
         if (!ts) return;
+        ts.classList.toggle('autosave-error', !!error);
+        if (error) {
+          ts.textContent = 'Pendiente de guardar';
+          ts.style.display = 'block';
+          return;
+        }
         var n = new Date();
         ts.textContent = 'Guardado a las ' + n.getHours() + ':' + String(n.getMinutes()).padStart(2, '0');
         ts.style.display = 'block';
       },
       _autoGuardar: function() {
         var sesionId = App.state.sesionId;
-        if (!sesionId || App.state.currentView !== 'sesion') return;
+        if (!sesionId || App.state.currentView !== 'sesion' || App.state._sesionManualSaving) return Promise.resolve();
+        if (App.state._sesionAutoSaving) return App.state._sesionAutoSavePromise || Promise.resolve();
         var jugadores = [];
         document.querySelectorAll('#sesion-jugs .jug-card').forEach(function(c) {
-          if (c.dataset.estado) jugadores.push({jugadorId:c.dataset.id, estado:c.dataset.estado, esInvitado:c.dataset.inv==='true', limpiarJustif: c.dataset.justifCleared === 'true'});
+          var estado = App.views.sesion._estadoTarjeta(c);
+          if (estado) jugadores.push({jugadorId:c.dataset.id, estado:estado, esInvitado:c.dataset.inv==='true', limpiarJustif: c.dataset.justifCleared === 'true'});
         });
         var entrenadores = [];
         document.querySelectorAll('#sesion-ents .ent-row').forEach(function(c) {
           entrenadores.push({entrenadorId:c.dataset.id, asistio:c.querySelector('input[type="checkbox"]').checked, esInvitado:c.dataset.inv==='true'});
         });
-        if (!entrenadores.some(function(e) { return e.asistio; })) return;
-        App.sync.run('guardarAsistenciaCompleta', [sesionId, {jugadores:jugadores, entrenadores:entrenadores}])
-          .then(function(res) {
-            if (!res || !res.success) return;
-            var prevRecsAuto = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === sesionId; });
-            App.cache.asistJugadores = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
-            jugadores.forEach(function(j) {
-              if (j.estado) {
-                var regOrig = prevRecsAuto.find(function(r) { return r.ID_Jugador === j.jugadorId; });
-                var justifFields = j.limpiarJustif
-                  ? { TieneJustificacion: false, TipoJustificacion: '', MotivoCategoria: '' }
-                  : (regOrig ? { TieneJustificacion: regOrig.TieneJustificacion, TipoJustificacion: regOrig.TipoJustificacion, MotivoCategoria: regOrig.MotivoCategoria } : {});
-                App.cache.asistJugadores.push(Object.assign(justifFields, { ID_Sesion: sesionId, ID_Jugador: j.jugadorId, Estado: j.estado, EsInvitado: j.esInvitado }));
-              }
-            });
-            App.cache.asistEntrenadores = App.cache.asistEntrenadores.filter(function(r) { return r.ID_Sesion !== sesionId; });
-            entrenadores.forEach(function(e) {
-              App.cache.asistEntrenadores.push({ ID_Sesion: sesionId, ID_Entrenador: e.entrenadorId, Asistio: e.asistio, EsInvitado: e.esInvitado });
-            });
-            var countP = 0, countA = 0, countR = 0;
-            jugadores.forEach(function(j) {
-              if (j.estado === 'P') countP++;
-              else if (j.estado === 'A') countA++;
-              else if (j.estado === 'R') countR++;
-            });
-            var sesionObj = App.cache.sesiones.find(function(s) { return s.ID === sesionId; });
-            if (sesionObj) {
-              sesionObj.AsistenciaGuardada = true;
-              sesionObj._asistRegistrada = true;
-              sesionObj._statsJug = { P: countP, A: countA, R: countR };
-              sesionObj._statsEnt = entrenadores.filter(function(e) { return e.asistio; }).length;
-            }
-            App.state._formIsDirty = false;
-            App.views.sesion._actualizarTs();
+        if (!entrenadores.some(function(e) { return e.asistio; })) return Promise.resolve();
+        var editVersion = App.state._sesionEditVersion;
+        App.state._sesionAutoSaving = true;
+        App.sync.start();
+        var request = server('guardarAsistenciaCompleta', sesionId, { jugadores: jugadores, entrenadores: entrenadores })
+          .then(function(result) {
+            if (!result || result.success === false) throw new Error(result && result.error || 'Error al guardar');
+            App.views.sesion._applyAttendanceCache(sesionId, jugadores, entrenadores);
+            if (editVersion === App.state._sesionEditVersion) App.state._formIsDirty = false;
+            App.views.sesion._actualizarTs(false);
+            return result;
+          })
+          .catch(function(error) {
+            App.views.sesion._actualizarTs(true);
+            _clientLog('attendance_autosave_error', { error: error && error.message ? error.message : null });
+          })
+          .then(function() {
+            App.sync.done();
+            App.state._sesionAutoSaving = false;
+            App.state._sesionAutoSavePromise = null;
           });
+        App.state._sesionAutoSavePromise = request;
+        return request;
       },
 
       buscarInvitadoJug: function() { App.views.sesion._abrirBuscador('jugador'); },
@@ -1403,6 +1711,7 @@ const App = {
       _confirmarEliminar: function() {
         var sesionId = App.state.sesionId;
         App.closeModal();
+        var historyBefore = App.state.viewHistory.slice();
         // OPTIMISTA: guardar backup para rollback
         var sesionBackup = Object.assign({}, App.cache.sesiones.find(function(s) { return s.ID === sesionId; }));
         var asistJugBackup = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === sesionId; });
@@ -1414,7 +1723,6 @@ const App = {
         App.state._formIsDirty = false;
         App.state.sesionId = null;
         App.views.sesion._stopAutoSave();
-        showToast('Sesión eliminada', 'success');
         var _hIdx = App.state.viewHistory.lastIndexOf('sesiones');
         App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'sesion'; });
         App.navigate('sesiones', null, false);
@@ -1423,6 +1731,9 @@ const App = {
           if (sesionBackup && sesionBackup.ID) App.cache.upsert('sesiones', sesionBackup);
           asistJugBackup.forEach(function(r) { App.cache.asistJugadores.push(r); });
           asistEntBackup.forEach(function(r) { App.cache.asistEntrenadores.push(r); });
+          App.state.sesionId = sesionId;
+          App.state.viewHistory = historyBefore;
+          App.navigate('sesion', {}, false);
         });
       },
     },
@@ -1516,7 +1827,7 @@ const App = {
                   (item.motivoJustif ? '<div style="font-size:.73rem;color:var(--texto-sec)">' + _esc(item.motivoJustif) + '</div>' : '') +
                 '</div>' +
                 '<span class="ro-chip ' + chipClass + '" style="font-size:.65rem;flex-shrink:0">' + tipoLabel + '</span>' +
-                '<span class="justif-badge" style="flex-shrink:0">&#x2713;</span>' +
+                '<span class="justif-badge" style="flex-shrink:0"></span>' +
                 '<button class="btn-justif-pdf" onclick="event.stopPropagation();App.views[\'sesion-guardada\'].descargarPDF(' + idx + ')" title="Descargar justificación en PDF">&#x21E9;&nbsp;PDF</button>' +
                 '</div>';
             }).join('');
@@ -1528,14 +1839,14 @@ const App = {
         document.getElementById('sesion-ro-jugs').innerHTML = data.jugadores.length
           ? data.jugadores.map(function(item) {
               var j = item.jugador;
-              var estado = item.estado || '';
+              var estado = item.estado || (item.tieneJustif ? App.views.sesion._estadoJustificacion(item.tipoJustif) : '') || '';
               var esIncidencia = estado === 'A' || estado === 'R';
               var chipClass = estado || 'none';
               var chipLabel = {P:'Presente',A:'Ausente',R:'Retraso'}[estado] || '–';
               var tagHtml = item.esInvitado ? '<span class="jrm-tag">Invitado</span>' : '';
               var justifTag = (item.tieneJustif && !esIncidencia) ? '<span class="jrm-tag justif">Pre-just.</span>' : '';
               var alertBadge = (esIncidencia && !item.tieneJustif)
-                ? '<span class="sin-justif-chip">&#x26A0;</span>' : '';
+                ? '<span class="calendar-alert" title="Sin justificar" aria-label="Sin justificar">!</span>' : '';
               var justifBadge = (esIncidencia && item.tieneJustif)
                 ? '<span class="justif-badge" style="font-size:.6rem;padding:2px 5px"></span>' : '';
               return '<div class="jug-ro-mini ' + estado + '">' +
@@ -1605,11 +1916,25 @@ const App = {
           '<button class="print-btn" onclick="window.print()">Guardar como PDF</button>' +
           '<script>window.addEventListener(\'load\',function(){setTimeout(function(){window.print();},300);});<\/script>' +
           '</body></html>';
-        var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-        var url = URL.createObjectURL(blob);
-        var win = window.open(url, '_blank');
-        if (win) win.document.title = titulo;
-        setTimeout(function() { URL.revokeObjectURL(url); }, 60000);
+        var win;
+        try {
+          win = window.open('', '_blank');
+        } catch (e) {
+          win = null;
+        }
+        if (!win) {
+          showToast('El navegador ha bloqueado la ventana del justificante', 'error');
+          return;
+        }
+        try {
+          win.opener = null;
+          win.document.open();
+          win.document.write(html);
+          win.document.close();
+        } catch (ePrint) {
+          win.close();
+          showToast('No se pudo preparar el justificante en PDF', 'error');
+        }
       },
 
       editar: function() {
@@ -1655,7 +1980,7 @@ const App = {
           sesGdas.forEach(function(s) {
             var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === s.ID; });
             totalRegistros += rs.length;
-            totalPresencias += rs.filter(function(r) { return r.Estado === 'P'; }).length;
+            totalPresencias += rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'P'; }).length;
           });
           statsEq[eq.ID] = {
             jugadores: jugs.length,
@@ -1929,6 +2254,9 @@ const App = {
         }
 
         if (equipoId) {
+          var operationToken = App.operation.begin('team:' + equipoId);
+          if (!operationToken) return;
+          var formHistory = App.state.viewHistory.slice();
           // ── EDICIÓN OPTIMISTA ─────────────────────────────────────────────
           // Capturar backup para posible rollback
           var eqAntes = Object.assign({}, App.cache.equipos.find(function(e) { return e.ID === equipoId; }));
@@ -1950,7 +2278,6 @@ const App = {
           });
           App.cache._setRelacionesEquipo(equipoId, App.state.formJugadores, App.state.formEntrenadores);
 
-          showToast('Equipo guardado', 'success');
           App.state._formIsDirty = false;
           var _hIdx = App.state.viewHistory.lastIndexOf('equipos-admin');
           App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'equipo-form' && v !== 'equipo-detalle'; });
@@ -1965,11 +2292,16 @@ const App = {
                 server('setHorariosEquipo', equipoId, horarios),
                 App.views['equipo-form']._sincronizarPersonas(equipoId),
               ]);
+            }).then(function(resultados) {
+              if (!resultados[0] || resultados[0].success === false) {
+                throw new Error(resultados[0] && resultados[0].error || 'No se pudieron guardar los horarios');
+              }
+              App.sync.done();
+              App.operation.succeed(operationToken);
+              if (App.state.currentView === 'equipos-admin') App.views['equipos-admin'].render();
             })
-            .then(function() { App.sync.done(); })
             .catch(function(e) {
               App.sync.done();
-              showToast((e && e.message) || 'Error al sincronizar equipo', 'error');
               // Rollback
               if (eqAntes && eqAntes.ID) App.cache.upsert('equipos', eqAntes);
               App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== equipoId; });
@@ -1978,41 +2310,64 @@ const App = {
               App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
               jugRelAntes.forEach(function(r) { App.cache.jugadoresEquipos.push(r); });
               entRelAntes.forEach(function(r) { App.cache.entrenadoresEquipos.push(r); });
+              App.state.equipos = App.state.equipos.map(function(e) { return e.ID === equipoId && eqAntes ? eqAntes : e; });
+              App.state.formEquipoId = equipoId;
+              App.state.viewHistory = formHistory;
+              App.navigate('equipo-form', {}, false);
+              App.operation.fail(operationToken, (e && e.message) || 'Error al guardar el equipo');
             });
 
         } else {
-          // ── CREACIÓN: esperar solo el ID, luego navegar ───────────────────
-          App.sync.start();
+          var operationToken = App.operation.begin('team-create');
+          if (!operationToken) return;
+          var formHistory = App.state.viewHistory.slice();
+          var nuevoEquipoId = null;
+          var parentIndex = App.state.viewHistory.lastIndexOf('equipos-admin');
+          if (parentIndex >= 0) App.state.viewHistory = App.state.viewHistory.slice(0, parentIndex);
+          App.state._formIsDirty = false;
+          App.navigate('equipos-admin', {}, false);
           server('crearEquipo', { Nombre: nombre, Categoria: categoria, Modalidad: modalidad })
             .then(function(res) {
-              if (!res.success) { App.sync.done(); showToast(res.error || 'Error al crear equipo', 'error'); return; }
-              var nuevoId = res.equipo.ID;
-              App.state.formEquipoId = nuevoId;
+              if (!res || res.success === false || !res.equipo || !res.equipo.ID) {
+                throw new Error(res && res.error || 'No se pudo crear el equipo');
+              }
+              nuevoEquipoId = res.equipo.ID;
               App.cache.upsert('equipos', res.equipo);
-              App.state.equipos.push(res.equipo);
-              showToast('Equipo creado', 'success');
+              if (!App.state.equipos.some(function(e) { return e.ID === nuevoEquipoId; })) App.state.equipos.push(res.equipo);
+              App.state.formEquipoId = nuevoEquipoId;
+              return Promise.all([
+                server('setHorariosEquipo', nuevoEquipoId, horarios),
+                App.views['equipo-form']._sincronizarPersonas(nuevoEquipoId),
+              ]);
+            }).then(function(resultados) {
+              if (!resultados || !resultados[0] || resultados[0].success === false) {
+                throw new Error(resultados && resultados[0] && resultados[0].error || 'No se pudieron guardar los horarios');
+              }
+              var nuevoId = nuevoEquipoId;
+              App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== nuevoId; });
+              horarios.forEach(function(h) {
+                App.cache.horarios.push({ ID: 'h_' + nuevoId + '_' + h.DiaSemana, ID_Equipo: nuevoId, DiaSemana: h.DiaSemana, HoraInicio: h.HoraInicio, HoraFin: h.HoraFin });
+              });
+              App.cache._setRelacionesEquipo(nuevoId, App.state.formJugadores, App.state.formEntrenadores);
               App.state._formIsDirty = false;
               App.state.formEquipoId = null;
-              var _hIdx = App.state.viewHistory.lastIndexOf('equipos-admin');
-              App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'equipo-form'; });
-              App.navigate('equipos-admin', null, false);
-              // Completar horarios y personas en segundo plano
-              Promise.all([
-                server('setHorariosEquipo', nuevoId, horarios),
-                App.views['equipo-form']._sincronizarPersonas(nuevoId),
-              ]).then(function() {
-                App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== nuevoId; });
-                horarios.forEach(function(h) {
-                  App.cache.horarios.push({ ID: 'h_' + nuevoId + '_' + h.DiaSemana, ID_Equipo: nuevoId, DiaSemana: h.DiaSemana, HoraInicio: h.HoraInicio, HoraFin: h.HoraFin });
-                });
-                App.cache._setRelacionesEquipo(nuevoId, App.state.formJugadores, App.state.formEntrenadores);
-                App.sync.done();
-              }).catch(function() {
-                App.sync.done();
-                showToast('Equipo creado, pero hubo un error al asignar horarios/jugadores. Edítalo para completar.', 'error');
-              });
+              App.views['equipos-admin'].render();
+              App.operation.succeed(operationToken);
             })
-            .catch(function(e) { App.sync.done(); showToast((e && e.message) || 'Error al crear equipo', 'error'); });
+            .catch(function(e) {
+              if (nuevoEquipoId) {
+                App.state.formEquipoId = nuevoEquipoId;
+                App.state.equipos = App.state.equipos.map(function(item) {
+                  return item.ID === nuevoEquipoId ? (App.cache.getEquipoById(nuevoEquipoId) || item) : item;
+                });
+              } else {
+                App.state.formEquipoId = null;
+              }
+              App.state.viewHistory = formHistory;
+              App.state._formIsDirty = true;
+              App.navigate('equipo-form', {}, false);
+              App.operation.fail(operationToken, (e && e.message) || 'Error al crear el equipo');
+            });
         }
       },
 
@@ -2032,6 +2387,7 @@ const App = {
       _confirmarEliminar: function() {
         var equipoId = App.state.formEquipoId;
         App.closeModal();
+        var historyBefore = App.state.viewHistory.slice();
         // OPTIMISTA: guardar backup para posible rollback
         var eqBackup      = Object.assign({}, App.cache.equipos.find(function(e) { return e.ID === equipoId; }));
         var sesBackup     = App.cache.sesiones.filter(function(s) { return s.ID_Equipo === equipoId; }).map(function(s) { return Object.assign({}, s); });
@@ -2053,7 +2409,6 @@ const App = {
         App.state.equipos = App.state.equipos.filter(function(e) { return e.ID !== equipoId; });
         App.state.formEquipoId = null;
         App.state._formIsDirty = false;
-        showToast('Equipo eliminado', 'success');
         // Limpiar historial para no volver a la ficha eliminada
         var _hIdx = App.state.viewHistory.lastIndexOf('equipos-admin');
         App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'equipo-form' && v !== 'equipo-detalle'; });
@@ -2068,6 +2423,9 @@ const App = {
           entRelBackup.forEach(function(r) { App.cache.entrenadoresEquipos.push(r); });
           asistJugBackup.forEach(function(r) { App.cache.asistJugadores.push(r); });
           asistEntBackup.forEach(function(r) { App.cache.asistEntrenadores.push(r); });
+          App.state.formEquipoId = equipoId;
+          App.state.viewHistory = historyBefore;
+          App.navigate('equipo-form', {}, false);
         });
       },
 
@@ -2122,7 +2480,7 @@ const App = {
         lista.forEach(function(j) {
           var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Jugador === j.ID; });
           var total = rs.length;
-          var presentes = rs.filter(function(r) { return r.Estado === 'P'; }).length;
+          var presentes = rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'P'; }).length;
           statsJug[j.ID] = { total: total, presentes: presentes };
         });
 
@@ -2199,7 +2557,8 @@ const App = {
       render: function() {
         var delZone = document.getElementById('jugador-delete-zone');
         if (delZone) delZone.style.display = App.state.formJugadorId ? '' : 'none';
-        if (!App.state.formJugadorId) App.views['jugador-form']._reset();
+        if (!App.state.formJugadorId && !App.state._jugadorDraftRestore) App.views['jugador-form']._reset();
+        App.state._jugadorDraftRestore = false;
         var setDirty = function() { App.state._formIsDirty = true; };
         ['jug-nombre','jug-apellidos','jug-dorsal','jug-fechanac','jug-tel','jug-email'].forEach(function(id) {
           document.getElementById(id).oninput = setDirty;
@@ -2343,38 +2702,75 @@ const App = {
             return;
           }
         }
+        var formHistory = App.state.viewHistory.slice();
         if (jugId) {
-          // EDICIÓN OPTIMISTA: actualizar cache y navegar de inmediato, sincronizar en segundo plano
-          var original = Object.assign({}, App.cache.getJugadorById(jugId));
-          App.cache.upsert('jugadores', Object.assign({ ID: jugId }, datos));
-          App.state._todosJugadores = App.cache.jugadores;
+          var operationToken = App.operation.begin('player-update:' + jugId);
+          if (!operationToken) return;
           App.state._formIsDirty = false;
           App.state.formJugadorId = null;
-          showToast('Jugador actualizado', 'success');
           var _hIdx = App.state.viewHistory.lastIndexOf('jugadores-admin');
           App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'jugador-form' && v !== 'jugador-detalle'; });
           App.navigate('jugadores-admin', null, false);
-          App.sync.run('actualizarJugador', [jugId, datos], function() {
-            App.cache.upsert('jugadores', original);
-            App.state._todosJugadores = App.cache.jugadores;
-          });
-          // Credenciales: llamada extra en segundo plano si algo cambió
-          if (credNuevo) {
-            App.sync.run('actualizarCredencialesJugador', [jugId, credNuevo.usuario, credNuevo.pin, credNuevo.codigo], null);
-          }
-        } else {
-          // CREACIÓN: esperar ID del servidor, indicador no bloqueante
-          showToast('Creando jugador\u2026', '');
           App.sync.start();
+          server('actualizarJugador', jugId, datos).then(function(result) {
+            if (!result || result.success === false || result.actualizado === false) {
+              throw new Error(result && result.error || 'No se pudo actualizar el jugador');
+            }
+            App.cache.upsert('jugadores', Object.assign({}, App.cache.getJugadorById(jugId), datos, { ID: jugId }));
+            App.state._todosJugadores = App.cache.jugadores;
+            if (credNuevo) {
+              return server('actualizarCredencialesJugador', jugId, credNuevo.usuario, credNuevo.pin, credNuevo.codigo).then(function(credentialResult) {
+                if (!credentialResult || credentialResult.success === false || credentialResult.actualizado === false) {
+                  throw new Error(credentialResult && credentialResult.error || 'No se pudieron actualizar las credenciales');
+                }
+                var jugadorActualizado = App.cache.getJugadorById(jugId);
+                if (jugadorActualizado) {
+                  if (credNuevo.usuario) jugadorActualizado.Usuario = credNuevo.usuario;
+                  if (credNuevo.codigo) jugadorActualizado.CodigoPadres = credNuevo.codigo;
+                  if (credNuevo.pin) jugadorActualizado.PIN = credNuevo.pin;
+                }
+              });
+            }
+          }).then(function() {
+            App.sync.done();
+            App.state._todosJugadores = App.cache.jugadores;
+            App.views['jugadores-admin'].render();
+            App.operation.succeed(operationToken);
+          }).catch(function(error) {
+            App.sync.done();
+            App.state.formJugadorId = jugId;
+            App.state.viewHistory = formHistory;
+            App.state._formIsDirty = true;
+            App.navigate('jugador-form', {}, false);
+            App.operation.fail(operationToken, (error && error.message) || 'No se pudo actualizar el jugador');
+          });
+        } else {
+          var crearDesdeEquipo = !!App.state._volverAEquipoFormDespues;
+          var historyAntesCrear = App.state.viewHistory.slice();
+          var operationToken = App.operation.begin('player-create');
+          if (!operationToken) return;
+          var parentIndex = App.state.viewHistory.lastIndexOf('jugadores-admin');
+          if (!crearDesdeEquipo && parentIndex >= 0) App.state.viewHistory = App.state.viewHistory.slice(0, parentIndex);
+          App.state._formIsDirty = false;
+          App.navigate(crearDesdeEquipo ? 'equipo-form' : 'jugadores-admin', {}, false);
           server('crearJugador', datos)
             .then(function(res) {
-              App.sync.done();
-              var volverEquipo = App.state._volverAEquipoFormDespues;
-              App.state._volverAEquipoFormDespues = false;
-              if (!res.success) { showToast(res.error, 'error'); return; }
+              if (!res || res.success === false || !res.jugador) throw new Error(res && res.error || 'No se pudo crear el jugador');
               if (res.jugador) App.cache.upsert('jugadores', res.jugador);
               App.state._todosJugadores = App.cache.jugadores;
-              showToast('Jugador creado', 'success');
+              App.state._volverAEquipoFormDespues = false;
+              App.state.formJugadorId = null;
+              App.state._formIsDirty = false;
+              if (crearDesdeEquipo) {
+                var nuevoJug = res.jugador;
+                App.state.formJugadores.push({ID:nuevoJug.ID,Nombre:nuevoJug.Nombre,Apellidos:nuevoJug.Apellidos,Dorsal:nuevoJug.Dorsal,Tipo:'Principal'});
+                App._goBackReal();
+                App.state._formIsDirty = true;
+                App.views['equipo-form'].render();
+              } else {
+                App.views['jugadores-admin'].render();
+              }
+              App.operation.succeed(operationToken);
               // Mostrar credenciales generadas automáticamente
               if (res.jugador && res.jugador.Usuario) {
                 setTimeout(function() {
@@ -2390,20 +2786,15 @@ const App = {
                   );
                 }, 50);
               }
-              App.state._formIsDirty = false;
-              App.state.formJugadorId = null;
-              if (volverEquipo) {
-                var nuevoJug = res.jugador;
-                if (nuevoJug) App.state.formJugadores.push({ID:nuevoJug.ID,Nombre:nuevoJug.Nombre,Apellidos:nuevoJug.Apellidos,Dorsal:nuevoJug.Dorsal,Tipo:'Principal'});
-                App.goBack();
-              } else {
-                var _hIdx = App.state.viewHistory.lastIndexOf('jugadores-admin');
-                App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'jugador-form' && v !== 'jugador-detalle'; });
-                App.views['jugadores-admin'].render();
-                App.navigate('jugadores-admin', null, false);
-              }
             })
-            .catch(function(err) { App.sync.done(); showToast((err && err.message) || 'Error al crear jugador', 'error'); });
+            .catch(function(err) {
+              App.state._volverAEquipoFormDespues = crearDesdeEquipo;
+              App.state.viewHistory = historyAntesCrear;
+              App.state._jugadorDraftRestore = true;
+              App.state._formIsDirty = true;
+              App.navigate('jugador-form', {}, false);
+              App.operation.fail(operationToken, (err && err.message) || 'Error al crear jugador');
+            });
         }
       },
 
@@ -2423,6 +2814,7 @@ const App = {
       _confirmarEliminar: function() {
         var jugId = App.state.formJugadorId;
         App.closeModal();
+        var historyBefore = App.state.viewHistory.slice();
         // ELIMINACIÓN OPTIMISTA: actualizar cache y navegar de inmediato
         var jBackup = Object.assign({}, App.cache.getJugadorById(jugId));
         var relBackup = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Jugador === jugId; });
@@ -2430,7 +2822,6 @@ const App = {
         App.cache.jugadoresEquipos = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Jugador !== jugId; });
         App.cache.asistencias = {};
         App.state._todosJugadores = App.cache.jugadores;
-        showToast('Jugador eliminado', 'success');
         App.state.formJugadorId = null;
         App.state._formIsDirty = false;
         var _hIdx = App.state.viewHistory.lastIndexOf('jugadores-admin');
@@ -2440,6 +2831,9 @@ const App = {
           if (jBackup && jBackup.ID) App.cache.upsert('jugadores', jBackup);
           relBackup.forEach(function(r) { App.cache.jugadoresEquipos.push(r); });
           App.state._todosJugadores = App.cache.jugadores;
+          App.state.formJugadorId = jugId;
+          App.state.viewHistory = historyBefore;
+          App.navigate('jugador-form', {}, false);
         });
       },
     },
@@ -2502,7 +2896,8 @@ const App = {
       render: function() {
         var delZone = document.getElementById('entrenador-delete-zone');
         if (delZone) delZone.style.display = App.state.formEntrenadorId ? '' : 'none';
-        if (!App.state.formEntrenadorId) App.views['entrenador-form']._reset();
+        if (!App.state.formEntrenadorId && !App.state._entrenadorDraftRestore) App.views['entrenador-form']._reset();
+        App.state._entrenadorDraftRestore = false;
         var setDirty = function() { App.state._formIsDirty = true; };
         ['ent-nombre','ent-apellidos','ent-email','ent-tel'].forEach(function(id) {
           document.getElementById(id).oninput = setDirty;
@@ -2535,7 +2930,9 @@ const App = {
       cargar: function(entrenadorId) {
         App.state.formEntrenadorId = entrenadorId;
         App.state._formIsDirty = false;
-        var e = App.state._todosEntrenadores.find(function(x) { return x.ID === entrenadorId; });
+        var e = App.cache.getEntrenadorById(entrenadorId) ||
+          (App.state.usuario && App.state.usuario.ID === entrenadorId ? App.state.usuario : null) ||
+          App.state._todosEntrenadores.find(function(x) { return x.ID === entrenadorId; });
         App.navigate('entrenador-form');
         if (e) {
           document.getElementById('ent-nombre').value    = e.Nombre || '';
@@ -2629,6 +3026,7 @@ const App = {
             return;
           }
         }
+        var formHistory = App.state.viewHistory.slice();
         if (entId) {
           // EDICIÓN OPTIMISTA: actualizar cache y navegar de inmediato
           var original = Object.assign({}, App.cache.getEntrenadorById(entId));
@@ -2636,38 +3034,52 @@ const App = {
           App.state._todosEntrenadores = App.cache.entrenadores;
           App.state._formIsDirty = false;
           App.state.formEntrenadorId = null;
-          showToast('Entrenador actualizado', 'success');
           var _hIdx = App.state.viewHistory.lastIndexOf('entrenadores-admin');
           App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'entrenador-form' && v !== 'entrenador-detalle'; });
           App.navigate('entrenadores-admin', null, false);
           App.sync.run('actualizarEntrenador', [entId, datos], function() {
             App.cache.upsert('entrenadores', original);
             App.state._todosEntrenadores = App.cache.entrenadores;
+            App.state.formEntrenadorId = entId;
+            App.state.viewHistory = formHistory;
+            App.navigate('entrenador-form', {}, false);
           });
         } else {
-          // CREACIÓN: esperar ID del servidor, indicador no bloqueante
-          App.sync.start();
+          var crearDesdeEquipo = !!App.state._volverAEquipoFormDespues;
+          var historyAntesCrear = App.state.viewHistory.slice();
+          var operationToken = App.operation.begin('coach-create');
+          if (!operationToken) return;
+          var parentIndex = App.state.viewHistory.lastIndexOf('entrenadores-admin');
+          if (!crearDesdeEquipo && parentIndex >= 0) App.state.viewHistory = App.state.viewHistory.slice(0, parentIndex);
+          App.state._formIsDirty = false;
+          App.navigate(crearDesdeEquipo ? 'equipo-form' : 'entrenadores-admin', {}, false);
           server('crearEntrenador', datos)
             .then(function(res) {
-              App.sync.done();
-              if (!res.success) { showToast(res.error, 'error'); return; }
+              if (!res || res.success === false || !res.entrenador) throw new Error(res && res.error || 'No se pudo crear el entrenador');
               if (res.entrenador) App.cache.upsert('entrenadores', res.entrenador);
               App.state._todosEntrenadores = App.cache.entrenadores;
-              showToast('Entrenador creado', 'success');
               App.state._formIsDirty = false;
               App.state.formEntrenadorId = null;
-              if (App.state._volverAEquipoFormDespues) {
-                App.state._volverAEquipoFormDespues = false;
+              App.state._volverAEquipoFormDespues = false;
+              if (crearDesdeEquipo) {
                 var nuevoEnt = res.entrenador;
-                if (nuevoEnt) App.state.formEntrenadores.push({ID:nuevoEnt.ID,Nombre:nuevoEnt.Nombre,Apellidos:nuevoEnt.Apellidos});
-                App.goBack();
+                App.state.formEntrenadores.push({ID:nuevoEnt.ID,Nombre:nuevoEnt.Nombre,Apellidos:nuevoEnt.Apellidos});
+                App._goBackReal();
+                App.state._formIsDirty = true;
+                App.views['equipo-form'].render();
               } else {
-                var _hIdx = App.state.viewHistory.lastIndexOf('entrenadores-admin');
-                App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'entrenador-form' && v !== 'entrenador-detalle'; });
-                App.navigate('entrenadores-admin', null, false);
+                App.views['entrenadores-admin'].render();
               }
+              App.operation.succeed(operationToken);
             })
-            .catch(function(err) { App.sync.done(); showToast((err && err.message) || 'Error al crear entrenador', 'error'); });
+            .catch(function(err) {
+              App.state._volverAEquipoFormDespues = crearDesdeEquipo;
+              App.state.viewHistory = historyAntesCrear;
+              App.state._entrenadorDraftRestore = true;
+              App.state._formIsDirty = true;
+              App.navigate('entrenador-form', {}, false);
+              App.operation.fail(operationToken, (err && err.message) || 'Error al crear entrenador');
+            });
         }
       },
 
@@ -2687,6 +3099,7 @@ const App = {
       _confirmarEliminar: function() {
         var entId = App.state.formEntrenadorId;
         App.closeModal();
+        var historyBefore = App.state.viewHistory.slice();
         // ELIMINACIÓN OPTIMISTA: actualizar cache y navegar de inmediato
         var eBackup = Object.assign({}, App.cache.getEntrenadorById(entId));
         var relBackup = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Entrenador === entId; });
@@ -2694,7 +3107,6 @@ const App = {
         App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Entrenador !== entId; });
         App.cache.asistencias = {};
         App.state._todosEntrenadores = App.cache.entrenadores;
-        showToast('Entrenador eliminado', 'success');
         App.state.formEntrenadorId = null;
         App.state._formIsDirty = false;
         var _hIdx = App.state.viewHistory.lastIndexOf('entrenadores-admin');
@@ -2704,6 +3116,9 @@ const App = {
           if (eBackup && eBackup.ID) App.cache.upsert('entrenadores', eBackup);
           relBackup.forEach(function(r) { App.cache.entrenadoresEquipos.push(r); });
           App.state._todosEntrenadores = App.cache.entrenadores;
+          App.state.formEntrenadorId = entId;
+          App.state.viewHistory = historyBefore;
+          App.navigate('entrenador-form', {}, false);
         });
       },
     },
@@ -2734,9 +3149,9 @@ const App = {
             var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === s.ID; });
             if (rs.length) {
               s._statsJug = {
-                P: rs.filter(function(r) { return r.Estado === 'P'; }).length,
-                A: rs.filter(function(r) { return r.Estado === 'A'; }).length,
-                R: rs.filter(function(r) { return r.Estado === 'R'; }).length
+                P: rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'P'; }).length,
+                A: rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'A'; }).length,
+                R: rs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'R'; }).length
               };
             }
           }
@@ -2796,16 +3211,16 @@ const App = {
         if (!j) return;
 
         var regs   = App.cache.asistJugadores.filter(function(r) { return r.ID_Jugador === id; });
-        var countP = regs.filter(function(r) { return r.Estado === 'P'; }).length;
-        var countA = regs.filter(function(r) { return r.Estado === 'A'; }).length;
-        var countR = regs.filter(function(r) { return r.Estado === 'R'; }).length;
+        var countP = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'P'; }).length;
+        var countA = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'A'; }).length;
+        var countR = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'R'; }).length;
         var total  = regs.length;
         var pct    = total > 0 ? Math.round(countP / total * 100) : 0;
 
         // Racha: sesiones consecutivas más recientes con P
         var hist = regs.map(function(r) {
           var s = App.cache.sesiones.find(function(x) { return x.ID === r.ID_Sesion; });
-          return s ? { fecha: s.Fecha, estado: r.Estado } : null;
+          return s ? { fecha: s.Fecha, estado: App.cache.getEstadoAsistencia(r) } : null;
         }).filter(Boolean).sort(function(a, b) { return a.fecha < b.fecha ? 1 : -1; });
         var racha = 0;
         for (var i = 0; i < hist.length; i++) { if (hist[i].estado === 'P') racha++; else break; }
@@ -2819,10 +3234,12 @@ const App = {
         var ini = (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '');
         var html = '<div class="detalle-perfil">' +
           '<div class="detalle-avatar">' + ini + '</div>' +
-          '<div><div class="detalle-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
+          '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
           '<div class="detalle-sub">Dorsal ' + (j.Dorsal || '-') + '</div>' +
           (j.FechaNac ? '<div class="detalle-meta">Nac. ' + j.FechaNac + '</div>' : '') +
-          '</div></div>';
+          '</div>' +
+          (App.puedeEditarDetalle('jugador-detalle') ? '<button class="detalle-settings" type="button" aria-label="Ajustes del jugador" title="Ajustes" onclick="App.editarDetalle()">&#x2699;&#xFE0F;</button>' : '') +
+          '</div>';
 
         if (equiposJug.length) {
           html += '<div class="stat-grid-1"><div class="stat-widget">' +
@@ -2924,10 +3341,12 @@ const App = {
         var ini = (e.Nombre ? e.Nombre[0] : '') + (e.Apellidos ? e.Apellidos[0] : '');
         var html = '<div class="detalle-perfil">' +
           '<div class="detalle-avatar">' + ini + '</div>' +
-          '<div><div class="detalle-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
+          '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
           '<div class="detalle-sub">' + (e.Email || '') + '</div>' +
           (e.Telefono ? '<div class="detalle-meta">' + e.Telefono + '</div>' : '') +
-          '</div></div>';
+          '</div>' +
+          (App.puedeEditarDetalle('entrenador-detalle') ? '<button class="detalle-settings" type="button" aria-label="Ajustes del entrenador" title="Ajustes" onclick="App.editarDetalle()">&#x2699;&#xFE0F;</button>' : '') +
+          '</div>';
 
         if (equiposEnt.length) {
           html += '<div class="stat-grid-1"><div class="stat-widget">' +
@@ -2979,16 +3398,18 @@ const App = {
         var sIds  = new Set(sGuardadas.map(function(s) { return s.ID; }));
         var regs  = App.cache.asistJugadores.filter(function(r) { return sIds.has(r.ID_Sesion); });
         var total = regs.length;
-        var cP    = regs.filter(function(r) { return r.Estado === 'P'; }).length;
-        var cA    = regs.filter(function(r) { return r.Estado === 'A'; }).length;
-        var cR    = regs.filter(function(r) { return r.Estado === 'R'; }).length;
+        var cP    = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'P'; }).length;
+        var cA    = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'A'; }).length;
+        var cR    = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'R'; }).length;
         var pctEq = total > 0 ? Math.round(cP / total * 100) : 0;
 
         var jugs = App.cache.getJugadoresByEquipo(id);
         var statsPJ = {};
         regs.forEach(function(r) {
+          var estado = App.cache.getEstadoAsistencia(r);
+          if (!estado) return;
           if (!statsPJ[r.ID_Jugador]) statsPJ[r.ID_Jugador] = { P:0, A:0, R:0 };
-          statsPJ[r.ID_Jugador][r.Estado] = (statsPJ[r.ID_Jugador][r.Estado] || 0) + 1;
+          statsPJ[r.ID_Jugador][estado] = (statsPJ[r.ID_Jugador][estado] || 0) + 1;
         });
         var jugStats = jugs.filter(function(j) { return statsPJ[j.ID]; }).map(function(j) {
           var s = statsPJ[j.ID]; var tot = (s.P||0) + (s.A||0) + (s.R||0);
@@ -3000,10 +3421,12 @@ const App = {
 
         var html = '<div class="detalle-perfil">' +
           '<div class="detalle-avatar" style="font-size:1.4rem">&#x1F3C0;</div>' +
-          '<div><div class="detalle-nombre">' + eq.Nombre + '</div>' +
+          '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + eq.Nombre + '</div>' +
           '<div class="detalle-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div>' +
           '<div class="detalle-meta">' + jugs.length + ' jugadores &middot; ' + sGuardadas.length + ' sesiones guardadas</div>' +
-          '</div></div>';
+          '</div>' +
+          (App.puedeEditarDetalle('equipo-detalle') ? '<button class="detalle-settings" type="button" aria-label="Ajustes del equipo" title="Ajustes" onclick="App.editarDetalle()">&#x2699;&#xFE0F;</button>' : '') +
+          '</div>';
 
         html += '<div class="stat-grid-2">' +
           '<div class="stat-widget"><div class="stat-widget-title">Sesiones</div>' +
@@ -3069,17 +3492,52 @@ const App = {
         document.getElementById('perfil-jugador-equipo').textContent = eqPrincipal ? eqPrincipal.Nombre : 'Sin equipo asignado';
         // Stats inline (4e)
         var regs = App.cache.asistJugadores.filter(function(r) { return r.ID_Jugador === j.ID; });
-        var cP = regs.filter(function(r) { return r.Estado === 'P'; }).length;
-        var cA = regs.filter(function(r) { return r.Estado === 'A'; }).length;
-        var cR = regs.filter(function(r) { return r.Estado === 'R'; }).length;
+        var cP = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'P'; }).length;
+        var cA = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'A'; }).length;
+        var cR = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'R'; }).length;
         var total = regs.length;
         var pct = total > 0 ? Math.round(cP / total * 100) : 0;
         var hist = regs.map(function(r) {
           var s = App.cache.sesiones.find(function(x) { return x.ID === r.ID_Sesion; });
-          return s ? { fecha: s.Fecha, estado: r.Estado } : null;
+          return s ? { fecha: s.Fecha, estado: App.cache.getEstadoAsistencia(r) } : null;
         }).filter(Boolean).sort(function(a, b) { return a.fecha < b.fecha ? 1 : -1; });
         var racha = 0;
         for (var i = 0; i < hist.length; i++) { if (hist[i].estado === 'P') racha++; else break; }
+        var incidenciasPendientes = regs.filter(function(registro) {
+          var sesion = App.cache.sesiones.find(function(s) { return s.ID === registro.ID_Sesion; });
+          var estado = App.cache.getEstadoAsistencia(registro);
+          var justificada = registro.TieneJustificacion === true || registro.TieneJustificacion === 'TRUE';
+          return sesion && sesion.Fecha < _hoy() && (estado === 'A' || estado === 'R') && !justificada;
+        }).map(function(registro) {
+          return {
+            sesion: App.cache.sesiones.find(function(s) { return s.ID === registro.ID_Sesion; }),
+            estado: App.cache.getEstadoAsistencia(registro)
+          };
+        }).sort(function(a, b) { return a.sesion.Fecha < b.sesion.Fecha ? -1 : 1; });
+        var incidenciasEl = document.getElementById('perfil-incidencias');
+        if (incidenciasEl) {
+          if (incidenciasPendientes.length) {
+            incidenciasEl.innerHTML = '<details class="player-unjustified">' +
+              '<summary class="player-unjustified-heading">' +
+                '<span class="player-unjustified-icon" aria-hidden="true">!</span>' +
+                '<span class="player-unjustified-copy"><strong>Faltas sin justificar</strong><small>Revisa las sesiones pendientes</small></span>' +
+                '<span class="player-unjustified-count" aria-label="' + incidenciasPendientes.length + ' faltas">' + incidenciasPendientes.length + '</span>' +
+                '<span class="player-unjustified-chevron" aria-hidden="true">&#8250;</span>' +
+              '</summary>' +
+              '<div class="player-unjustified-list">' + incidenciasPendientes.map(function(item) {
+                var fecha = _fmtFecha(item.sesion.Fecha);
+                var equipo = App.cache.getEquipoById(item.sesion.ID_Equipo);
+                return '<button type="button" class="player-unjustified-item" onclick="App.views[\'mis-entrenamientos\'].abrirDetalle(\'' + item.sesion.ID + '\')">' +
+                  '<span class="player-unjustified-date"><strong>' + _esc(fecha.d) + '</strong><small>' + _esc(fecha.m) + '</small></span>' +
+                  '<span class="player-unjustified-session"><strong>' + _esc(fecha.dn) + ' · ' + _esc(item.sesion.HoraInicio) + '</strong>' +
+                  '<small>' + _esc(equipo ? equipo.Nombre : 'Entrenamiento') + '</small></span>' +
+                  '<span class="player-unjustified-state ' + (item.estado === 'A' ? 'absence' : 'late') + '">' + (item.estado === 'A' ? 'Ausencia' : 'Retraso') + '</span>' +
+                  '<span class="calendar-event-arrow" aria-hidden="true">&#8250;</span></button>';
+              }).join('') + '</div></details>';
+          } else {
+            incidenciasEl.innerHTML = '<div class="player-unjustified-clear"><span aria-hidden="true">&#10003;</span> Sin faltas pendientes de justificar</div>';
+          }
+        }
         var statsEl = document.getElementById('perfil-stats');
         statsEl.innerHTML =
           '<div class="stat-grid-2">' +
@@ -3136,7 +3594,7 @@ const App = {
         var f  = _fmtFecha(s.Fecha);
         var eq = App.cache.getEquipoById(s.ID_Equipo);
         var reg = App.cache.asistJugadores.find(function(r) { return r.ID_Sesion === id && r.ID_Jugador === j.ID; });
-        var estado = reg ? reg.Estado : 'sin';
+        var estado = App.cache.getEstadoAsistencia(reg) || 'sin';
 
         document.getElementById('detalle-sesion-jug-hdr').innerHTML =
           '<h2>' + f.dn + ', ' + f.d + ' de ' + f.ml + '</h2>' +
@@ -3178,14 +3636,14 @@ const App = {
         var el = document.getElementById('mis-stats-contenido');
         if (!j) { el.innerHTML = ''; return; }
         var regs = App.cache.asistJugadores.filter(function(r) { return r.ID_Jugador === j.ID; });
-        var cP = regs.filter(function(r) { return r.Estado === 'P'; }).length;
-        var cA = regs.filter(function(r) { return r.Estado === 'A'; }).length;
-        var cR = regs.filter(function(r) { return r.Estado === 'R'; }).length;
+        var cP = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'P'; }).length;
+        var cA = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'A'; }).length;
+        var cR = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'R'; }).length;
         var total = regs.length;
         var pct = total > 0 ? Math.round(cP / total * 100) : 0;
         var hist = regs.map(function(r) {
           var s = App.cache.sesiones.find(function(x) { return x.ID === r.ID_Sesion; });
-          return s ? { fecha: s.Fecha, estado: r.Estado } : null;
+          return s ? { fecha: s.Fecha, estado: App.cache.getEstadoAsistencia(r) } : null;
         }).filter(Boolean).sort(function(a, b) { return a.fecha < b.fecha ? 1 : -1; });
         var racha = 0;
         for (var i = 0; i < hist.length; i++) { if (hist[i].estado === 'P') racha++; else break; }
@@ -3238,7 +3696,7 @@ const App = {
         // Ranking por jugador
         var ranking = jugs.map(function(jj) {
           var regs = App.cache.asistJugadores.filter(function(r) { return r.ID_Jugador === jj.ID && sesIds.has(r.ID_Sesion); });
-          var pres = regs.filter(function(r) { return r.Estado === 'P'; }).length;
+          var pres = regs.filter(function(r) { return App.cache.getEstadoAsistencia(r) === 'P'; }).length;
           var pct = totalSes > 0 ? Math.round(pres / totalSes * 100) : 0;
           return { jugador: jj, pres: pres, pct: pct };
         }).sort(function(a, b) { return b.pres - a.pres || (a.jugador.Apellidos || '').localeCompare(b.jugador.Apellidos || ''); });
@@ -3281,8 +3739,10 @@ const App = {
       render: function() {
         var j = App.state.jugador;
         if (!j) return;
-        App.state._formIsDirty = false;
-        // Datos personales
+        var restoreDraft = App.state._ajustesDraftRestore;
+        if (!restoreDraft) {
+          App.state._formIsDirty = false;
+          // Datos personales
         var tEl = document.getElementById('ajustes-tel');         if (tEl) tEl.value = j.Telefono || '';
         var eEl = document.getElementById('ajustes-email');        if (eEl) eEl.value = j.Email    || '';
         // Familiares
@@ -3298,6 +3758,8 @@ const App = {
         var pcEl = document.getElementById('ajustes-pin-confirm');  if (pcEl) pcEl.value = '';
         // Código de seguridad
         var cEl  = document.getElementById('ajustes-codigo-seg');   if (cEl)  cEl.value  = '';
+        }
+        App.state._ajustesDraftRestore = false;
         // Dirty tracking
         var setDirty = function() { App.state._formIsDirty = true; };
         ['ajustes-tel','ajustes-email',
@@ -3341,56 +3803,61 @@ const App = {
           'Se actualizar\u00e1 tu perfil y/o credenciales de acceso.' +
           '<br><span style="font-size:.8rem;color:var(--texto-sec)">El c\u00f3digo de seguridad se verificar\u00e1 en el servidor.</span>',
           function() {
-            App.state._formIsDirty = false;
-            // Capturar auth ORIGINAL antes de modificar (bug fix: el servidor valida con el usuario antiguo)
             var authOriginal = Object.assign({}, App.state.auth);
-            // Actualización optimista: auth local
-            var authAct = Object.assign({}, App.state.auth, { usuario: nuevoUsuario });
-            if (nuevoPin) authAct.pin = nuevoPin;
-            App.state.auth = authAct;
-            _setStoredAuth(JSON.stringify(authAct));
-            // Actualización optimista: cache del jugador
-            j.Usuario        = nuevoUsuario;
-            j.Telefono       = nuevoTel;
-            j.Email          = nuevoEmail;
-            j.NombrePadre1   = p1Nombre;
-            j.TelefonoPadre1 = p1Tel;
-            j.EmailPadre1    = p1Email;
-            j.NombrePadre2   = p2Nombre;
-            j.TelefonoPadre2 = p2Tel;
-            j.EmailPadre2    = p2Email;
-            App.goBack();
+            var historyBefore = App.state.viewHistory.slice();
+            var operationToken = App.operation.begin('player-settings:' + j.ID);
+            if (!operationToken) return;
             var datosPersonales = {
               Telefono: nuevoTel, Email: nuevoEmail,
               NombrePadre1: p1Nombre, TelefonoPadre1: p1Tel, EmailPadre1: p1Email,
               NombrePadre2: p2Nombre, TelefonoPadre2: p2Tel, EmailPadre2: p2Email,
             };
-            // Sincronizar en segundo plano usando authOriginal para ambas llamadas
+            var parentIndex = App.state.viewHistory.lastIndexOf('perfil-jugador');
+            App.state.viewHistory = parentIndex >= 0
+              ? App.state.viewHistory.slice(0, parentIndex)
+              : App.state.viewHistory.filter(function(view) { return view !== 'ajustes-cuenta'; });
+            App.state._formIsDirty = false;
+            App.navigate('perfil-jugador', {}, false);
             App.sync.start();
-            var _done1 = false, _done2 = false;
-            var _syncCheck = function() { if (_done1 && _done2) App.sync.done(); };
-            // 1. Datos personales (verificación de código en servidor)
-            new Promise(function(resolve, reject) {
-              google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
-                .actualizarPerfilJugador(authOriginal, j.ID, datosPersonales, codigoSeg);
-            }).then(function(res) {
-              _done1 = true; _syncCheck();
-              if (!res.success) showToast(res.error || 'Error al guardar datos', 'error');
-            }).catch(function(err) {
-              _done1 = true; _syncCheck();
-              showToast((err && err.message) || 'Error de conexi\u00f3n', 'error');
-            });
-            // 2. Credenciales (usando authOriginal + código de seguridad)
-            new Promise(function(resolve, reject) {
-              google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
-                .actualizarCredencialesJugador(authOriginal, j.ID, nuevoUsuario, nuevoPin || null, null, codigoSeg);
-            }).then(function(res) {
-              _done2 = true; _syncCheck();
-              if (!res.success) showToast(res.error || 'Error al guardar credenciales', 'error');
-              else showToast('Perfil actualizado', 'success');
-            }).catch(function(err) {
-              _done2 = true; _syncCheck();
-              showToast((err && err.message) || 'Error de conexi\u00f3n', 'error');
+            var callWithAuth = function(fn, args) {
+              return new Promise(function(resolve, reject) {
+                var call = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+                call[fn].apply(call, [authOriginal].concat(args));
+              }).then(function(value) { return { ok: true, value: value }; }, function(error) {
+                return { ok: false, error: error };
+              });
+            };
+            Promise.all([
+              callWithAuth('actualizarPerfilJugador', [j.ID, datosPersonales, codigoSeg]),
+              callWithAuth('actualizarCredencialesJugador', [j.ID, nuevoUsuario, nuevoPin || null, null, codigoSeg]),
+            ]).then(function(results) {
+              App.sync.done();
+              var profile = results[0];
+              var credentials = results[1];
+              var profileOk = profile.ok && profile.value && profile.value.success !== false && profile.value.actualizado !== false;
+              var credentialsOk = credentials.ok && credentials.value && credentials.value.success !== false && credentials.value.actualizado !== false;
+              if (profileOk) Object.assign(j, datosPersonales);
+              if (credentialsOk) {
+                j.Usuario = nuevoUsuario;
+                var authActualizada = Object.assign({}, authOriginal, { usuario: nuevoUsuario });
+                if (nuevoPin) authActualizada.pin = nuevoPin;
+                App.state.auth = authActualizada;
+                _setStoredAuth(JSON.stringify(authActualizada));
+              }
+              App.cache.upsert('jugadores', Object.assign({}, j));
+              if (profileOk && credentialsOk) {
+                App.state._formIsDirty = false;
+                App.operation.succeed(operationToken);
+                return;
+              }
+              var errors = [];
+              if (!profileOk) errors.push(profile.value && profile.value.error || profile.error && profile.error.message || 'No se pudieron guardar los datos personales');
+              if (!credentialsOk) errors.push(credentials.value && credentials.value.error || credentials.error && credentials.error.message || 'No se pudieron guardar las credenciales');
+              App.state.viewHistory = historyBefore;
+              App.state._ajustesDraftRestore = true;
+              App.state._formIsDirty = true;
+              App.navigate('ajustes-cuenta', {}, false);
+              App.operation.fail(operationToken, errors.join('; '));
             });
           }
         );
@@ -3402,7 +3869,7 @@ const App = {
       _sesionId: null,
       _estadoInicial: null,
 
-      abrir: function(sesionId, estado) {
+      abrir: function(sesionId, estado, borrador) {
         this._sesionId = sesionId;
         this._estadoInicial = estado;
         var esAusencia = estado !== 'R';
@@ -3410,8 +3877,10 @@ const App = {
           inp.checked = esAusencia ? inp.value === 'Ausencia' : inp.value === 'Retraso';
         });
         document.getElementById('justif-hora-wrap').classList.toggle('hidden', esAusencia);
-        document.getElementById('justif-detalle').value = '';
-        document.getElementById('justif-codigo').value = '';
+        document.getElementById('justif-detalle').value = borrador ? borrador.detalle : '';
+        document.getElementById('justif-codigo').value = borrador ? borrador.codigo : '';
+        var horaInput = document.getElementById('justif-hora');
+        if (horaInput) horaInput.value = borrador ? borrador.hora : '';
         var justifTituloEl = document.getElementById('justif-titulo');
         if (justifTituloEl) justifTituloEl.textContent = esAusencia ? 'Justificar ausencia' : 'Justificar retraso';
         // Poblar motivos desde la configuraci\u00f3n
@@ -3421,6 +3890,13 @@ const App = {
               return '<option value="' + _esc(m) + '">' + m + '</option>';
             }).join('')
           : '<option value="Motivo personal">Motivo personal</option>';
+        if (borrador && borrador.motivo) select.value = borrador.motivo;
+        if (borrador && borrador.tipo) {
+          document.querySelectorAll('#modal-justificacion input[name="justif-tipo"]').forEach(function(inp) {
+            inp.checked = inp.value === borrador.tipo;
+          });
+          document.getElementById('justif-hora-wrap').classList.toggle('hidden', borrador.tipo !== 'Retraso');
+        }
         App.views.justificacion.actualizarPreview();
         document.getElementById('modal-justificacion').classList.remove('hidden');
       },
@@ -3466,18 +3942,24 @@ const App = {
         var motivo = motivoEl ? motivoEl.value : '';
         var detalle = document.getElementById('justif-detalle') ? document.getElementById('justif-detalle').value.trim() : '';
         var horaWrap = document.getElementById('justif-hora-wrap');
-        var hora = (horaWrap && !horaWrap.classList.contains('hidden')) ? horaWrap.value : null;
+        var horaInput = document.getElementById('justif-hora');
+        var hora = (horaWrap && !horaWrap.classList.contains('hidden') && horaInput) ? horaInput.value : null;
         var codigo = document.getElementById('justif-codigo') ? document.getElementById('justif-codigo').value.trim().toUpperCase() : '';
         if (!codigo || codigo.length !== 6) { showToast('Introduce el c\u00f3digo de autorizaci\u00f3n de 6 caracteres', 'error'); return; }
-        // Cerrar modal inmediatamente y enviar en segundo plano (no bloqueante)
+        var token = App.operation.begin('justification:' + sesionId + ':' + j.ID);
+        if (!token) return;
+        var borrador = { tipo: tipo, motivo: motivo, detalle: detalle, hora: hora || '', codigo: codigo };
+        var historyBefore = App.state.viewHistory.slice();
         App.closeModalJustif();
-        App.sync.start();
+        var parentIndex = App.state.viewHistory.lastIndexOf('mis-entrenamientos');
+        App.state.viewHistory = parentIndex >= 0
+          ? App.state.viewHistory.slice(0, parentIndex)
+          : App.state.viewHistory.filter(function(view) { return view !== 'detalle-sesion-jugador'; });
+        App.navigate('mis-entrenamientos', {}, false);
         var jugadorId = j.ID;
         server('enviarJustificacion', sesionId, jugadorId, codigo, tipo, motivo, detalle, hora || null)
           .then(function(res) {
-            App.sync.done();
-            if (!res.success) { showToast(res.error || 'Error al enviar', 'error'); return; }
-            showToast('Justificaci\u00f3n enviada', 'success');
+            if (!res || res.success === false) throw new Error(res && res.error || 'No se pudo enviar la justificación');
             // Actualizar cach\u00e9 con el registro devuelto por el servidor
             var reg = App.cache.asistJugadores.find(function(r) { return r.ID_Sesion === sesionId && r.ID_Jugador === jugadorId; });
             if (reg) {
@@ -3490,12 +3972,15 @@ const App = {
               App.cache.asistJugadores.push(res.registro);
             }
             // Re-renderizar vistas afectadas solo si siguen activas
-            if (App.state.currentView === 'detalle-sesion-jugador') App.views['detalle-sesion-jugador'].render();
             if (App.state.currentView === 'mis-entrenamientos') App.views['mis-entrenamientos'].render();
+            App.operation.succeed(token);
           })
           .catch(function(err) {
-            App.sync.done();
-            showToast((err && err.message) || 'Error de conexi\u00f3n', 'error');
+            App.state.viewHistory = historyBefore;
+            App.state.sesionJugadorId = sesionId;
+            App.navigate('detalle-sesion-jugador', {}, false);
+            App.views.justificacion.abrir(sesionId, App.views.justificacion._estadoInicial, borrador);
+            App.operation.fail(token, (err && err.message) || 'Error de conexi\u00f3n');
           });
       },
     },
@@ -3504,10 +3989,91 @@ const App = {
 
 }; // fin App
 
+App.operation = {
+  _nextId: 0,
+  _active: {},
+  _locks: {},
+  _timer: null,
+  _result: 'success',
+  _errorMessage: '',
+
+  _render: function(state) {
+    var status = document.getElementById('operation-status');
+    if (!status) return;
+    var logo = document.getElementById('operation-logo');
+    var source = document.getElementById('hdr-logo') || document.querySelector('.loading-logo-img');
+    if (logo && source && source.src && logo.src !== source.src) logo.src = source.src;
+    status.classList.remove('hidden', 'pending', 'success', 'error', 'success-animate');
+    status.classList.add(state);
+    if (state === 'success') {
+      void status.offsetWidth;
+      status.classList.add('success-animate');
+    }
+    var errorText = document.getElementById('operation-error-text');
+    if (errorText) errorText.textContent = state === 'error' ? (this._errorMessage || 'No se pudo guardar') : 'No se pudo guardar';
+  },
+
+  begin: function(key) {
+    key = key || 'operation';
+    if (this._locks[key]) return null;
+    if (!Object.keys(this._active).length) {
+      this._result = 'success';
+      this._errorMessage = '';
+    }
+    if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+    var token = { id: ++this._nextId, key: key };
+    this._locks[key] = token.id;
+    this._active[token.id] = token;
+    this._render('pending');
+    return token;
+  },
+
+  _finish: function(token, outcome, message) {
+    if (!token || this._active[token.id] !== token) return;
+    if (outcome === 'error') {
+      this._result = 'error';
+      this._errorMessage = message || 'No se pudo guardar';
+    }
+    delete this._active[token.id];
+    if (this._locks[token.key] === token.id) delete this._locks[token.key];
+    if (Object.keys(this._active).length) return;
+    this._render(this._result);
+    var self = this;
+    this._timer = setTimeout(function() {
+      if (Object.keys(self._active).length) return;
+      var status = document.getElementById('operation-status');
+      if (status) status.classList.add('hidden');
+      self._timer = null;
+    }, this._result === 'success' ? 2800 : 5000);
+  },
+
+  succeed: function(token) { this._finish(token, 'success'); },
+  fail: function(token, message) { this._finish(token, 'error', message); },
+
+  run: function(key, fn, args, onSuccess, onError) {
+    var token = this.begin(key);
+    if (!token) return Promise.reject(new Error('Ya hay una operación en curso'));
+    return server.apply(null, [fn].concat(args || []))
+      .then(function(result) {
+        if (!result || result.success === false) throw new Error(result && result.error || 'El servidor no confirmó el guardado');
+        return Promise.resolve(onSuccess ? onSuccess(result) : result).then(function(value) {
+          App.operation.succeed(token);
+          return value === undefined ? result : value;
+        });
+      })
+      .catch(function(error) {
+        if (onError) onError(error);
+        App.operation.fail(token, error && error.message);
+        throw error;
+      });
+  },
+};
+
 App.realtime = {
   client: null,
   channel: null,
   started: false,
+  config: null,
   connected: false,
   refreshing: false,
   pending: false,
@@ -3526,9 +4092,9 @@ App.realtime = {
     if (!App.state.auth || this.started) return;
     this.started = true;
 
-    if (window.supabase && window.supabase.createClient) {
+    if (window.supabase && window.supabase.createClient && this.config && this.config.url && this.config.key) {
       try {
-        this.client = window.supabase.createClient(SUPABASE_REALTIME_URL, SUPABASE_REALTIME_KEY, {
+        this.client = window.supabase.createClient(this.config.url, this.config.key, {
           auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
         });
         var self = this;
@@ -3555,7 +4121,7 @@ App.realtime = {
         _clientLog('realtime_start_failed', { error: error.message });
       }
     } else {
-      _clientLog('realtime_sdk_unavailable', {});
+      _clientLog('realtime_config_unavailable', {});
     }
 
     if (!this.fallbackTimer) {
@@ -3708,20 +4274,30 @@ App.sync = {
   // Si falla (error de red o res.success===false), llama a rollback() y muestra toast de error.
   run: function(fn, args, rollback) {
     var self = this;
+    var operationKey = 'sync:' + fn + ':' + JSON.stringify((args || []).slice(0, 1));
+    var token = App.operation.begin(operationKey);
+    if (!token) {
+      if (rollback) rollback();
+      return Promise.resolve(null);
+    }
     self.start();
     return server.apply(null, [fn].concat(args || []))
       .then(function(res) {
-        self.done();
-        if (res && !res.success) {
-          if (rollback) rollback();
-          showToast(res.error || 'Error al sincronizar', 'error');
+        if (!res || res.success === false || res.actualizado === false || res.eliminado === false || res.desasignado === false) {
+          throw new Error(res && res.error || 'El servidor no confirmó el guardado');
         }
+        self.done();
+        App.operation.succeed(token);
         return res;
       })
       .catch(function(err) {
         self.done();
         if (rollback) rollback();
-        showToast((err && err.message) || 'Error de conexión', 'error');
+        if (App.views[App.state.currentView] && App.views[App.state.currentView].render) {
+          App.views[App.state.currentView].render();
+        }
+        App.operation.fail(token, (err && err.message) || 'Error de conexión');
+        return null;
       });
   }
 };

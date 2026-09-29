@@ -91,3 +91,7 @@ const CONFIG = {
     7: 'Domingo',
   },
 };
+
+// Entorno incluido en cada versión publicada; no almacenar secretos aquí.
+// Cambiar a 'PRO' solo antes de crear la versión que se publicará en producción.
+const SUPABASE_ENV = 'DEV';

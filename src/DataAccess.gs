@@ -11,14 +11,31 @@ const SUPABASE_BOOLEAN_FIELDS = new Set([
 ]);
 
 function getSupabaseConfig_() {
-  const properties = PropertiesService.getScriptProperties();
-  const url = String(properties.getProperty('SUPABASE_URL') || '').replace(/\/+$/, '');
-  const key = properties.getProperty('SUPABASE_SECRET_KEY')
-    || properties.getProperty('SUPABASE_SERVICE_ROLE_KEY');
-  if (!url || !key) {
-    throw new Error('Configura SUPABASE_URL y SUPABASE_SECRET_KEY en las propiedades del script.');
+  const env = String(SUPABASE_ENV || '').trim().toUpperCase();
+  if (env !== 'DEV' && env !== 'PRO') {
+    throw new Error('SUPABASE_ENV debe ser DEV o PRO.');
   }
-  return { url: url, key: key };
+
+  const properties = PropertiesService.getScriptProperties();
+  const urlProperty = `SUPABASE_${env}_URL`;
+  const keyProperty = `SUPABASE_${env}_SECRET_KEY`;
+  const realtimeKeyProperty = `SUPABASE_${env}_PUBLISHABLE_KEY`;
+  const url = String(properties.getProperty(urlProperty) || '').replace(/\/+$/, '');
+  const key = properties.getProperty(keyProperty);
+  if (!url || !key) {
+    throw new Error(`Configura ${urlProperty} y ${keyProperty} en las propiedades del script.`);
+  }
+  return {
+    env: env,
+    url: url,
+    key: key,
+    realtimeKey: properties.getProperty(realtimeKeyProperty) || '',
+  };
+}
+
+function getSupabaseRealtimeConfig_() {
+  const config = getSupabaseConfig_();
+  return { url: config.url, key: config.realtimeKey };
 }
 
 function assertSupabaseTable_(tableName) {

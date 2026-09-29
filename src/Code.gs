@@ -172,6 +172,7 @@ function cargarDatos(auth) {
     return {
       success:             true,
       traceId:             traceId,
+      supabaseRealtime:    getSupabaseRealtimeConfig_(),
       contexto:            contexto,
       jugadores:           jugadoresFinal,
       entrenadores:        entrenFinal,
@@ -208,7 +209,9 @@ function crearEquipo(auth, datos) {
 function actualizarEquipo(auth, equipoId, datos) {
   try {
     Auth.requireAccesoGestionEquipo(equipoId, auth);
-    return { success: true, actualizado: Equipos.actualizarEquipo(equipoId, datos) };
+    const actualizado = Equipos.actualizarEquipo(equipoId, datos);
+    if (!actualizado) throw new Error('No se encontró el equipo o no se pudo actualizar.');
+    return { success: true, actualizado: actualizado };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -217,7 +220,9 @@ function actualizarEquipo(auth, equipoId, datos) {
 function eliminarEquipo(auth, equipoId) {
   try {
     Auth.requireAccesoGestionEquipo(equipoId, auth);
-    return { success: true, eliminado: Equipos.eliminarEquipo(equipoId) };
+    const eliminado = Equipos.eliminarEquipo(equipoId);
+    if (!eliminado) throw new Error('No se encontró el equipo o no se pudo eliminar.');
+    return { success: true, eliminado: eliminado };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -237,7 +242,9 @@ function crearJugador(auth, datos) {
 function actualizarJugador(auth, jugadorId, datos) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
-    return { success: true, actualizado: Equipos.actualizarJugador(jugadorId, datos) };
+    const actualizado = Equipos.actualizarJugador(jugadorId, datos);
+    if (!actualizado) throw new Error('No se encontró el jugador o no se pudo actualizar.');
+    return { success: true, actualizado: actualizado };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -246,7 +253,9 @@ function actualizarJugador(auth, jugadorId, datos) {
 function eliminarJugador(auth, jugadorId) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
-    return { success: true, eliminado: Equipos.eliminarJugador(jugadorId) };
+    const eliminado = Equipos.eliminarJugador(jugadorId);
+    if (!eliminado) throw new Error('No se encontró el jugador o no se pudo eliminar.');
+    return { success: true, eliminado: eliminado };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -255,7 +264,9 @@ function eliminarJugador(auth, jugadorId) {
 function asignarJugadorAEquipo(auth, jugadorId, equipoId, tipo) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
-    return { success: true, relacion: Equipos.asignarJugadorAEquipo(jugadorId, equipoId, tipo) };
+    const relacion = Equipos.asignarJugadorAEquipo(jugadorId, equipoId, tipo);
+    if (!relacion) throw new Error('No se pudo asignar el jugador al equipo.');
+    return { success: true, relacion: relacion };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -264,7 +275,9 @@ function asignarJugadorAEquipo(auth, jugadorId, equipoId, tipo) {
 function desasignarJugadorDeEquipo(auth, jugadorId, equipoId) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
-    return { success: true, desasignado: Equipos.desasignarJugadorDeEquipo(jugadorId, equipoId) };
+    const desasignado = Equipos.desasignarJugadorDeEquipo(jugadorId, equipoId);
+    if (!desasignado) throw new Error('No se encontró la asignación del jugador o no se pudo quitar.');
+    return { success: true, desasignado: desasignado };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -295,7 +308,9 @@ function actualizarCredencialesJugador(auth, jugadorId, nuevoUsuario, nuevoPin, 
       // Solo admin puede cambiar CodigoPadres
       if (nuevoCodigoPadres && !Auth.isAdmin(auth)) throw new Error('Solo un administrador puede cambiar el código de familias.');
     }
-    return { success: true, actualizado: Equipos.actualizarCredencialesJugador(jugadorId, nuevoUsuario, nuevoPin, nuevoCodigoPadres) };
+    const actualizado = Equipos.actualizarCredencialesJugador(jugadorId, nuevoUsuario, nuevoPin, nuevoCodigoPadres);
+    if (!actualizado) throw new Error('No se modificaron las credenciales.');
+    return { success: true, actualizado: actualizado };
   } catch (e) { return { success: false, error: e.message }; }
 }
 
@@ -323,10 +338,14 @@ function actualizarPerfilJugador(auth, jugadorId, datos, codigoSeguridad) {
         'NombrePadre2', 'TelefonoPadre2', 'EmailPadre2'];
       const datosFiltrados = {};
       camposPermitidos.forEach(k => { if (datos[k] !== undefined) datosFiltrados[k] = datos[k]; });
-      return { success: true, actualizado: Equipos.actualizarJugador(jugadorId, datosFiltrados) };
+      const actualizado = Equipos.actualizarJugador(jugadorId, datosFiltrados);
+      if (!actualizado) throw new Error('No se pudo actualizar el perfil.');
+      return { success: true, actualizado: actualizado };
     } else {
       Auth.requireEntrenadorOAdmin(auth);
-      return { success: true, actualizado: Equipos.actualizarJugador(jugadorId, datos) };
+      const actualizado = Equipos.actualizarJugador(jugadorId, datos);
+      if (!actualizado) throw new Error('No se pudo actualizar el perfil.');
+      return { success: true, actualizado: actualizado };
     }
   } catch (e) { return { success: false, error: e.message }; }
 }
@@ -359,7 +378,9 @@ function actualizarEntrenador(auth, entrenadorId, datos) {
       throw new Error('No tienes permisos para editar este entrenador.');
     }
 
-    return { success: true, actualizado: Equipos.actualizarEntrenador(entrenadorId, datos, true) };
+    const actualizado = Equipos.actualizarEntrenador(entrenadorId, datos, true);
+    if (!actualizado) throw new Error('No se encontró el entrenador o no se pudo actualizar.');
+    return { success: true, actualizado: actualizado };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -368,7 +389,9 @@ function actualizarEntrenador(auth, entrenadorId, datos) {
 function eliminarEntrenador(auth, entrenadorId) {
   try {
     Auth.requireAdmin(auth);
-    return { success: true, eliminado: Equipos.eliminarEntrenador(entrenadorId) };
+    const eliminado = Equipos.eliminarEntrenador(entrenadorId);
+    if (!eliminado) throw new Error('No se encontró el entrenador o no se pudo eliminar.');
+    return { success: true, eliminado: eliminado };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -377,7 +400,9 @@ function eliminarEntrenador(auth, entrenadorId) {
 function asignarEntrenadorAEquipo(auth, entrenadorId, equipoId, tipoRol) {
   try {
     Auth.requireAdmin(auth);
-    return { success: true, relacion: Equipos.asignarEntrenadorAEquipo(entrenadorId, equipoId, tipoRol) };
+    const relacion = Equipos.asignarEntrenadorAEquipo(entrenadorId, equipoId, tipoRol);
+    if (!relacion) throw new Error('No se pudo asignar el entrenador al equipo.');
+    return { success: true, relacion: relacion };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -386,7 +411,9 @@ function asignarEntrenadorAEquipo(auth, entrenadorId, equipoId, tipoRol) {
 function desasignarEntrenadorDeEquipo(auth, entrenadorId, equipoId) {
   try {
     Auth.requireAdmin(auth);
-    return { success: true, desasignado: Equipos.desasignarEntrenadorDeEquipo(entrenadorId, equipoId) };
+    const desasignado = Equipos.desasignarEntrenadorDeEquipo(entrenadorId, equipoId);
+    if (!desasignado) throw new Error('No se encontró la asignación del entrenador o no se pudo quitar.');
+    return { success: true, desasignado: desasignado };
   } catch (e) {
     return { success: false, error: e.message };
   }

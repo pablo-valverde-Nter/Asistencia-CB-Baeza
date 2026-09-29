@@ -231,7 +231,8 @@ const Equipos = {
       .filter(r => r.ID_Equipo === equipoId);
 
     if (existentes.length > 0) {
-      updateRow(CONFIG.SHEETS.JUGADORES_EQUIPOS, existentes[0].ID, { Activo: true, Tipo: tipo });
+      const actualizado = updateRow(CONFIG.SHEETS.JUGADORES_EQUIPOS, existentes[0].ID, { Activo: true, Tipo: tipo });
+      if (!actualizado) throw new Error('No se pudo actualizar la asignación del jugador.');
       return { ...existentes[0], Activo: true, Tipo: tipo };
     }
 
@@ -252,7 +253,7 @@ const Equipos = {
   desasignarJugadorDeEquipo(jugadorId, equipoId) {
     const relaciones = findWhere(CONFIG.SHEETS.JUGADORES_EQUIPOS, 'ID_Jugador', jugadorId)
       .filter(r => r.ID_Equipo === equipoId);
-    if (relaciones.length === 0) return false;
+    if (relaciones.length === 0) return true;
     return updateRow(CONFIG.SHEETS.JUGADORES_EQUIPOS, relaciones[0].ID, { Activo: false });
   },
 
@@ -346,7 +347,8 @@ const Equipos = {
       .filter(r => r.ID_Equipo === equipoId);
 
     if (existentes.length > 0) {
-      updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, existentes[0].ID, { Activo: true, TipoRol: tipoRol });
+      const actualizado = updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, existentes[0].ID, { Activo: true, TipoRol: tipoRol });
+      if (!actualizado) throw new Error('No se pudo actualizar la asignación del entrenador.');
       return { ...existentes[0], Activo: true, TipoRol: tipoRol };
     }
 
@@ -367,7 +369,7 @@ const Equipos = {
   desasignarEntrenadorDeEquipo(entrenadorId, equipoId) {
     const relaciones = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
       .filter(r => r.ID_Equipo === equipoId);
-    if (relaciones.length === 0) return false;
+    if (relaciones.length === 0) return true;
     return updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, relaciones[0].ID, { Activo: false });
   },
 };
