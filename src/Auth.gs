@@ -38,17 +38,17 @@ const Auth = {
     const email = String(auth.email || '').toLowerCase().trim();
     if (!email || !pin) return { success: false, error: 'Email y PIN son obligatorios.' };
 
+    const administrador = Auth._getAdministradorByEmail_(email);
+    if (administrador && (administrador.Activo === true || administrador.Activo === 'TRUE')) {
+      if (String(administrador.PIN || '').trim() !== pin) return { success: false, error: 'El PIN de acceso es incorrecto.' };
+      return { success: true };
+    }
+
     const entrenadores = getSheetData(CONFIG.SHEETS.ENTRENADORES);
     const entrenador   = entrenadores.find(e => String(e.Email || '').toLowerCase().trim() === email);
 
     if (entrenador) {
       if (String(entrenador.PIN || '').trim() !== pin) return { success: false, error: 'El PIN de acceso es incorrecto.' };
-      return { success: true };
-    }
-
-    // Admin estático sin fila en Entrenadores
-    if (CONFIG.ADMIN_EMAILS.includes(email)) {
-      if (String(CONFIG.ADMIN_MASTER_PIN).trim() !== pin) return { success: false, error: 'PIN maestro incorrecto.' };
       return { success: true };
     }
 
@@ -66,14 +66,22 @@ const Auth = {
     if (tipo === 'jugador') return CONFIG.ROLES.JUGADOR;
 
     const email = String(auth.email || '').toLowerCase().trim();
-    if (CONFIG.ADMIN_EMAILS.includes(email)) return CONFIG.ROLES.ADMIN;
+    const administrador = Auth._getAdministradorByEmail_(email);
+    if (administrador && (administrador.Activo === true || administrador.Activo === 'TRUE')) {
+      return CONFIG.ROLES.ADMIN;
+    }
 
     const entrenadores = getSheetData(CONFIG.SHEETS.ENTRENADORES);
     const ent = entrenadores.find(e => String(e.Email || '').toLowerCase().trim() === email);
-    if (ent && (ent.EsAdmin === true || ent.EsAdmin === 'TRUE')) return CONFIG.ROLES.ADMIN;
     if (ent) return CONFIG.ROLES.ENTRENADOR;
 
-    return CONFIG.ROLES.ENTRENADOR; // admin estático sin fila → ya se detecta arriba
+    return CONFIG.ROLES.ENTRENADOR;
+  },
+
+  _getAdministradorByEmail_(email) {
+    const normalizedEmail = String(email || '').toLowerCase().trim();
+    return getSheetData(CONFIG.SHEETS.ADMINISTRADORES)
+      .find(row => String(row.Email || '').toLowerCase().trim() === normalizedEmail) || null;
   },
 
   /** Devuelve el registro de Entrenadores del usuario o null si es jugador. */

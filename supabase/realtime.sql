@@ -47,6 +47,7 @@ BEGIN
     'Jugadores',
     'Jugadores_Equipos',
     'Entrenadores',
+    'Administradores',
     'Entrenadores_Equipos',
     'Sesiones',
     'Asist_Jugadores',

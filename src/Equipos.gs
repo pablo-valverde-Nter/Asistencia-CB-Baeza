@@ -274,15 +274,19 @@ const Equipos = {
     if (existentes.length > 0) {
       throw new Error(`Ya existe un entrenador con el email: ${datos.Email}`);
     }
+    const esAdmin = datos.EsAdmin === true || datos.EsAdmin === 'TRUE';
+    if (esAdmin && !datos.PIN) throw new Error('Indica un PIN explícito para un nuevo administrador.');
     const pin = datos.PIN || '1234';
-    return appendRow(CONFIG.SHEETS.ENTRENADORES, {
+    const entrenador = appendRow(CONFIG.SHEETS.ENTRENADORES, {
       Nombre:    datos.Nombre,
       Apellidos: datos.Apellidos,
       Email:     datos.Email,
       Telefono:  datos.Telefono || '',
       PIN:       pin,
-      EsAdmin:   datos.EsAdmin === true || datos.EsAdmin === 'TRUE' ? true : false,
+      EsAdmin:   esAdmin,
     });
+    if (esAdmin) Equipos._syncAdministrador_(datos.Email, pin, true);
+    return entrenador;
   },
 
   /**
@@ -291,6 +295,10 @@ const Equipos = {
    * @returns {boolean}
    */
   eliminarEntrenador(entrenadorId) {
+    const entrenador = findById(CONFIG.SHEETS.ENTRENADORES, entrenadorId);
+    if (entrenador && (entrenador.EsAdmin === true || entrenador.EsAdmin === 'TRUE')) {
+      Equipos._syncAdministrador_(entrenador.Email, entrenador.PIN, false);
+    }
     deleteWhere(CONFIG.SHEETS.ASIST_ENTRENADORES,  'ID_Entrenador', entrenadorId);
     deleteWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS,'ID_Entrenador', entrenadorId);
     return deleteRow(CONFIG.SHEETS.ENTRENADORES, entrenadorId);
@@ -308,6 +316,8 @@ const Equipos = {
    * Si se cambia el Email, la sesión activa del entrenador quedará invalidada.
    */
   actualizarEntrenador(entrenadorId, datos, permiteEmail) {
+    const actual = findById(CONFIG.SHEETS.ENTRENADORES, entrenadorId);
+    if (!actual) return false;
     const campos = {};
     const permitidos = ['Nombre', 'Apellidos', 'Telefono', 'PIN'];
     permitidos.forEach(k => { if (datos[k] !== undefined) campos[k] = datos[k]; });
@@ -322,7 +332,47 @@ const Equipos = {
     if (datos.EsAdmin !== undefined) {
       campos.EsAdmin = datos.EsAdmin === true || datos.EsAdmin === 'TRUE';
     }
+    const administradorActual = Auth._getAdministradorByEmail_(actual.Email);
+    const esAdminFinal = datos.EsAdmin !== undefined
+      ? campos.EsAdmin
+      : Boolean(administradorActual && (administradorActual.Activo === true || administradorActual.Activo === 'TRUE'));
+    if (datos.EsAdmin === true && !administradorActual && !datos.PIN) {
+      throw new Error('Indica un PIN explícito para habilitar este administrador.');
+    }
+    const emailFinal = campos.Email || actual.Email;
+    const pinFinal = campos.PIN || actual.PIN;
+
+    if (esAdminFinal) {
+      if (emailFinal !== actual.Email) Equipos._syncAdministrador_(actual.Email, actual.PIN, false);
+      Equipos._syncAdministrador_(emailFinal, pinFinal, true);
+    } else if (administradorActual) {
+      Equipos._syncAdministrador_(actual.Email, actual.PIN, false);
+    }
+
     return updateRow(CONFIG.SHEETS.ENTRENADORES, entrenadorId, campos);
+  },
+
+  _syncAdministrador_(email, pin, activo) {
+    const normalizedEmail = String(email || '').toLowerCase().trim();
+    const administradores = getSheetData(CONFIG.SHEETS.ADMINISTRADORES);
+    const existente = administradores.find(row => String(row.Email || '').toLowerCase().trim() === normalizedEmail);
+
+    if (activo) {
+      if (existente) {
+        return updateRow(CONFIG.SHEETS.ADMINISTRADORES, existente.ID, {
+          Email: normalizedEmail,
+          PIN: pin,
+          Activo: true,
+        });
+      }
+      appendRow(CONFIG.SHEETS.ADMINISTRADORES, { Email: normalizedEmail, PIN: pin, Activo: true });
+      return true;
+    }
+
+    if (!existente || !(existente.Activo === true || existente.Activo === 'TRUE')) return true;
+    const activos = administradores.filter(row => row.Activo === true || row.Activo === 'TRUE');
+    if (activos.length <= 1) throw new Error('No se puede desactivar al último administrador activo.');
+    return updateRow(CONFIG.SHEETS.ADMINISTRADORES, existente.ID, { Activo: false });
   },
 
   /**

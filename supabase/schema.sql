@@ -58,6 +58,13 @@ CREATE TABLE IF NOT EXISTS public."Entrenadores" (
   "EsAdmin" boolean
 );
 
+CREATE TABLE IF NOT EXISTS public."Administradores" (
+  "ID" text PRIMARY KEY,
+  "Email" text NOT NULL UNIQUE,
+  "PIN" text NOT NULL,
+  "Activo" boolean NOT NULL DEFAULT true
+);
+
 CREATE TABLE IF NOT EXISTS public."Entrenadores_Equipos" (
   "ID" text PRIMARY KEY,
   "ID_Entrenador" text REFERENCES public."Entrenadores" ("ID") ON DELETE CASCADE,
@@ -121,6 +128,7 @@ ALTER TABLE public."Horarios" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Jugadores" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Jugadores_Equipos" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Entrenadores" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."Administradores" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Entrenadores_Equipos" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Sesiones" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Asist_Jugadores" ENABLE ROW LEVEL SECURITY;

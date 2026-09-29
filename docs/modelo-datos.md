@@ -181,4 +181,4 @@ Temporadas ──< Equipos ──< Horarios
 - **Fotos**: se almacena la URL de Google Drive. La subida de fotos se hace a Drive con `DriveApp.createFile()` y se guarda la URL pública.
 - **Borrado**: nunca se borran jugadores o entrenadores del registro global; se desactivan con `Activo = false`.
 - **Generación de sesiones**: la función `generarSesionesSemana(equipoId)` crea una sesión por cada fila de `Horarios` del equipo para la semana actual, si no existe ya.
-- **Control de acceso**: `Auth.gs` comprueba el email del usuario contra `Entrenadores.Email` y contra `ADMIN_EMAILS` en `Config.gs`.
+- **Control de acceso**: `Auth.gs` valida entrenadores contra `Entrenadores.Email` y administradores activos contra la tabla privada `Administradores`.

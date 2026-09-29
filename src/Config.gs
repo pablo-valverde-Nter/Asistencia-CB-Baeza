@@ -16,17 +16,8 @@ const CONFIG = {
     SESIONES:             'Sesiones',
     ASIST_JUGADORES:      'Asist_Jugadores',
     ASIST_ENTRENADORES:   'Asist_Entrenadores',
+    ADMINISTRADORES:      'Administradores',
   },
-
-  // ── Control de acceso ─────────────────────────────────────────────────────────
-  // Emails con permisos de administrador (fuente estática; también se lee EsAdmin en Entrenadores)
-  ADMIN_EMAILS: [
-    'pablo.valverde@nter.es',
-    'vnpablo2002@gmail.com',
-  ],
-
-  // PIN maestro para admins que NO estén dados de alta como entrenadores
-  ADMIN_MASTER_PIN: '0000',
 
   // ── Roles de usuario ──────────────────────────────────────────────────────────
   ROLES: {

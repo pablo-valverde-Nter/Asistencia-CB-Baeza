@@ -73,7 +73,7 @@ justificaciones de ausencias/retrasos y notificaciones por email vía MailApp.
 **Nuevo formato `auth`:** `{ tipo: 'entrenador'|'jugador', email?, usuario?, pin }`
 **Funciones principales:**
 - `validate(auth)` — valida credenciales para ambos tipos
-- `getRol(auth)` — devuelve 'admin' | 'entrenador' | 'jugador' (admin = ADMIN_EMAILS o EsAdmin=true)
+- `getRol(auth)` — devuelve 'admin' | 'entrenador' | 'jugador' (admin validado en `Administradores`)
 - `getContextoUsuario(auth)` — devuelve contexto completo con rol, equipos, equiposVisor
 - `requireAdmin(auth)`, `requireEntrenadorOAdmin(auth)` — guards de acceso
 - `requireAccesoGestionEquipo(equipoId, auth)` — solo TipoRol='Entrenador' o admin

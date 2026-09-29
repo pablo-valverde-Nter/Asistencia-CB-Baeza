@@ -21,6 +21,9 @@ const SCHEMA = {
   Entrenadores: [
     'ID', 'Nombre', 'Apellidos', 'Email', 'Telefono', 'PIN', 'EsAdmin'
   ],
+  Administradores: [
+    'ID', 'Email', 'PIN', 'Activo'
+  ],
   Entrenadores_Equipos: [
     'ID', 'ID_Entrenador', 'ID_Equipo', 'Activo', 'TipoRol'
   ],

@@ -32,18 +32,20 @@ No actualices el despliegue productivo mientras el código que vas a publicar te
 
 1. En Supabase Dashboard, crea un proyecto nuevo para desarrollo. Guarda la contraseña de PostgreSQL en un gestor de secretos.
 2. En la configuración/API del proyecto, copia la Project URL, la Secret key y la Publishable key.
-3. Abre el SQL Editor y ejecuta el contenido completo de `supabase/schema.sql`. Crea las diez tablas del dominio, índices, RLS y permisos de `service_role`; no inserta datos de negocio.
-4. Ejecuta después el contenido completo de `supabase/realtime.sql`. Crea `app_sync_state`, sus triggers y la publicación Realtime. Inserta deliberadamente una única fila técnica en `app_sync_state`; las diez tablas de negocio permanecen vacías.
+3. Abre el SQL Editor y ejecuta el contenido completo de `supabase/schema.sql`. Crea las diez tablas del dominio y la tabla privada `Administradores`, índices, RLS y permisos de `service_role`; no inserta datos de negocio.
+4. Ejecuta después el contenido completo de `supabase/realtime.sql`. Crea `app_sync_state`, sus triggers y la publicación Realtime. Inserta deliberadamente una única fila técnica en `app_sync_state`; las tablas del dominio permanecen vacías.
 5. En las Script Properties, configura las tres propiedades `SUPABASE_DEV_*` anteriores con los datos de este proyecto. Configura también las tres `SUPABASE_PRO_*` cuando tengas los datos del proyecto productivo. No reutilices las claves entre proyectos.
 6. Deja `SUPABASE_ENV = 'DEV'`, guarda el código y abre la implementación `/dev`. Comprueba en Table Editor que hay cero filas en las diez tablas de negocio y una fila en `app_sync_state`.
 
-La app permite el primer acceso a la base vacía mediante uno de los correos estáticos de `CONFIG.ADMIN_EMAILS` y `CONFIG.ADMIN_MASTER_PIN` en `src/Config.gs`; el valor actual del PIN maestro es `0000`. Úsalo solo para arrancar DEV y cambia el PIN en el código antes de crear una versión productiva. Desde ese acceso de admin podrás crear temporada, equipos y el resto de datos iniciales desde la propia aplicación, sin scripts de semillas.
+La tabla `Administradores` es privada y el servidor la consulta para validar correo y PIN; no hay correos ni PIN de administrador en el código. Para sembrar la cuenta inicial, temporada y migrar administradores antiguos, ejecuta `supabase/bootstrap-pro.sql` en la base PRO después de `schema.sql`. Antes de ejecutarlo, reemplaza `__INTRODUCIR_PIN_ADMIN__` por el PIN solicitado directamente en SQL Editor y no guardes esa copia en Git. El script crea o activa `CB Baeza Baloncesto 2026-2027`, del 1 de septiembre de 2026 al 30 de junio de 2027, y habilita `vnpablo2002@gmail.com` como administrador. Después de añadir la tabla, vuelve a ejecutar `supabase/realtime.sql` para instalar también su trigger de sincronización.
+
+El PIN se guarda en una tabla accesible únicamente con `service_role`, pero un PIN de cuatro cifras sigue siendo débil ante intentos repetidos. Conviene cambiarlo por uno más largo y limitar el acceso a las propiedades secretas de Apps Script.
 
 ## Llevar el proyecto a otra cuenta
 
 1. Copia los archivos del proyecto Apps Script a la cuenta de destino, incluidos `src/`, `ui/` y `appsscript.json`. Mantén `Schema.gs`, que declara las tablas y columnas permitidas por `DataAccess.gs`.
 2. Si vas a conservar la misma base de datos, configura en **Configuración del proyecto → Propiedades del script** las propiedades de URL, Secret key y Publishable key del entorno seleccionado en `src/Config.gs`. La clave de servidor debe ser una Secret key (`sb_secret_...`), nunca la Publishable key, y no debe ponerse en HTML ni en el repositorio. Si es un Supabase nuevo y vacío, sigue primero los pasos de «Crear una base de desarrollo vacía».
-3. Revisa `ADMIN_EMAILS` en `src/Config.gs` y añade el correo que deba tener rol administrador. Si se usa `ADMIN_MASTER_PIN`, cámbialo por un PIN privado y seguro.
+3. Registra las cuentas administrativas en la tabla `Administradores` de la base activa usando SQL Editor; no se configuran administradores en `src/Config.gs`.
 4. Crea una implementación de tipo **Aplicación web** con **Ejecutar como: usuario que implementa** y acceso **Cualquiera**. Autoriza las solicitudes de UrlFetch y correo que muestra Google.
 5. Configura el trigger semanal desde **Activadores** en la cuenta nueva para `triggerGenerarSesiones`, si se desea generación automática. Los activadores y las propiedades del script no se copian con los archivos.
 6. Prueba inicio de sesión, carga de datos, guardado de asistencia y notificaciones antes de retirar la implementación anterior. Desactiva el trigger anterior al completar el cambio para evitar ejecuciones duplicadas.

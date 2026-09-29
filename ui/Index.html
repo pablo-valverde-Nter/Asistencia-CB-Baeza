@@ -6,6 +6,11 @@
   <meta name="theme-color" content="#4A148C">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="description" content="Gestión de asistencia del Club de Baloncesto Baeza.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="CB Baeza — Asistencia">
+  <meta property="og:description" content="Gestión de asistencia del Club de Baloncesto Baeza.">
+  <meta name="twitter:card" content="summary">
   <title>CB Baeza &mdash; Asistencia</title>
   <?!= include('ui/styles') ?>
 </head>
@@ -85,7 +90,7 @@
         <!-- Toggle tipo de usuario -->
         <div class="login-tabs">
           <button class="login-tab active" id="tab-entrenador" onclick="App.setLoginTipo('entrenador')">
-            &#x1F3BD; Entrenador / Admin
+            &#x1F3BD; Entrenador
           </button>
           <button class="login-tab" id="tab-jugador" onclick="App.setLoginTipo('jugador')">
             &#x1F3C0; Jugador
@@ -679,5 +684,30 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <?!= include('ui/app') ?>
+<script>
+(function() {
+  const logo = document.getElementById('hdr-logo') || document.querySelector('.loading-logo-img');
+  if (!logo || !logo.src || !logo.src.startsWith('data:image/')) return;
+
+  let favicon = document.querySelector('link[rel="icon"]');
+  if (!favicon) {
+    favicon = document.createElement('link');
+    favicon.rel = 'icon';
+    document.head.appendChild(favicon);
+  }
+  favicon.type = 'image/jpeg';
+  favicon.href = logo.src;
+
+  [['property', 'og:image'], ['name', 'twitter:image']].forEach(function(entry) {
+    let meta = document.querySelector('meta[' + entry[0] + '="' + entry[1] + '"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute(entry[0], entry[1]);
+      document.head.appendChild(meta);
+    }
+    meta.content = logo.src;
+  });
+})();
+</script>
 </body>
 </html>
