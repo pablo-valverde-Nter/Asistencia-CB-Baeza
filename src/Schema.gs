@@ -28,14 +28,18 @@ const SCHEMA = {
     'ID', 'ID_Entrenador', 'ID_Equipo', 'Activo', 'TipoRol'
   ],
   Sesiones: [
-    'ID', 'ID_Equipo', 'ID_Temporada', 'Fecha', 'HoraInicio', 'HoraFin', 'EsExtra', 'Notas', 'AsistenciaGuardada'
+    'ID', 'ID_Equipo', 'ID_Temporada', 'ID_Horario', 'Fecha', 'HoraInicio', 'HoraFin', 'EsExtra', 'Notas', 'AsistenciaGuardada'
   ],
   Asist_Jugadores: [
-    'ID', 'ID_Sesion', 'ID_Jugador', 'Estado', 'EsInvitado', 'FechaRegistro',
+    'ID', 'ID_Sesion', 'ID_Jugador', 'Estado', 'EsInvitado', 'Excluido', 'FechaRegistro',
     'TieneJustificacion', 'TipoJustificacion', 'MotivoCategoria', 'MotivoDetalle',
-    'FechaJustificacion', 'JustificadoPor', 'MensajeGenerado', 'NotificadoEntrenador'
+    'FechaJustificacion', 'JustificadoPor', 'MensajeGenerado', 'NotificadoEntrenador', 'EsProgramada'
   ],
   Asist_Entrenadores: [
-    'ID', 'ID_Sesion', 'ID_Entrenador', 'Asistio', 'EsInvitado', 'FechaRegistro'
+    'ID', 'ID_Sesion', 'ID_Entrenador', 'Asistio', 'EsInvitado', 'Excluido', 'FechaRegistro'
+  ],
+  Programaciones_Justificaciones: [
+    'ID', 'ID_Jugador', 'ID_Equipo', 'ID_Horario', 'TipoIncidencia', 'MotivoCategoria',
+    'MotivoDetalle', 'HoraIncorporacion', 'Activo', 'FechaCreacion', 'FechaActualizacion'
   ],
 };

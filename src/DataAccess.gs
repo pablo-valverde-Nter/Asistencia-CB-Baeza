@@ -7,7 +7,7 @@
 const SUPABASE_BATCH_SIZE = 500;
 const SUPABASE_BOOLEAN_FIELDS = new Set([
   'Activa', 'Activo', 'EsAdmin', 'EsExtra', 'AsistenciaGuardada',
-  'EsInvitado', 'TieneJustificacion', 'NotificadoEntrenador', 'Asistio',
+  'EsInvitado', 'Excluido', 'TieneJustificacion', 'NotificadoEntrenador', 'EsProgramada', 'Asistio',
 ]);
 
 function getSupabaseConfig_() {

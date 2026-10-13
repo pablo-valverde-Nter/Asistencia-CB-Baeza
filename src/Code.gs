@@ -98,6 +98,7 @@ function cargarDatos(auth) {
     const temporadasR          = leerHojaSegura('temporadas', 'Temporadas');
     const asistJugadoresR      = leerHojaSegura('asistJugadores', 'Asist_Jugadores');
     const asistEntrenadoresR   = leerHojaSegura('asistEntrenadores', 'Asist_Entrenadores');
+    const programacionesR      = leerHojaSegura('programacionesJustificaciones', 'Programaciones_Justificaciones');
 
     const resultados = [
       jugadoresR,
@@ -110,6 +111,7 @@ function cargarDatos(auth) {
       temporadasR,
       asistJugadoresR,
       asistEntrenadoresR,
+      programacionesR,
     ];
 
     const fallo = resultados.find(r => !r.ok);
@@ -152,6 +154,7 @@ function cargarDatos(auth) {
         return { ID: r.ID, ID_Sesion: r.ID_Sesion, ID_Jugador: r.ID_Jugador,
                  Estado: r.Estado, EsInvitado: r.EsInvitado, FechaRegistro: r.FechaRegistro };
       });
+      programacionesR.data = programacionesR.data.filter(r => r.ID_Jugador === jugadorPropioId);
 
       // Entrenadores: datos básicos, sin PIN
       entrenFinal = entrenadoresR.data.map(e => ({
@@ -184,6 +187,7 @@ function cargarDatos(auth) {
       temporadas:          temporadasR.data,
       asistJugadores:      asistJugFinal,
       asistEntrenadores:   asistEntrenadoresR.data,
+      programacionesJustificaciones: programacionesR.data,
       motivosJustificacion: CONFIG.MOTIVOS_JUSTIFICACION,
     };
   } catch (e) {
@@ -468,6 +472,38 @@ function enviarJustificacion(auth, sesionId, jugadorId, codigoPadres, tipoIncide
     const v = Auth.validate(auth);
     if (!v.success) throw new Error(v.error);
     return Asistencia.registrarJustificacion(sesionId, jugadorId, codigoPadres, tipoIncidencia, motivo, detalle, horaIncorporacion);
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+function eliminarJustificacion(auth, sesionId, jugadorId, codigoPadres) {
+  try {
+    const v = Auth.validate(auth);
+    if (!v.success) throw new Error(v.error);
+    return Asistencia.eliminarJustificacion(sesionId, jugadorId, codigoPadres);
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+function crearProgramacionJustificacion(auth, jugadorId, codigoPadres, datos) {
+  try {
+    const v = Auth.validate(auth);
+    if (!v.success || !Auth.isJugador(auth) || Auth.getJugadorActual(auth).ID !== jugadorId) throw new Error('Acceso no autorizado.');
+    return { success: true, programacion: Asistencia.crearProgramacion(jugadorId, codigoPadres, datos) };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+function actualizarProgramacionJustificacion(auth, programacionId, jugadorId, codigoPadres, datos) {
+  try {
+    const v = Auth.validate(auth);
+    if (!v.success || !Auth.isJugador(auth) || Auth.getJugadorActual(auth).ID !== jugadorId) throw new Error('Acceso no autorizado.');
+    return { success: true, programacion: Asistencia.actualizarProgramacion(programacionId, jugadorId, codigoPadres, datos) };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+function eliminarProgramacionJustificacion(auth, programacionId, jugadorId, codigoPadres) {
+  try {
+    const v = Auth.validate(auth);
+    if (!v.success || !Auth.isJugador(auth) || Auth.getJugadorActual(auth).ID !== jugadorId) throw new Error('Acceso no autorizado.');
+    return { success: true, eliminado: Asistencia.eliminarProgramacion(programacionId, jugadorId, codigoPadres) };
   } catch (e) { return { success: false, error: e.message }; }
 }
 

@@ -28,6 +28,8 @@ Flujo de publicación:
 
 No actualices el despliegue productivo mientras el código que vas a publicar tenga `SUPABASE_ENV = 'DEV'`. Si falta la URL o Secret key del entorno seleccionado, el backend falla explícitamente en lugar de caer a una conexión genérica.
 
+Antes de publicar la versión que permite quitar jugadores o entrenadores de una sesión, ejecuta `supabase/migrate-exclusiones-sesion.sql` en el SQL Editor de **DEV y PRO**. Añade solo la columna booleana `Excluido` a las dos tablas de asistencia, con valor `false` para los registros anteriores. Es idempotente; no borra asistencias ni altera las asignaciones a equipos. Un invitado quitado se elimina de la asistencia de esa sesión; un miembro del equipo queda excluido solo de esa sesión y puede volver a añadirse. No publiques la nueva versión antes de migrar su base correspondiente.
+
 ## Crear una base de desarrollo vacía
 
 1. En Supabase Dashboard, crea un proyecto nuevo para desarrollo. Guarda la contraseña de PostgreSQL en un gestor de secretos.

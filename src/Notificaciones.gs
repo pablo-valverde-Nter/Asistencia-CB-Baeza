@@ -73,27 +73,19 @@ CB Baeza — Gestión de Asistencia`;
    * @param {string} mensaje        - Mensaje auto-generado
    * @returns {boolean}
    */
-  notificarJustificacionAEntrenadores(jugador, sesion, equipo, tipoIncidencia, motivo, detalle, mensaje) {
-    // Solo entrenadores con TipoRol=Entrenador (no Visores)
-    const relaciones = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Equipo', equipo.ID)
-      .filter(r => (r.Activo === true || r.Activo === 'TRUE') && r.TipoRol !== CONFIG.TIPOS_ROL_ENTRENADOR.VISOR);
-
-    const entrenadorIds = relaciones.map(r => r.ID_Entrenador);
-    const entrenadores  = findWhereIn(CONFIG.SHEETS.ENTRENADORES, 'ID', entrenadorIds);
-
-    const destinatarios = entrenadores
-      .map(e => String(e.Email || '').trim())
-      .filter(e => e && e.includes('@'));
+  notificarJustificacionAEntrenadores(jugador, sesion, equipo, tipoIncidencia, motivo, detalle, mensaje, esProgramada) {
+    const destinatarios = Notificaciones._emailsEntrenadoresEquipo_(equipo.ID);
 
     if (destinatarios.length === 0) return false;
 
     const fechaForm = Notificaciones._formatFecha(sesion.Fecha);
-    const asunto    = `CB Baeza — Justificación recibida: ${jugador.Nombre} ${jugador.Apellidos} (${fechaForm})`;
+    const marca = esProgramada ? ' [Programada]' : '';
+    const asunto    = `CB Baeza — Justificación${marca}: ${jugador.Nombre} ${jugador.Apellidos} (${fechaForm})`;
 
     const cuerpoDetalle = detalle ? `\nInformación adicional: ${detalle}` : '';
     const cuerpo = `Hola,
 
-Se ha recibido una justificación de ${tipoIncidencia.toLowerCase()} para el siguiente entrenamiento:
+Se ha recibido una justificación${esProgramada ? ' programada' : ''} de ${tipoIncidencia.toLowerCase()} para el siguiente entrenamiento:
 
 👤 Jugador: ${jugador.Nombre} ${jugador.Apellidos}
 📅 Sesión:  ${fechaForm}, ${sesion.HoraInicio} – ${sesion.HoraFin}
@@ -119,6 +111,31 @@ CB Baeza — Gestión de Asistencia`;
       Logger.log(`[Notificaciones] Error al enviar email a entrenadores: ${e.message}`);
       return false;
     }
+  },
+
+  notificarCancelacionJustificacionAEntrenadores(jugador, sesion, equipo) {
+    const destinatarios = Notificaciones._emailsEntrenadoresEquipo_(equipo.ID);
+    if (!destinatarios.length) return false;
+
+    const fechaForm = Notificaciones._formatFecha(sesion.Fecha);
+    try {
+      MailApp.sendEmail({
+        to: destinatarios.join(','),
+        subject: `CB Baeza — Justificación anulada: ${jugador.Nombre} ${jugador.Apellidos} (${fechaForm})`,
+        body: `Hola,\n\nLa familia de ${jugador.Nombre} ${jugador.Apellidos} ha eliminado su justificación para la sesión del ${fechaForm} (${sesion.HoraInicio}–${sesion.HoraFin}) del equipo ${equipo.Nombre}.\n\nConsulta la asistencia actualizada en la aplicación.\n\nCB Baeza — Gestión de Asistencia`,
+      });
+      return true;
+    } catch (error) {
+      Logger.log(`[Notificaciones] Error al notificar anulación: ${error.message}`);
+      return false;
+    }
+  },
+
+  _emailsEntrenadoresEquipo_(equipoId) {
+    const relaciones = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Equipo', equipoId)
+      .filter(r => (r.Activo === true || r.Activo === 'TRUE') && r.TipoRol !== CONFIG.TIPOS_ROL_ENTRENADOR.VISOR);
+    const entrenadores = findWhereIn(CONFIG.SHEETS.ENTRENADORES, 'ID', relaciones.map(r => r.ID_Entrenador));
+    return entrenadores.map(e => String(e.Email || '').trim()).filter(e => e && e.includes('@'));
   },
 
   // ══════════════════════════════════════════════════════════════════════════════

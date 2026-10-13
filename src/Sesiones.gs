@@ -55,13 +55,21 @@ const Sesiones = {
       const sesion = appendRow(CONFIG.SHEETS.SESIONES, {
         ID_Equipo:   equipoId,
         ID_Temporada: temporadaId,
+        ID_Horario:   h.ID,
         Fecha:       fechaStr,
         HoraInicio:  h.HoraInicio,
         HoraFin:     h.HoraFin,
         EsExtra:     false,
         Notas:       '',
       });
+      Asistencia.aplicarProgramacionesSesion(sesion);
       creadas.push(sesion);
+    });
+
+    sesionesActuales.forEach(sesion => {
+      if (sesion.Fecha >= Sesiones._formatDate_(lunes) && sesion.Fecha <= Sesiones._formatDate_(Sesiones._sumarDias_(lunes, 6))) {
+        Asistencia.aplicarProgramacionesSesion(sesion);
+      }
     });
 
     return {
@@ -114,6 +122,7 @@ const Sesiones = {
     return appendRow(CONFIG.SHEETS.SESIONES, {
       ID_Equipo:    equipoId,
       ID_Temporada: temporadaId,
+      ID_Horario:   null,
       Fecha:        datos.Fecha,
       HoraInicio:   datos.HoraInicio,
       HoraFin:      datos.HoraFin,

@@ -16,6 +16,7 @@ const CONFIG = {
     SESIONES:             'Sesiones',
     ASIST_JUGADORES:      'Asist_Jugadores',
     ASIST_ENTRENADORES:   'Asist_Entrenadores',
+    PROGRAMACIONES_JUSTIFICACIONES: 'Programaciones_Justificaciones',
     ADMINISTRADORES:      'Administradores',
   },
 

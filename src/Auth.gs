@@ -153,7 +153,8 @@ const Auth = {
   verificarCodigoPadres(jugadorId, codigo) {
     const jugador = findById(CONFIG.SHEETS.JUGADORES, jugadorId);
     if (!jugador) return false;
-    return String(jugador.CodigoPadres || '').trim().toUpperCase() === String(codigo || '').trim().toUpperCase();
+    const codigoGuardado = String(jugador.CodigoPadres || '').trim().toUpperCase();
+    return codigoGuardado.length === 6 && codigoGuardado === String(codigo || '').trim().toUpperCase();
   },
 
   // ══════════════════════════════════════════════════════════════════════════════
