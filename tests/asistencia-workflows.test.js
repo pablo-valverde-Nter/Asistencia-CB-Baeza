@@ -21,7 +21,7 @@ function backend(rows) {
       writes.push({ op: 'append', table, fields });
       return { ID: 'new-row', ...fields };
     },
-    Notificaciones: { notificarAusenciaAFamilia() {}, notificarJustificacionAEntrenadores() { return false; },
+    Notificaciones: { notificarAusenciaAFamilia(...args) { notifications.push(args); }, notificarJustificacionAEntrenadores() { return false; },
       notificarCancelacionJustificacionAEntrenadores(...args) { notifications.push(args); return true; },
       generarMensajeJustificacion() { return 'mensaje'; } },
     Logger: { log() {} },
@@ -302,4 +302,96 @@ test('el aviso de anulacion llega solo a entrenadores activos, sin visores', () 
   assert.equal(sent.length, 1);
   assert.equal(sent[0].to, 'coach@example.com');
   assert.match(sent[0].subject, /anulada/);
+});
+
+test('no notifica a la familia una ausencia que ya estaba justificada', () => {
+  const rows = sessionRows();
+  rows.jugadores[0].EmailPadre1 = 'tutor@example.com';
+  rows.asistJugadores.push({ ID: 'justified-row', ID_Sesion: 's1', ID_Jugador: 'member',
+    Estado: 'A', TieneJustificacion: true, Excluido: false });
+  const { asistencia, notifications } = backend(rows);
+
+  asistencia.guardarAsistenciaCompleta('s1', {
+    jugadores: [{ jugadorId: 'member', estado: 'A' }], entrenadores: [],
+  });
+
+  assert.equal(notifications.length, 0);
+});
+
+test('no repite el correo de ausencia en guardados posteriores sin cambio de estado', () => {
+  const rows = sessionRows();
+  rows.jugadores[0].EmailPadre1 = 'tutor@example.com';
+  rows.asistJugadores.push({ ID: 'attendance-row', ID_Sesion: 's1', ID_Jugador: 'member',
+    Estado: 'P', TieneJustificacion: false, Excluido: false });
+  const { asistencia, notifications } = backend(rows);
+  const payload = { jugadores: [{ jugadorId: 'member', estado: 'A' }], entrenadores: [] };
+
+  asistencia.guardarAsistenciaCompleta('s1', payload);
+  rows.asistJugadores.find(row => row.ID === 'attendance-row').Estado = 'A';
+  asistencia.guardarAsistenciaCompleta('s1', payload);
+
+  assert.equal(notifications.length, 1);
+});
+
+test('el correo de ausencia identifica correctamente el martes 13/10/2026', () => {
+  const sent = [];
+  const context = vm.createContext({
+    CONFIG: { DIAS_SEMANA: { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves',
+      5: 'Viernes', 6: 'Sábado', 7: 'Domingo' }, ESTADOS_ASISTENCIA: { AUSENTE: 'A' } },
+    MailApp: { sendEmail: mail => sent.push(mail) }, Logger: { log() {} },
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Notificaciones.gs'), 'utf8'), context);
+  const notifications = vm.runInContext('Notificaciones', context);
+
+  notifications.notificarAusenciaAFamilia(
+    { Nombre: 'Juan', Apellidos: 'Lozano Mora', EmailPadre1: 'tutor@example.com' },
+    { Fecha: '2026-10-13', HoraInicio: '19:00', HoraFin: '20:00' },
+    { Nombre: 'CB Baeza - Infantil Mixto', Categoria: 'infantil', Modalidad: 'Mixto' },
+    'A'
+  );
+
+  assert.match(sent[0].body, /Fecha: Martes, 13\/10\/2026/);
+});
+
+test('envia el aviso de ausencia solo a familiares habilitados', () => {
+  const sent = [];
+  const context = vm.createContext({
+    CONFIG: { DIAS_SEMANA: {}, ESTADOS_ASISTENCIA: { AUSENTE: 'A' } },
+    MailApp: { sendEmail: mail => sent.push(mail) }, Logger: { log() {} },
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Notificaciones.gs'), 'utf8'), context);
+  const notifications = vm.runInContext('Notificaciones', context);
+
+  notifications.notificarAusenciaAFamilia(
+    { Nombre: 'Ana', Apellidos: 'Baeza', EmailPadre1: 'uno@example.com', EmailPadre2: 'dos@example.com',
+      NotificarAusenciasPadre1: true, NotificarAusenciasPadre2: false },
+    { Fecha: '2026-10-13' }, { Nombre: 'Equipo' }, 'A'
+  );
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, 'uno@example.com');
+});
+
+test('el jugador puede actualizar su fecha de nacimiento en su propio perfil', () => {
+  let actualizacion;
+  const context = vm.createContext({
+    Auth: {
+      validate: () => ({ success: true }),
+      isJugador: () => true,
+      getJugadorActual: () => ({ ID: 'member' }),
+      verificarCodigoPadres: () => true,
+    },
+    Equipos: { actualizarJugador: (id, fields) => { actualizacion = { id, fields }; return true; } },
+    Utilities: { formatDate: date => date.toISOString().slice(0, 10) },
+    Session: { getScriptTimeZone: () => 'UTC' },
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Code.gs'), 'utf8'), context);
+  const result = vm.runInContext(
+    "actualizarPerfilJugador({tipo:'jugador'}, 'member', {FechaNac:'2008-04-15', ApellidosPadre1:'García López', PIN:'no'}, 'ABC123')",
+    context
+  );
+
+  assert.equal(result.success, true);
+  assert.equal(actualizacion.id, 'member');
+  assert.deepEqual({ ...actualizacion.fields }, { FechaNac: '2008-04-15', ApellidosPadre1: 'García López' });
 });

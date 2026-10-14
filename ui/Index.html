@@ -283,8 +283,15 @@
 
     <!-- JUGADORES ADMIN -->
     <section id="view-jugadores-admin" class="view">
-      <div class="search-wrap" style="padding-top:16px">
+      <div class="search-wrap player-list-controls" style="padding-top:16px">
         <input type="search" placeholder="Buscar jugador&hellip;" oninput="App.views['jugadores-admin'].filtrar(this.value)">
+        <select id="jugadores-admin-orden" class="player-sort-select" aria-label="Ordenar jugadores" onchange="App.views['jugadores-admin'].ordenar(this.value)">
+          <option value="apellidos-asc">Apellido (A-Z)</option>
+          <option value="nombre-asc">Nombre (A-Z)</option>
+          <option value="dorsal" selected>Dorsal</option>
+          <option value="edad-desc">Edad (mayor a menor)</option>
+          <option value="edad-asc">Edad (menor a mayor)</option>
+        </select>
       </div>
       <div id="jugadores-admin-lista"></div>
     </section>
@@ -307,16 +314,26 @@
       <div class="form-section">
         <div class="form-section-title">Contacto familiar</div>
         <p style="font-size:.75rem;color:var(--texto-sec);margin:0 0 10px">Familiar 1</p>
-        <div class="form-group"><label>Nombre</label><input type="text" id="jug-padre1-nombre" placeholder="Nombre completo"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Nombre</label><input type="text" id="jug-padre1-nombre" placeholder="Nombre"></div>
+          <div class="form-group"><label>Apellidos</label><input type="text" id="jug-padre1-apellidos" placeholder="Apellidos"></div>
+        </div>
         <div class="form-row">
           <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="jug-padre1-tel" placeholder="+34 600 000 000"></div>
-          <div class="form-group"><label>Email</label><input type="email" id="jug-padre1-email" placeholder="padre@ejemplo.com"></div>
+          <div class="form-group"><label>Email</label><input type="email" id="jug-padre1-email" placeholder="padre@ejemplo.com">
+            <label class="parent-email-notify"><input type="checkbox" id="jug-padre1-notificar" checked><span>Enviar avisos de ausencia</span></label>
+          </div>
         </div>
         <p style="font-size:.75rem;color:var(--texto-sec);margin:12px 0 10px">Familiar 2</p>
-        <div class="form-group"><label>Nombre</label><input type="text" id="jug-padre2-nombre" placeholder="Nombre completo"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Nombre</label><input type="text" id="jug-padre2-nombre" placeholder="Nombre"></div>
+          <div class="form-group"><label>Apellidos</label><input type="text" id="jug-padre2-apellidos" placeholder="Apellidos"></div>
+        </div>
         <div class="form-row">
           <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="jug-padre2-tel" placeholder="+34 600 000 000"></div>
-          <div class="form-group"><label>Email</label><input type="email" id="jug-padre2-email" placeholder="madre@ejemplo.com"></div>
+          <div class="form-group"><label>Email</label><input type="email" id="jug-padre2-email" placeholder="madre@ejemplo.com">
+            <label class="parent-email-notify"><input type="checkbox" id="jug-padre2-notificar" checked><span>Enviar avisos de ausencia</span></label>
+          </div>
         </div>
       </div>
       <div class="form-section" id="jug-credenciales-zona" style="display:none">
@@ -486,6 +503,7 @@
         </div>
       </div>
       <div id="perfil-incidencias"></div>
+      <div id="perfil-configuracion-aviso"></div>
       <div id="perfil-stats"></div>
     </section>
 
@@ -525,19 +543,26 @@
     <section id="view-ajustes-cuenta" class="view">
       <div class="form-section">
         <div class="form-section-title">Datos personales</div>
+        <div class="form-group"><label>Fecha de nacimiento</label><input type="date" id="ajustes-fecha-nac"></div>
         <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ajustes-tel" placeholder="+34 600 000 000"></div>
         <div class="form-group"><label>Email</label><input type="email" id="ajustes-email" placeholder="email@ejemplo.com"></div>
       </div>
       <div class="form-section">
         <div class="form-section-title">Contacto familiar</div>
         <p style="font-size:.75rem;color:var(--texto-sec);margin:0 0 10px">Familiar 1</p>
-        <div class="form-group"><label>Nombre</label><input type="text" id="ajustes-padre1-nombre" placeholder="Nombre completo"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Nombre</label><input type="text" id="ajustes-padre1-nombre" placeholder="Nombre"></div>
+          <div class="form-group"><label>Apellidos</label><input type="text" id="ajustes-padre1-apellidos" placeholder="Apellidos"></div>
+        </div>
         <div class="form-row">
           <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ajustes-padre1-tel" placeholder="+34 600 000 000"></div>
           <div class="form-group"><label>Email</label><input type="email" id="ajustes-padre1-email" placeholder="padre@ejemplo.com"></div>
         </div>
         <p style="font-size:.75rem;color:var(--texto-sec);margin:12px 0 10px">Familiar 2</p>
-        <div class="form-group"><label>Nombre</label><input type="text" id="ajustes-padre2-nombre" placeholder="Nombre completo"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Nombre</label><input type="text" id="ajustes-padre2-nombre" placeholder="Nombre"></div>
+          <div class="form-group"><label>Apellidos</label><input type="text" id="ajustes-padre2-apellidos" placeholder="Apellidos"></div>
+        </div>
         <div class="form-row">
           <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ajustes-padre2-tel" placeholder="+34 600 000 000"></div>
           <div class="form-group"><label>Email</label><input type="email" id="ajustes-padre2-email" placeholder="madre@ejemplo.com"></div>

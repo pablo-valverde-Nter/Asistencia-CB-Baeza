@@ -127,8 +127,14 @@ const Equipos = {
       CodigoPadres:  codigoPadres,
       EmailPadre1:   datos.EmailPadre1   || '',
       EmailPadre2:   datos.EmailPadre2   || '',
+      TelefonoPadre1: datos.TelefonoPadre1 || '',
+      TelefonoPadre2: datos.TelefonoPadre2 || '',
+      NotificarAusenciasPadre1: datos.NotificarAusenciasPadre1 !== false,
+      NotificarAusenciasPadre2: datos.NotificarAusenciasPadre2 !== false,
       NombrePadre1:  datos.NombrePadre1  || '',
+      ApellidosPadre1: datos.ApellidosPadre1 || '',
       NombrePadre2:  datos.NombrePadre2  || '',
+      ApellidosPadre2: datos.ApellidosPadre2 || '',
     });
   },
 
@@ -164,8 +170,8 @@ const Equipos = {
     const campos = {};
     const permitidos = [
       'Nombre', 'Apellidos', 'FechaNac', 'Telefono', 'Email', 'FotoURL', 'Dorsal',
-      'EmailPadre1', 'EmailPadre2', 'NombrePadre1', 'NombrePadre2',
-      'TelefonoPadre1', 'TelefonoPadre2'
+      'EmailPadre1', 'EmailPadre2', 'NombrePadre1', 'ApellidosPadre1', 'NombrePadre2', 'ApellidosPadre2',
+      'TelefonoPadre1', 'TelefonoPadre2', 'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2'
     ];
     permitidos.forEach(k => { if (datos[k] !== undefined) campos[k] = datos[k]; });
     return updateRow(CONFIG.SHEETS.JUGADORES, jugadorId, campos);

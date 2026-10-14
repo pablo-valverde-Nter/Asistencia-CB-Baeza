@@ -170,6 +170,11 @@ const Asistencia = {
       if (!item.jugadorId || !estadosValidos.has(item.estado)) return;
       const estado = item.estado;
       if (estado !== CONFIG.ESTADOS_ASISTENCIA.AUSENTE && estado !== CONFIG.ESTADOS_ASISTENCIA.RETRASO) return;
+      const asistenciaExistente = asistenciaJugadorPorId.get(String(item.jugadorId));
+      const tieneJustificacion = asistenciaExistente &&
+        (asistenciaExistente.TieneJustificacion === true || asistenciaExistente.TieneJustificacion === 'TRUE');
+      if (tieneJustificacion && !item.limpiarJustif) return;
+      if (asistenciaExistente && asistenciaExistente.Estado === estado && !item.limpiarJustif) return;
       try {
         const jugador = findById(CONFIG.SHEETS.JUGADORES, item.jugadorId);
         if (jugador && (jugador.EmailPadre1 || jugador.EmailPadre2)) {

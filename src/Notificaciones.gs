@@ -20,14 +20,18 @@ const Notificaciones = {
    * @returns {boolean} true si se envió al menos un email
    */
   notificarAusenciaAFamilia(jugador, sesion, equipo, estado) {
-    const destinatarios = [jugador.EmailPadre1, jugador.EmailPadre2]
+    const destinatarios = [
+      { email: jugador.EmailPadre1, activo: jugador.NotificarAusenciasPadre1 },
+      { email: jugador.EmailPadre2, activo: jugador.NotificarAusenciasPadre2 },
+    ].filter(contacto => contacto.activo !== false && contacto.activo !== 'FALSE')
+      .map(contacto => contacto.email)
       .filter(e => e && String(e).trim() && String(e).includes('@'));
 
     if (destinatarios.length === 0) return false;
 
     const tipoTexto = estado === CONFIG.ESTADOS_ASISTENCIA.AUSENTE ? 'ausencia' : 'retraso';
     const tipoCapt  = estado === CONFIG.ESTADOS_ASISTENCIA.AUSENTE ? 'Ausencia'  : 'Retraso';
-    const diaNombre = CONFIG.DIAS_SEMANA[new Date(sesion.Fecha + 'T12:00:00').getDay() + 1] || sesion.Fecha;
+    const diaNombre = Notificaciones._diaSemana(sesion.Fecha) || sesion.Fecha;
     const fechaForm = Notificaciones._formatFecha(sesion.Fecha);
 
     const asunto = `CB Baeza — ${tipoCapt} de ${jugador.Nombre} ${jugador.Apellidos} (${fechaForm})`;
@@ -147,7 +151,7 @@ CB Baeza — Gestión de Asistencia`;
    */
   generarMensajeJustificacion(jugador, sesion, equipo, tipoIncidencia, motivo, detalle, horaIncorporacion) {
     const fechaForm   = Notificaciones._formatFecha(sesion.Fecha);
-    const diaNombre   = CONFIG.DIAS_SEMANA[new Date(sesion.Fecha + 'T12:00:00').getDay() + 1] || '';
+    const diaNombre   = Notificaciones._diaSemana(sesion.Fecha);
     const tipoTexto   = tipoIncidencia === 'Ausencia' ? 'una ausencia' : 'una llegada con retraso';
     const detalleText = detalle ? ` Información adicional: "${detalle}".` : '';
     const horaText    = horaIncorporacion ? ` Previsión de incorporación aproximada: ${horaIncorporacion}.` : '';
@@ -163,5 +167,12 @@ CB Baeza — Gestión de Asistencia`;
     const parts = String(fechaStr).split('-');
     if (parts.length !== 3) return fechaStr;
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  },
+
+  _diaSemana(fechaStr) {
+    const parts = String(fechaStr || '').split('-').map(Number);
+    if (parts.length !== 3 || parts.some(part => !Number.isInteger(part))) return '';
+    const dia = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).getUTCDay() || 7;
+    return CONFIG.DIAS_SEMANA[dia] || '';
   },
 };

@@ -337,9 +337,19 @@ function actualizarPerfilJugador(auth, jugadorId, datos, codigoSeguridad) {
         throw new Error('Código de seguridad incorrecto.');
       }
       // Filtrar solo los campos que un jugador puede editar
-      const camposPermitidos = ['Telefono', 'Email',
-        'NombrePadre1', 'TelefonoPadre1', 'EmailPadre1',
-        'NombrePadre2', 'TelefonoPadre2', 'EmailPadre2'];
+      if (datos.FechaNac) {
+        const fechaNacimiento = String(datos.FechaNac);
+        const fechaParseada = new Date(`${fechaNacimiento}T00:00:00Z`);
+        const hoy = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaNacimiento) ||
+            Number.isNaN(fechaParseada.getTime()) || fechaParseada.toISOString().slice(0, 10) !== fechaNacimiento ||
+            fechaNacimiento > hoy) {
+          throw new Error('La fecha de nacimiento no es válida o es futura.');
+        }
+      }
+      const camposPermitidos = ['FechaNac', 'Telefono', 'Email',
+        'NombrePadre1', 'ApellidosPadre1', 'TelefonoPadre1', 'EmailPadre1',
+        'NombrePadre2', 'ApellidosPadre2', 'TelefonoPadre2', 'EmailPadre2'];
       const datosFiltrados = {};
       camposPermitidos.forEach(k => { if (datos[k] !== undefined) datosFiltrados[k] = datos[k]; });
       const actualizado = Equipos.actualizarJugador(jugadorId, datosFiltrados);
