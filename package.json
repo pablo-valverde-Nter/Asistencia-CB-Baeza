@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "test": "node --test",
+    "deploy:setup": "node scripts/deploy.mjs setup",
+    "deploy:doctor": "node scripts/deploy.mjs doctor",
+    "deploy:dev": "node scripts/deploy.mjs dev",
+    "deploy:pro": "node scripts/deploy.mjs pro",
+    "test:deploy": "node --test tests/deploy.test.mjs"
+  },
+  "devDependencies": {
+    "@google/clasp": "3.3.0",
+    "open": "10.2.0"
+  }
+}

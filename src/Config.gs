@@ -84,6 +84,7 @@ const CONFIG = {
   },
 };
 
-// Entorno incluido en cada versión publicada; no almacenar secretos aquí.
-// Cambiar a 'PRO' solo antes de crear la versión que se publicará en producción.
-const SUPABASE_ENV = 'DEV';
+// El publicador fija estos valores solo en la copia de cada versión; nunca secretos.
+// El código fuente sin preparar no puede conectarse a ninguna base de datos.
+const SUPABASE_ENV = 'UNPUBLISHED';
+const SUPABASE_EXPECTED_URL = '';

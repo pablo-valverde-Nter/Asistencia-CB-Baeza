@@ -1,0 +1,15 @@
+{
+  "scriptId": "1pLLShVaGOPsiQO5V6hA9xHEa7-2KqK8ta6WaTDKpmzpIys6NBcrqBybi",
+  "environments": {
+    "DEV": {
+      "branch": "develop",
+      "deploymentId": "AKfycbyhHD-u1fzcUuGXVkC90Zdsnbv2Nj6D7XBFBGWGkgzRd88ubdihmABPvszHnmBj3sys",
+      "supabaseUrl": "https://rodbxxlhyapmwrgbthqu.supabase.co"
+    },
+    "PRO": {
+      "branch": "main",
+      "deploymentId": "AKfycbyKCpXnYpDB3DrYo_VQfQ7irHQP49kI-PDT_wQj_MqSwRXR1ol5pRoE386BSA9GmaNw",
+      "supabaseUrl": "https://gnsqycjrkxpaongrhmxv.supabase.co"
+    }
+  }
+}

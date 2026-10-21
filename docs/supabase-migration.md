@@ -2,31 +2,15 @@
 
 La app usa Apps Script como backend y Supabase como única base de datos operativa. La migración de datos ya se completó; el código de migración y las utilidades de Google Sheets se han retirado. No vuelvas a ejecutar una migración ni `supabase/schema.sql` al trasladar el proyecto.
 
-## Entornos DEV y PRO por versión
+## Publicación en DEV y PRO
 
-`src/Config.gs` contiene `SUPABASE_ENV`, que se incorpora al código de cada versión (`DEV` o `PRO`). Apps Script comparte Script Properties entre sus despliegues, pero cada despliegue publicado conserva la versión que se le asignó. Por eso `/dev` puede apuntar a la base DEV mientras la implementación productiva publicada sigue apuntando a PRO, siempre que no se actualice esa implementación con una versión DEV.
+Las publicaciones normales usan el flujo local controlado descrito en [`docs/publicacion.md`](publicacion.md). No cambies manualmente `SUPABASE_ENV` ni `SUPABASE_EXPECTED_URL` para publicar: el builder fija entorno y URL esperada solo en la copia de cada build, y actualiza las implementaciones DEV/PRO existentes sin cambiar sus URL `/exec`.
 
-Configura en **Configuración del proyecto → Propiedades del script** estas claves para cada proyecto Supabase:
+Configura en **Configuración del proyecto → Propiedades del script** las URL y claves DEV/PRO indicadas en la guía de publicación. Las propiedades son compartidas por ambas implementaciones; el código de cada versión selecciona su entorno y el backend rechaza una URL que no coincida con la esperada. Nunca guardes una Secret key en código, HTML ni Git.
 
-| Propiedad | Valor |
-|---|---|
-| `SUPABASE_DEV_URL` | URL del proyecto Supabase de desarrollo |
-| `SUPABASE_DEV_SECRET_KEY` | Secret key del proyecto de desarrollo (`sb_secret_...`) |
-| `SUPABASE_DEV_PUBLISHABLE_KEY` | Publishable key del proyecto de desarrollo, usada solo por Realtime en el navegador |
-| `SUPABASE_PRO_URL` | URL del proyecto Supabase productivo |
-| `SUPABASE_PRO_SECRET_KEY` | Secret key del proyecto productivo (`sb_secret_...`) |
-| `SUPABASE_PRO_PUBLISHABLE_KEY` | Publishable key del proyecto productivo, usada solo por Realtime en el navegador |
+Usa la implementación web `/exec` de DEV para revisar la publicación de desarrollo. `/dev` ejecuta el código de desarrollo del editor y ya no es el flujo principal de revisión; el código fuente queda fail-closed como `UNPUBLISHED`. La herramienta no publica automáticamente al hacer push ni ejecuta SQL o cambios en Supabase.
 
-Las propiedades DEV y PRO pueden coexistir en el mismo proyecto Apps Script. No pongas ninguna Secret key en `Config.gs`, HTML ni en Git. El backend selecciona el URL y Secret key de acuerdo con `SUPABASE_ENV`; el bootstrap entrega al navegador solo el URL y la Publishable key del mismo entorno. Sin Publishable key, la app sigue actualizando con su consulta de respaldo cada 30 segundos.
-
-Flujo de publicación:
-
-1. Mantén `SUPABASE_ENV = 'DEV'`, guarda el código y valida la aplicación mediante `/dev`.
-2. Cuando quieras publicar, cambia `SUPABASE_ENV` a `'PRO'`, guarda y crea una versión nueva.
-3. Actualiza la implementación productiva para que use esa versión PRO.
-4. Vuelve el código fuente a `'DEV'` y guárdalo. `/dev` usará la base DEV; la implementación productiva seguirá en la versión PRO asignada.
-
-No actualices el despliegue productivo mientras el código que vas a publicar tenga `SUPABASE_ENV = 'DEV'`. Si falta la URL o Secret key del entorno seleccionado, el backend falla explícitamente en lugar de caer a una conexión genérica.
+Antes de publicar una versión que requiere una migración de esquema, aplica manualmente las instrucciones específicas de más abajo en las bases correspondientes. La publicación no sustituye ni ejecuta esas migraciones.
 
 Antes de publicar la versión que permite quitar jugadores o entrenadores de una sesión, ejecuta `supabase/migrate-exclusiones-sesion.sql` en el SQL Editor de **DEV y PRO**. Añade solo la columna booleana `Excluido` a las dos tablas de asistencia, con valor `false` para los registros anteriores. Es idempotente; no borra asistencias ni altera las asignaciones a equipos. Un invitado quitado se elimina de la asistencia de esa sesión; un miembro del equipo queda excluido solo de esa sesión y puede volver a añadirse. No publiques la nueva versión antes de migrar su base correspondiente.
 
@@ -39,7 +23,7 @@ Antes de publicar la configuración de contacto familiar, ejecuta `supabase/migr
 3. Abre el SQL Editor y ejecuta el contenido completo de `supabase/schema.sql`. Crea las diez tablas del dominio y la tabla privada `Administradores`, índices, RLS y permisos de `service_role`; no inserta datos de negocio.
 4. Ejecuta después el contenido completo de `supabase/realtime.sql`. Crea `app_sync_state`, sus triggers y la publicación Realtime. Inserta deliberadamente una única fila técnica en `app_sync_state`; las tablas del dominio permanecen vacías.
 5. En las Script Properties, configura las tres propiedades `SUPABASE_DEV_*` anteriores con los datos de este proyecto. Configura también las tres `SUPABASE_PRO_*` cuando tengas los datos del proyecto productivo. No reutilices las claves entre proyectos.
-6. Deja `SUPABASE_ENV = 'DEV'`, guarda el código y abre la implementación `/dev`. Comprueba en Table Editor que hay cero filas en las diez tablas de negocio y una fila en `app_sync_state`.
+6. Sigue [`docs/publicacion.md`](publicacion.md) para configurar y publicar la implementación DEV existente mediante la CLI; valida en Table Editor que hay cero filas en las diez tablas de negocio y una fila en `app_sync_state`. El código `/dev` del editor no es el flujo de revisión.
 
 La tabla `Administradores` es privada y el servidor la consulta para validar correo y PIN; no hay correos ni PIN de administrador en el código. Para sembrar la cuenta inicial, temporada y migrar administradores antiguos, ejecuta `supabase/bootstrap-pro.sql` en la base PRO después de `schema.sql`. Antes de ejecutarlo, reemplaza `__INTRODUCIR_PIN_ADMIN__` por el PIN solicitado directamente en SQL Editor y no guardes esa copia en Git. El script crea o activa `CB Baeza Baloncesto 2026-2027`, del 1 de septiembre de 2026 al 30 de junio de 2027, y habilita `vnpablo2002@gmail.com` como administrador. Después de añadir la tabla, vuelve a ejecutar `supabase/realtime.sql` para instalar también su trigger de sincronización.
 
@@ -48,13 +32,13 @@ El PIN se guarda en una tabla accesible únicamente con `service_role`, pero un 
 ## Llevar el proyecto a otra cuenta
 
 1. Copia los archivos del proyecto Apps Script a la cuenta de destino, incluidos `src/`, `ui/` y `appsscript.json`. Mantén `Schema.gs`, que declara las tablas y columnas permitidas por `DataAccess.gs`.
-2. Si vas a conservar la misma base de datos, configura en **Configuración del proyecto → Propiedades del script** las propiedades de URL, Secret key y Publishable key del entorno seleccionado en `src/Config.gs`. La clave de servidor debe ser una Secret key (`sb_secret_...`), nunca la Publishable key, y no debe ponerse en HTML ni en el repositorio. Si es un Supabase nuevo y vacío, sigue primero los pasos de «Crear una base de desarrollo vacía».
+2. Si vas a conservar la misma base de datos, configura en **Configuración del proyecto → Propiedades del script** las URL, Secret keys y Publishable keys de ambos entornos DEV y PRO, siguiendo [`docs/publicacion.md`](publicacion.md). Las versiones publicadas seleccionan su entorno; la fuente no se edita manualmente para cambiarlo. No pongas keys en HTML ni en el repositorio. Si es un Supabase nuevo y vacío, sigue primero los pasos de «Crear una base de desarrollo vacía».
 3. Registra las cuentas administrativas en la tabla `Administradores` de la base activa usando SQL Editor; no se configuran administradores en `src/Config.gs`.
-4. Crea una implementación de tipo **Aplicación web** con **Ejecutar como: usuario que implementa** y acceso **Cualquiera**. Autoriza las solicitudes de UrlFetch y correo que muestra Google.
+4. El flujo local de publicación de este repositorio está fijado al Script ID actual y no migra implementaciones a otro proyecto. Si la transferencia implica crear otro proyecto Apps Script, planifica ese cambio como un cutover independiente; no uses el flujo normal de publicación hasta que el destino esté configurado intencionalmente. Para una nueva implementación, configura **Ejecutar como: usuario que implementa** y el acceso requerido, y autoriza las solicitudes de UrlFetch y correo que muestra Google.
 5. Configura el trigger semanal desde **Activadores** en la cuenta nueva para `triggerGenerarSesiones`, si se desea generación automática. Los activadores y las propiedades del script no se copian con los archivos.
 6. Prueba inicio de sesión, carga de datos, guardado de asistencia y notificaciones antes de retirar la implementación anterior. Desactiva el trigger anterior al completar el cambio para evitar ejecuciones duplicadas.
 
-Si se conserva el mismo proyecto Supabase, los datos y la configuración SQL de Realtime permanecen allí; no hace falta copiar tablas ni volver a ejecutar SQL. Las propiedades de URL y Publishable key del entorno seleccionado se leen desde Script Properties y se entregan al navegador en el bootstrap; la Secret key de backend solo debe estar en las propiedades del script. Si se retira el acceso de la cuenta anterior, revoca o rota las credenciales que tenía configuradas.
+Si se conserva el mismo proyecto Supabase, los datos y la configuración SQL de Realtime permanecen allí; no hace falta copiar tablas ni volver a ejecutar SQL. El bootstrap entrega al navegador solo la URL y Publishable key del entorno de la versión desplegada; la Secret key de backend permanece en Script Properties. Si se retira el acceso de la cuenta anterior, revoca o rota las credenciales que tenía configuradas.
 
 ## Seguridad y sincronización
 

@@ -104,12 +104,13 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - Siempre usar **V8 runtime** (declarado en `appsscript.json`).
 - Todas las funciones expuestas al cliente deben estar en `Code.gs` y ser llamadas vía `google.script.run`.
 - Las funciones en otros `.gs` son internas — no exponer directamente.
-- El acceso operativo a datos usa Supabase PostgREST desde Apps Script. `src/Config.gs → SUPABASE_ENV` selecciona DEV o PRO por versión; las URL y claves están en Script Properties (`SUPABASE_DEV_URL`, `SUPABASE_DEV_SECRET_KEY`, `SUPABASE_DEV_PUBLISHABLE_KEY` y sus equivalentes PRO). Nunca exponer una Secret key al navegador ni guardarla en el repositorio. Los administradores se registran en `Administradores`, consultada solo por Apps Script; no hardcodear cuentas ni PINs administrativos. El navegador puede recibir solo la URL y Publishable key del entorno seleccionado para Realtime.
+- El acceso operativo a datos usa Supabase PostgREST desde Apps Script. El publicador fija `SUPABASE_ENV` y `SUPABASE_EXPECTED_URL` en cada versión; el fuente permanece `UNPUBLISHED` y falla sin conexión. El backend exige que la URL de Script Properties coincida con la fijada en la versión. Las URL y claves están en Script Properties (`SUPABASE_DEV_URL`, `SUPABASE_DEV_SECRET_KEY`, `SUPABASE_DEV_PUBLISHABLE_KEY` y sus equivalentes PRO). Nunca exponer una Secret key al navegador ni guardarla en el repositorio. Los administradores se registran en `Administradores`, consultada solo por Apps Script; no hardcodear cuentas ni PINs administrativos. El navegador puede recibir solo la URL y Publishable key del entorno seleccionado para Realtime.
 - La SPA recibe solo cambios de `public.app_sync_state` vía Supabase Realtime y recarga los datos mediante `cargarDatos(auth)`. No suscribir el navegador a tablas de negocio (contienen PIN, códigos familiares y datos personales); mantener la publishable key como única clave del cliente.
 - Manejar errores con `try/catch` y devolver objetos `{ success: false, error: message }`.
 - Los IDs siempre se generan con `Utilities.getUuid()`.
 - Las fechas se almacenan como strings `YYYY-MM-DD` para evitar problemas de zona horaria.
 - Las horas se almacenan como strings `HH:MM` (24h).
+- Para commits, promoción `develop` → `main` y publicación DEV/PRO, usar la skill `publicar-apps-script` y `docs/publicacion.md`; no editar los valores de entorno ni crear una implementación nueva para publicar. Las URLs estables corresponden a IDs de implementación existentes.
 
 ### Frontend (JavaScript en HtmlService)
 - Toda comunicación con el servidor usa `google.script.run.withSuccessHandler(fn).withFailureHandler(fn).nombreFuncion(args)`.

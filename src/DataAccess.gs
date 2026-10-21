@@ -14,17 +14,24 @@ const SUPABASE_BOOLEAN_FIELDS = new Set([
 function getSupabaseConfig_() {
   const env = String(SUPABASE_ENV || '').trim().toUpperCase();
   if (env !== 'DEV' && env !== 'PRO') {
-    throw new Error('SUPABASE_ENV debe ser DEV o PRO.');
+    throw new Error('Versión sin preparar: publica con deploy:dev o deploy:pro.');
+  }
+  const expectedUrl = String(SUPABASE_EXPECTED_URL || '').trim().replace(/\/+$/, '');
+  if (!expectedUrl) {
+    throw new Error('Esta versión no tiene una URL de Supabase fijada por el publicador.');
   }
 
   const properties = PropertiesService.getScriptProperties();
   const urlProperty = `SUPABASE_${env}_URL`;
   const keyProperty = `SUPABASE_${env}_SECRET_KEY`;
   const realtimeKeyProperty = `SUPABASE_${env}_PUBLISHABLE_KEY`;
-  const url = String(properties.getProperty(urlProperty) || '').replace(/\/+$/, '');
+  const url = String(properties.getProperty(urlProperty) || '').trim().replace(/\/+$/, '');
   const key = properties.getProperty(keyProperty);
   if (!url || !key) {
     throw new Error(`Configura ${urlProperty} y ${keyProperty} en las propiedades del script.`);
+  }
+  if (url !== expectedUrl) {
+    throw new Error(`La URL de ${urlProperty} no coincide con esta versión ${env}. Conexión bloqueada.`);
   }
   return {
     env: env,
