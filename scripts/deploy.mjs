@@ -40,7 +40,9 @@ function run(command, args, { cwd = ROOT, maxBuffer = 4 * 1024 * 1024 } = {}) {
   });
   if (result.error || result.status !== 0) {
     const detail = result.error ? 'no se pudo iniciar el proceso' : `código ${result.status}`;
-    throw new Error(`${path.basename(command)} ${args[0] || ''} falló (${detail}).`);
+    const error = new Error(`${path.basename(command)} ${args[0] || ''} falló (${detail}).`);
+    error.stderr = result.stderr?.trim();
+    throw error;
   }
   return result.stdout;
 }
@@ -68,9 +70,9 @@ function parseJsonOutput(output, label) {
 function runClasp(args, { cwd = ROOT } = {}) {
   try {
     return run(process.execPath, [CLASP_ENTRY, ...args], { cwd });
-  } catch {
+  } catch (error) {
     const command = args[0] || 'comando';
-    throw new Error(`clasp ${command} falló. Comprueba la sesión local y el acceso a Apps Script API.`);
+    throw new Error(`clasp ${command} falló: ${error.stderr || error.message}`);
   }
 }
 
