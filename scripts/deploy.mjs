@@ -376,13 +376,6 @@ function makeOperations({ config, environment, urls, buildDirectories, expectedC
         throw new Error('update-deployment devolvió datos inesperados; el deployment puede haberse actualizado. Comprueba deploy:doctor antes de reintentar.');
       }
     },
-    async verifyDeployment(deploymentId, version, description) {
-      const refreshed = readCurrentDeployments();
-      const current = refreshed.find(entry => entry.deploymentId === deploymentId);
-      if (!current || Number(current.versionNumber) !== version || current.description !== description) {
-        throw new Error('Apps Script no confirma la versión y descripción esperadas; el deployment puede haberse actualizado. Comprueba deploy:doctor; no se abrió el navegador.');
-      }
-    },
     async openWebApp() {
       console.log(`Publicado ${environment}: ${targetDeploymentId}`);
       console.log(`URL: ${targetUrl}`);

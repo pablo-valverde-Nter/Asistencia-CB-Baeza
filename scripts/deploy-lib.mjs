@@ -231,7 +231,6 @@ export async function publishDev({ sha, deploymentId, build, buildDirectory, ops
   const version = assertVersion(await ops.createVersion(description));
   await ops.verifyImmutableVersion(version, description, build);
   await ops.updateDeployment(deploymentId, version, description);
-  await ops.verifyDeployment(deploymentId, version, description);
   await ops.openWebApp();
   return { version, description };
 }
@@ -270,7 +269,6 @@ export async function publishPro({ sha, deploymentId, devBuild, proBuild, devBui
   if (failure) throw failure;
 
   await ops.updateDeployment(deploymentId, version, proDescription);
-  await ops.verifyDeployment(deploymentId, version, proDescription);
   await ops.openWebApp();
   return { version, description: proDescription };
 }

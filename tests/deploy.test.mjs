@@ -87,10 +87,6 @@ class StatefulRemoteScript {
         if (!remote.versions.has(version)) throw new Error('versión no existente');
         remote.deployments.set(deploymentId, { version, description });
       },
-      async verifyDeployment(deploymentId, version, description) {
-        const current = remote.deployments.get(deploymentId);
-        if (!current || current.version !== version || current.description !== description) throw new Error('deployment no actualizado');
-      },
       async openWebApp() {},
     };
   }

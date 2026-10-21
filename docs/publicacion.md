@@ -52,6 +52,8 @@ DEV es el destino predeterminado cuando se solicita publicar sin especificar ent
 5. Tras verificar la actualización, se abre la URL web `/exec` de DEV en el navegador del sistema. Comprueba allí la versión publicada.
 La comparación se hace contra la versión remota inmutable recién creada, incluyendo el manifiesto JSON y el contenido de todos los archivos; normaliza finales de línea y las extensiones `.gs`/`.js` tal como `clasp` las representa. El build conserva los nombres y rutas del repositorio (`src/Code.gs`, `ui/Index.html`, entre otros); el builder solo admite `src/Config.gs` como archivo de configuración fuente.
 
+La actualización se confirma con la respuesta de Google a `update-deployment`, comprobando ID, número de versión y descripción exactos. No depende de una segunda consulta inmediata al listado: en la primera publicación el listado no coincidió inmediatamente, aunque una consulta posterior confirmó la actualización. Si la respuesta de actualización falta o es incoherente, la herramienta sigue deteniéndose y exige inspeccionar el estado antes de volver a publicar.
+
 `deploy:doctor` nunca escribe remotamente. Consulta `clasp show-authorized-user --json`; sin login informa y omite las APIs. Con login lista las implementaciones y clona sus versiones actuales para detectar el `SUPABASE_ENV` real y verificar entrypoint `WEB_APP` y URL `/exec`; no ejecuta funciones de la app. Si falta configuración informa los datos pendientes. El modo `--dry-run` es offline: no usa clasp, autenticación ni fetch remoto; valida rama, limpieza del árbol (el lock ignorado no cuenta), configuración, placeholders en HEAD y la referencia cacheada `origin/<rama>`. No publica ni prueba permisos remotos.
 
 ## Promover a PRO
