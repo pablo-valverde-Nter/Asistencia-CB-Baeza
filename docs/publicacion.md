@@ -78,6 +78,7 @@ La rama heredada `origin/new-dev` queda fuera del flujo: no la mezcles con `deve
 
 ## Qué hace y qué no aísla este flujo
 
+- DEV y PRO deben permitir abrir la pantalla de acceso sin una sesión de Google; la autenticación por usuario/email y PIN sigue siendo propia de la aplicación. En el manifiesto, `ANYONE` exige una cuenta de Google y `ANYONE_ANONYMOUS` permite ese acceso sin sesión. Mantén la identidad de ejecución `USER_DEPLOYING`; cambiar el acceso web no debe cambiar la base de datos ni eliminar el login de la app.
 - La configuración fuente mantiene `SUPABASE_ENV = 'UNPUBLISHED'` y `SUPABASE_EXPECTED_URL = ''`. El build sustituye esos valores solo en su copia temporal. El backend rechaza un entorno distinto de DEV/PRO y una URL de Script Properties que no corresponda a la URL esperada; no hay una clave secreta en el navegador.
 - Las dos implementaciones pertenecen al mismo proyecto Apps Script. Script Properties, caches y activadores son compartidos; DEV y PRO **no son proyectos físicamente aislados**. Que cada implementación conserve una versión diferente no separa esos recursos compartidos.
 - Los activadores instalados ejecutan el HEAD del proyecto, no la versión de la implementación PRO. Como este flujo deja el HEAD en DEV, un activador como `triggerGenerarSesiones` trabajará en DEV. No lo uses para automatizar tareas PRO suponiendo que sigue la implementación productiva; eso requiere una configuración de activadores separada, preferiblemente en otro proyecto Apps Script.

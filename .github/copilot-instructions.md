@@ -17,7 +17,7 @@ El deporte es siempre **baloncesto** — no existe esa variable en ningún model
 | Base de datos | Supabase PostgreSQL vía PostgREST; clave secreta guardada en Script Properties |
 | Comunicación cliente-servidor | `google.script.run` (asíncrono) |
 | Autenticación | Validación propia en Apps Script: email/PIN para entrenadores y usuario/PIN para jugadores |
-| Despliegue | Apps Script Web App (Execute as: Me, Access: Anyone with Google Account) |
+| Despliegue | Apps Script Web App (Execute as: Me, Access: Anyone, including anonymous; autenticación propia de la app) |
 
 ---
 
