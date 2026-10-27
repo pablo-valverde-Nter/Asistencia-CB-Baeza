@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import open from 'open';
+import open, { apps } from 'open';
 import {
   ENVIRONMENTS,
   SCRIPT_ID,
@@ -380,9 +380,9 @@ function makeOperations({ config, environment, urls, buildDirectories, expectedC
       console.log(`Publicado ${environment}: ${targetDeploymentId}`);
       console.log(`URL: ${targetUrl}`);
       try {
-        await open(targetUrl, { wait: false });
+        await open(targetUrl, { app: { name: apps.browserPrivate }, wait: false });
       } catch {
-        console.error(`El deployment ya está publicado, pero no se pudo abrir el navegador. Abre manualmente: ${targetUrl}`);
+        console.error(`El deployment ya está publicado, pero no se pudo abrir una ventana privada. Abre manualmente en incógnito: ${targetUrl}`);
       }
     },
   };
