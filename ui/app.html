@@ -5035,10 +5035,6 @@ function _fmtFecha(s) {
   };
 }
 
-function _diaN(num) {
-  return {1:'Lun',2:'Mar',3:'Mie',4:'Jue',5:'Vie',6:'Sab',7:'Dom'}[num] || num;
-}
-
 function _iconEstado(e) {
   if (e === 'P') return String.fromCharCode(10003);
   if (e === 'A') return String.fromCharCode(10007);

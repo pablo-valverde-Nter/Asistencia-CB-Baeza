@@ -250,25 +250,5 @@ const Auth = {
     delete seguro.CodigoPadres;
     return seguro;
   },
-
-  /** Sanitiza una lista de jugadores para que el rol jugador no vea datos de otros */
-  sanitizarJugadoresParaRolJugador(jugadores, jugadorPropio) {
-    return jugadores.map(j => {
-      if (j.ID === jugadorPropio) {
-        // El propio jugador ve todo excepto CodigoPadres
-        const s = Object.assign({}, j);
-        delete s.CodigoPadres;
-        return s;
-      }
-      // Otros jugadores: solo datos públicos
-      return {
-        ID:        j.ID,
-        Nombre:    j.Nombre,
-        Apellidos: j.Apellidos,
-        FotoURL:   j.FotoURL   || '',
-        Dorsal:    j.Dorsal    || '',
-      };
-    });
-  },
 };
 

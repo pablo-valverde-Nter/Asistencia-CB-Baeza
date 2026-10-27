@@ -339,11 +339,6 @@ const Asistencia = {
     }
   },
 
-  getProgramacionesJugador(jugadorId) {
-    return findWhere(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, 'ID_Jugador', jugadorId)
-      .sort((a, b) => String(a.ID_Horario || '').localeCompare(String(b.ID_Horario || '')));
-  },
-
   crearProgramacion(jugadorId, codigoPadres, datos) {
     if (!Auth.verificarCodigoPadres(jugadorId, codigoPadres)) {
       throw new Error('El código de autorización no es correcto.');

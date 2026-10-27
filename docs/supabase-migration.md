@@ -10,12 +10,6 @@ Configura en **Configuración del proyecto → Propiedades del script** las URL 
 
 Usa la implementación web `/exec` de DEV para revisar la publicación de desarrollo. `/dev` ejecuta el código de desarrollo del editor y ya no es el flujo principal de revisión; el código fuente queda fail-closed como `UNPUBLISHED`. La herramienta no publica automáticamente al hacer push ni ejecuta SQL o cambios en Supabase.
 
-Antes de publicar una versión que requiere una migración de esquema, aplica manualmente las instrucciones específicas de más abajo en las bases correspondientes. La publicación no sustituye ni ejecuta esas migraciones.
-
-Antes de publicar la versión que permite quitar jugadores o entrenadores de una sesión, ejecuta `supabase/migrate-exclusiones-sesion.sql` en el SQL Editor de **DEV y PRO**. Añade solo la columna booleana `Excluido` a las dos tablas de asistencia, con valor `false` para los registros anteriores. Es idempotente; no borra asistencias ni altera las asignaciones a equipos. Un invitado quitado se elimina de la asistencia de esa sesión; un miembro del equipo queda excluido solo de esa sesión y puede volver a añadirse. No publiques la nueva versión antes de migrar su base correspondiente.
-
-Antes de publicar la configuración de contacto familiar, ejecuta `supabase/migrate-contacto-familia-y-notificaciones.sql` y `supabase/migrate-apellidos-familia.sql` en el SQL Editor de **DEV y PRO**. El primero prepara teléfonos, preferencias de email y división de nombres. El segundo es una migración independiente y repetible para cubrir también las bases donde ya se ejecutó una versión anterior del primero. La división conserva el texto completo en `NombrePadre1Original` / `NombrePadre2Original` y propone como nombre el primer término y como apellidos el resto; revisa manualmente los nombres compuestos. Las preferencias quedan activas para los registros existentes. No publiques el código nuevo antes de migrar ambas bases correspondientes.
-
 ## Crear una base de desarrollo vacía
 
 1. En Supabase Dashboard, crea un proyecto nuevo para desarrollo. Guarda la contraseña de PostgreSQL en un gestor de secretos.
