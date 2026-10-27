@@ -395,3 +395,104 @@ test('el jugador puede actualizar su fecha de nacimiento en su propio perfil', (
   assert.equal(actualizacion.id, 'member');
   assert.deepEqual({ ...actualizacion.fields }, { FechaNac: '2008-04-15', ApellidosPadre1: 'García López' });
 });
+
+function clienteCaptura(documentOverrides = {}) {
+  const document = { addEventListener() {}, getElementById() { return null; }, querySelectorAll() { return []; }, ...documentOverrides };
+  const context = vm.createContext({ document, window: { addEventListener() {} } });
+  const code = fs.readFileSync(path.join(__dirname, '../ui/app.html'), 'utf8').replace(/^<script[^>]*>|<\/script>\s*$/g, '');
+  vm.runInContext(code, context);
+  return vm.runInContext('App', context);
+}
+
+test('el preaviso no registra un estado y marcar avisos conserva su justificacion', () => {
+  const chip = {};
+  const card = { dataset: { id: 'member', estado: '', preaviso: 'A', justif: 'true', tipoJustif: 'Ausencia' },
+    querySelector(selector) { return selector === '.estado-chip' ? chip : null; } };
+  const boton = {};
+  const app = clienteCaptura({ querySelectorAll: selector => selector === '#sesion-jugs .jug-card' ? [card] : [],
+    getElementById: () => boton });
+  app.views.sesion._removed = { jugadores: new Set(), entrenadores: new Set() };
+  const registro = { Estado: null, TieneJustificacion: true, TipoJustificacion: 'Ausencia' };
+  assert.equal(app.cache.getEstadoAsistencia(registro), 'A');
+  assert.equal(app.cache.getEstadoRegistrado(registro), null);
+  assert.equal(app.views.sesion._collectAttendance().jugadores[0].estado, null);
+  app.views.sesion.marcarAvisos();
+  assert.equal(app.views.sesion._collectAttendance().jugadores[0].estado, 'A');
+  assert.equal(card.className, 'jug-card A');
+  assert.equal(card.dataset.justif, 'true');
+  assert.equal(card.dataset.justifCleared, undefined);
+  assert.equal(boton.hidden, true);
+  assert.equal(app.state._formIsDirty, true);
+});
+
+test('la cache mantiene el aviso sin estado y guarda minutos y primer registro sin sobrescribirlo', () => {
+  const app = clienteCaptura();
+  app.cache.sesiones = [{ ID: 's1', ID_Equipo: 'team' }];
+  app.cache.jugadores = [{ ID: 'member' }];
+  app.cache.jugadoresEquipos = [{ ID_Jugador: 'member', ID_Equipo: 'team', Activo: true }];
+  const aviso = { ID_Sesion: 's1', ID_Jugador: 'member', Estado: null, TieneJustificacion: true,
+    TipoJustificacion: 'Retraso', MotivoCategoria: 'Consulta' };
+  app.cache.asistJugadores = [aviso];
+  const vista = app.views.sesion._buildFromCache(app.cache.sesiones[0]);
+  assert.equal(vista.jugadores[0].estado, null);
+  assert.equal(vista.jugadores[0].preaviso, 'R');
+  app.views.sesion._applyAttendanceCache('s1', [{ jugadorId: 'member', estado: null }], [], [], [], '2026-10-27 21:00');
+  assert.equal(app.cache.asistJugadores[0], aviso);
+  app.views.sesion._applyAttendanceCache('s1', [{ jugadorId: 'member', estado: 'R', minutosRetraso: 15 }], [], [], [], '2026-10-28 21:00');
+  assert.equal(app.cache.asistJugadores[0].MinutosRetraso, 15);
+  assert.equal(app.cache.sesiones[0].FechaPrimerRegistro, '2026-10-27 21:00');
+  app.views.sesion._applyAttendanceCache('s1', [{ jugadorId: 'member', estado: 'P', minutosRetraso: 15 }], [], [], []);
+  assert.equal(app.cache.asistJugadores[0].MinutosRetraso, null);
+});
+
+test('cambiar un preaviso no pide confirmar y salir de retraso borra sus minutos', () => {
+  const minutos = { value: '15' };
+  const card = { dataset: { id: 'member', estado: '', preaviso: 'R', justif: 'true' },
+    querySelector(selector) { return selector === '.retraso-min' ? minutos : selector === '.estado-chip' ? {} : null; } };
+  const app = clienteCaptura();
+  app.openModal = () => assert.fail('El preaviso no debe pedir confirmacion');
+  app.views.sesion.toggleEstado(card);
+  assert.equal(card.dataset.estado, 'P');
+  assert.equal(card.dataset.justif, 'true');
+  assert.equal(card.dataset.justifCleared, undefined);
+  card.dataset.estado = 'R';
+  card.dataset.min = '15';
+  app.views.sesion._doToggleEstado(card);
+  assert.equal(card.dataset.min, undefined);
+  assert.equal(minutos.value, '');
+  assert.equal(card.dataset.justifCleared, 'true');
+});
+
+test('la sesion cancelada abre un modal sin navegar y no cuenta avisos ni faltas', () => {
+  const app = clienteCaptura();
+  const sesion = { ID: 's1', Cancelada: 'TRUE', AsistenciaGuardada: true,
+    MotivoCancelacion: 'Climatología', FechaCancelacion: '2026-10-27 10:00' };
+  app.cache.sesiones = [sesion];
+  app.cache.asistJugadores = [{ ID_Sesion: 's1', ID_Jugador: 'member', Estado: 'A' }];
+  let modal;
+  app.openModal = (titulo, html) => { modal = { titulo, html }; };
+  app.navigate = () => assert.fail('No debe navegar al abrir una sesion cancelada');
+  app.views.sesiones.abrirSesion('s1');
+  assert.equal(modal.titulo, 'Sesión cancelada');
+  assert.match(modal.html, /Climatología/);
+  assert.match(modal.html, /Reactivar/);
+  assert.equal(app.notifications.sessionUnjustifiedCount(sesion), 0);
+  assert.equal(app.notifications.sessionJustificationCount(sesion), 0);
+});
+
+test('el detalle del jugador muestra el aviso sin registrarlo y las canceladas no ofrecen acciones', () => {
+  const elements = new Map();
+  const app = clienteCaptura({ getElementById(id) { if (!elements.has(id)) elements.set(id, {}); return elements.get(id); } });
+  app.state.jugador = { ID: 'member' };
+  app.state.sesionJugadorId = 's1';
+  app.cache.sesiones = [{ ID: 's1', Fecha: '2099-10-27', HoraInicio: '19:00', HoraFin: '20:00' }];
+  app.cache.asistJugadores = [{ ID_Sesion: 's1', ID_Jugador: 'member', TieneJustificacion: true, TipoJustificacion: 'Ausencia' }];
+  app.views['detalle-sesion-jugador'].render();
+  assert.match(elements.get('detalle-sesion-jug-estado').innerHTML, /Sin registrar/);
+  assert.match(elements.get('detalle-sesion-jug-estado').innerHTML, /Aviso enviado: Ausencia/);
+  app.cache.sesiones[0].Cancelada = true;
+  app.cache.sesiones[0].MotivoCancelacion = 'Festivo o vacaciones';
+  app.views['detalle-sesion-jugador'].render();
+  assert.match(elements.get('detalle-sesion-jug-estado').innerHTML, /Entrenamiento cancelado: Festivo o vacaciones/);
+  assert.equal(elements.get('detalle-sesion-jug-actions').innerHTML, '');
+});

@@ -129,37 +129,56 @@ function cargarDatos(auth) {
 
     const rol = contexto.rol;
 
+    // ── Estadísticas agregadas (antes de sanear; el jugador solo recibe las suyas) ──
+    let estadisticas = null;
+    let estadisticasError = null;
+    try {
+      estadisticas = Estadisticas.consultar({
+        temporadas: temporadasR.data, equipos: equiposR.data, horarios: horariosR.data,
+        jugadores: jugadoresR.data, jugadoresEquipos: jugadoresEquiposR.data,
+        entrenadores: entrenadoresR.data, entrenadoresEquipos: entrenadoresEquiposR.data,
+        sesiones: sesionesR.data, asistJugadores: asistJugadoresR.data, asistEntrenadores: asistEntrenadoresR.data,
+      }, { entidad: rol === CONFIG.ROLES.JUGADOR ? 'propio' : 'resumen' }, contextoEstadisticas_(contexto), ahoraMadrid_());
+    } catch (e) {
+      estadisticasError = e.message;
+      Logger.log(`[cargarDatos:${traceId}] fallo estadisticas: ${e.message}`);
+    }
+
     // ── Filtrado de datos sensibles según rol ──────────────────────────────────
     let jugadoresFinal    = jugadoresR.data;
     let asistJugFinal     = asistJugadoresR.data;
     let entrenFinal       = entrenadoresR.data;
+    let equiposFinal      = equiposR.data;
+    let jugEquiposFinal   = jugadoresEquiposR.data;
+    let entEquiposFinal   = entrenadoresEquiposR.data;
+    let horariosFinal     = horariosR.data;
+    let sesionesFinal     = sesionesR.data;
+    let asistEntFinal     = asistEntrenadoresR.data;
 
     if (rol === CONFIG.ROLES.JUGADOR) {
       const jugadorPropioId = contexto.jugador ? contexto.jugador.ID : null;
+      const esActivo = r => r.Activo === true || r.Activo === 'TRUE';
 
-      // Jugadores: datos completos para el propio (sin CodigoPadres) y solo campos básicos para terceros
-      jugadoresFinal = jugadoresR.data.map(j => {
-        if (j.ID === jugadorPropioId) {
-          const s = Object.assign({}, j);
-          delete s.CodigoPadres;   // El jugador nunca ve su propio CodigoPadres (es para padres)
-          return s;
-        }
-        return { ID: j.ID, Nombre: j.Nombre, Apellidos: j.Apellidos,
-                 FotoURL: j.FotoURL || '', Dorsal: j.Dorsal || '' };
+      // Solo sus propios datos; el jugador nunca ve su CodigoPadres (es para padres)
+      jugadoresFinal = jugadoresR.data.filter(j => j.ID === jugadorPropioId).map(j => {
+        const s = Object.assign({}, j);
+        delete s.CodigoPadres;
+        return s;
       });
-
-      // Asistencias: propias completas; las de otros solo Estado (sin justificación)
-      asistJugFinal = asistJugadoresR.data.map(r => {
-        if (r.ID_Jugador === jugadorPropioId) return r;
-        return { ID: r.ID, ID_Sesion: r.ID_Sesion, ID_Jugador: r.ID_Jugador,
-                 Estado: r.Estado, EsInvitado: r.EsInvitado, FechaRegistro: r.FechaRegistro };
-      });
+      jugEquiposFinal = jugadoresEquiposR.data.filter(r => r.ID_Jugador === jugadorPropioId);
+      asistJugFinal = asistJugadoresR.data.filter(r => r.ID_Jugador === jugadorPropioId);
       programacionesR.data = programacionesR.data.filter(r => r.ID_Jugador === jugadorPropioId);
 
-      // Entrenadores: datos básicos, sin PIN
-      entrenFinal = entrenadoresR.data.map(e => ({
-        ID: e.ID, Nombre: e.Nombre, Apellidos: e.Apellidos, EsAdmin: e.EsAdmin || false,
-      }));
+      const equiposActivos = new Set(jugEquiposFinal.filter(esActivo).map(r => r.ID_Equipo));
+      const sesionesPropias = new Set(asistJugFinal.map(r => r.ID_Sesion));
+      sesionesFinal = sesionesR.data.filter(s => equiposActivos.has(s.ID_Equipo) || sesionesPropias.has(s.ID));
+      const equiposVisibles = new Set(jugEquiposFinal.map(r => r.ID_Equipo).concat(sesionesFinal.map(s => s.ID_Equipo)));
+      equiposFinal = equiposR.data.filter(e => equiposVisibles.has(e.ID));
+      horariosFinal = horariosR.data.filter(h => equiposActivos.has(h.ID_Equipo));
+
+      entrenFinal = [];
+      entEquiposFinal = [];
+      asistEntFinal = [];
     } else if (rol === CONFIG.ROLES.ENTRENADOR) {
       // Entrenadores no ven el PIN de sus compañeros entrenadores
       entrenFinal = entrenadoresR.data.map(e => {
@@ -179,16 +198,18 @@ function cargarDatos(auth) {
       contexto:            contexto,
       jugadores:           jugadoresFinal,
       entrenadores:        entrenFinal,
-      equipos:             equiposR.data,
-      jugadoresEquipos:    jugadoresEquiposR.data,
-      entrenadoresEquipos: entrenadoresEquiposR.data,
-      horarios:            horariosR.data,
-      sesiones:            sesionesR.data,
+      equipos:             equiposFinal,
+      jugadoresEquipos:    jugEquiposFinal,
+      entrenadoresEquipos: entEquiposFinal,
+      horarios:            horariosFinal,
+      sesiones:            sesionesFinal,
       temporadas:          temporadasR.data,
       asistJugadores:      asistJugFinal,
-      asistEntrenadores:   asistEntrenadoresR.data,
+      asistEntrenadores:   asistEntFinal,
       programacionesJustificaciones: programacionesR.data,
       motivosJustificacion: CONFIG.MOTIVOS_JUSTIFICACION,
+      estadisticas:        estadisticas,
+      estadisticasError:   estadisticasError,
     };
   } catch (e) {
     Logger.log(`[cargarDatos:${traceId}] excepcion inesperada: ${e.message}`);
@@ -198,6 +219,41 @@ function cargarDatos(auth) {
       stage: 'unexpected',
       traceId: traceId,
     };
+  }
+}
+
+function ahoraMadrid_() { return Utilities.formatDate(new Date(), 'Europe/Madrid', 'yyyy-MM-dd HH:mm'); }
+
+function contextoEstadisticas_(contexto) { return { rol: contexto.rol, jugadorId: contexto.jugador ? contexto.jugador.ID : null }; }
+
+/**
+ * Estadísticas agregadas para otro periodo o un detalle (equipo, jugador, entrenador, club).
+ * @param {Object} auth
+ * @param {{temporadaId?:string, periodo?:string, entidad:string, id?:string}} consulta
+ * @returns {Object}
+ */
+function getEstadisticas(auth, consulta) {
+  try {
+    const contexto = Auth.getContextoUsuario(auth);
+    if (!contexto.success) return { success: false, error: contexto.error };
+    const datos = {
+      temporadas:          getSheetData(CONFIG.SHEETS.TEMPORADAS),
+      equipos:             getSheetData(CONFIG.SHEETS.EQUIPOS),
+      horarios:            getSheetData(CONFIG.SHEETS.HORARIOS),
+      jugadores:           getSheetData(CONFIG.SHEETS.JUGADORES),
+      jugadoresEquipos:    getSheetData(CONFIG.SHEETS.JUGADORES_EQUIPOS),
+      entrenadores:        getSheetData(CONFIG.SHEETS.ENTRENADORES),
+      entrenadoresEquipos: getSheetData(CONFIG.SHEETS.ENTRENADORES_EQUIPOS),
+      sesiones:            getSheetData(CONFIG.SHEETS.SESIONES),
+      asistJugadores:      getSheetData(CONFIG.SHEETS.ASIST_JUGADORES),
+      asistEntrenadores:   getSheetData(CONFIG.SHEETS.ASIST_ENTRENADORES),
+    };
+    return {
+      success: true,
+      estadisticas: Estadisticas.consultar(datos, consulta || {}, contextoEstadisticas_(contexto), ahoraMadrid_()),
+    };
+  } catch (e) {
+    return { success: false, error: e.message };
   }
 }
 
@@ -457,6 +513,24 @@ function eliminarSesion(auth, sesionId) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
     return { success: true, eliminado: Sesiones.eliminarSesion(sesionId) };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function cancelarSesion(auth, sesionId, motivo) {
+  try {
+    Auth.requireEntrenadorOAdmin(auth);
+    return { success: true, sesion: Sesiones.cancelarSesion(sesionId, motivo) };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function reactivarSesion(auth, sesionId) {
+  try {
+    Auth.requireEntrenadorOAdmin(auth);
+    return { success: true, sesion: Sesiones.reactivarSesion(sesionId) };
   } catch (e) {
     return { success: false, error: e.message };
   }

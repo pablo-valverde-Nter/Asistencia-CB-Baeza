@@ -1,6 +1,7 @@
 {
   "scripts": {
     "test": "node --test",
+    "smoke:ui": "node scripts/smoke-ui.mjs",
     "deploy:setup": "node scripts/deploy.mjs setup",
     "deploy:doctor": "node scripts/deploy.mjs doctor",
     "deploy:dev": "node scripts/deploy.mjs dev",

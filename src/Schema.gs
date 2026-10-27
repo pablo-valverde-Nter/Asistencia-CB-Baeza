@@ -19,7 +19,7 @@ const SCHEMA = {
     'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2'
   ],
   Jugadores_Equipos: [
-    'ID', 'ID_Jugador', 'ID_Equipo', 'Tipo', 'Activo'
+    'ID', 'ID_Jugador', 'ID_Equipo', 'Tipo', 'Activo', 'FechaAlta', 'FechaBaja'
   ],
   Entrenadores: [
     'ID', 'Nombre', 'Apellidos', 'Email', 'Telefono', 'PIN', 'EsAdmin'
@@ -28,15 +28,16 @@ const SCHEMA = {
     'ID', 'Email', 'PIN', 'Activo'
   ],
   Entrenadores_Equipos: [
-    'ID', 'ID_Entrenador', 'ID_Equipo', 'Activo', 'TipoRol'
+    'ID', 'ID_Entrenador', 'ID_Equipo', 'Activo', 'TipoRol', 'FechaAlta', 'FechaBaja'
   ],
   Sesiones: [
-    'ID', 'ID_Equipo', 'ID_Temporada', 'ID_Horario', 'Fecha', 'HoraInicio', 'HoraFin', 'EsExtra', 'Notas', 'AsistenciaGuardada'
+    'ID', 'ID_Equipo', 'ID_Temporada', 'ID_Horario', 'Fecha', 'HoraInicio', 'HoraFin', 'EsExtra', 'Notas', 'AsistenciaGuardada',
+    'Cancelada', 'MotivoCancelacion', 'FechaCancelacion', 'FechaPrimerRegistro'
   ],
   Asist_Jugadores: [
     'ID', 'ID_Sesion', 'ID_Jugador', 'Estado', 'EsInvitado', 'Excluido', 'FechaRegistro',
     'TieneJustificacion', 'TipoJustificacion', 'MotivoCategoria', 'MotivoDetalle',
-    'FechaJustificacion', 'JustificadoPor', 'MensajeGenerado', 'NotificadoEntrenador', 'EsProgramada'
+    'FechaJustificacion', 'JustificadoPor', 'MensajeGenerado', 'NotificadoEntrenador', 'EsProgramada', 'MinutosRetraso'
   ],
   Asist_Entrenadores: [
     'ID', 'ID_Sesion', 'ID_Entrenador', 'Asistio', 'EsInvitado', 'Excluido', 'FechaRegistro'

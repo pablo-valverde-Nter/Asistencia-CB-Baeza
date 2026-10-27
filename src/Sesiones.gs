@@ -60,6 +60,7 @@ const Sesiones = {
         HoraInicio:  h.HoraInicio,
         HoraFin:     h.HoraFin,
         EsExtra:     false,
+        Cancelada:   false,
         Notas:       '',
       });
       Asistencia.aplicarProgramacionesSesion(sesion);
@@ -127,6 +128,7 @@ const Sesiones = {
       HoraInicio:   datos.HoraInicio,
       HoraFin:      datos.HoraFin,
       EsExtra:      true,
+      Cancelada:    false,
       Notas:        datos.Notas || '',
     });
   },
@@ -140,6 +142,26 @@ const Sesiones = {
     deleteWhere(CONFIG.SHEETS.ASIST_JUGADORES,    'ID_Sesion', sesionId);
     deleteWhere(CONFIG.SHEETS.ASIST_ENTRENADORES, 'ID_Sesion', sesionId);
     return deleteRow(CONFIG.SHEETS.SESIONES, sesionId);
+  },
+
+  cancelarSesion(sesionId, motivo) {
+    if (!CONFIG.MOTIVOS_CANCELACION.includes(motivo)) throw new Error('Motivo de cancelación no válido.');
+    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
+    if (!sesion) throw new Error('Sesión no encontrada.');
+    if (sesion.AsistenciaGuardada === true || sesion.AsistenciaGuardada === 'TRUE') {
+      throw new Error('No se puede cancelar una sesión con asistencia guardada. Elimínala si fue un error.');
+    }
+    const cambios = { Cancelada: true, MotivoCancelacion: motivo, FechaCancelacion: Asistencia._timestamp_() };
+    updateRow(CONFIG.SHEETS.SESIONES, sesionId, cambios);
+    return { ...sesion, ...cambios };
+  },
+
+  reactivarSesion(sesionId) {
+    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
+    if (!sesion) throw new Error('Sesión no encontrada.');
+    const cambios = { Cancelada: false, MotivoCancelacion: null, FechaCancelacion: null };
+    updateRow(CONFIG.SHEETS.SESIONES, sesionId, cambios);
+    return { ...sesion, ...cambios };
   },
 
   // ══════════════════════════════════════════════════════════════════════════════

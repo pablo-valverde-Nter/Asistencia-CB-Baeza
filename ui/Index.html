@@ -153,6 +153,9 @@
         <button class="btn btn-primary btn-full" onclick="App.views.sesion.guardar()">
           Guardar asistencia
         </button>
+        <button id="btn-cancelar-sesion" class="btn btn-secondary btn-full mt-8" onclick="App.views.sesion.cancelar()">
+          Cancelar sesión
+        </button>
         <button id="btn-eliminar-sesion" class="btn btn-danger btn-full mt-8" onclick="App.views.sesion.eliminar()">
           Eliminar sesi&oacute;n
         </button>
@@ -208,7 +211,19 @@
           </div>
           <div class="gestion-arrow">&#x203A;</div>
         </div>
+        <div id="gestion-informes" class="gestion-card hidden" onclick="App.navigate('informes')">
+          <div class="gestion-icon" aria-hidden="true">&#x1F4CA;</div>
+          <div>
+            <div class="gestion-label">Informes del club</div>
+            <div class="gestion-desc">Consultar la asistencia y la evoluci&oacute;n del club</div>
+          </div>
+          <div class="gestion-arrow" aria-hidden="true">&#x203A;</div>
+        </div>
       </div>
+    </section>
+
+    <section id="view-informes" class="view">
+      <div id="informes-contenido" class="p-16"></div>
     </section>
 
     <!-- EQUIPOS ADMIN -->
@@ -291,6 +306,8 @@
           <option value="dorsal" selected>Dorsal</option>
           <option value="edad-desc">Edad (mayor a menor)</option>
           <option value="edad-asc">Edad (menor a mayor)</option>
+          <option value="asistencia-desc">Asistencia (mayor a menor)</option>
+          <option value="asistencia-asc">Asistencia (menor a mayor)</option>
         </select>
       </div>
       <div id="jugadores-admin-lista"></div>
@@ -500,6 +517,11 @@
             <span class="perfil-nav-label">Mi equipo</span>
             <span class="perfil-home-arrow" aria-hidden="true">&#x203A;</span>
           </button>
+          <button class="perfil-nav-btn" onclick="App.navigate('mis-stats')">
+            <span class="perfil-nav-icon" aria-hidden="true">&#x1F4CA;</span>
+            <span class="perfil-nav-label">Mis estad&iacute;sticas</span>
+            <span class="perfil-home-arrow" aria-hidden="true">&#x203A;</span>
+          </button>
         </div>
       </div>
       <div id="perfil-incidencias"></div>
@@ -536,7 +558,7 @@
 
     <!-- VISTA: MI EQUIPO (jugador, solo lectura) -->
     <section id="view-mi-equipo" class="view">
-      <div id="mi-equipo-contenido"></div>
+      <div id="mi-equipo-contenido" class="p-16"></div>
     </section>
 
     <!-- VISTA: AJUSTES CUENTA (jugador) -->

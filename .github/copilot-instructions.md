@@ -32,6 +32,7 @@ src/
   Equipos.gs         → Lógica de equipos, jugadores y entrenadores
   Sesiones.gs        → Generación automática de sesiones + sesiones extra
   Asistencia.gs      → Registro y consulta de asistencia de jugadores y entrenadores
+  Estadisticas.gs    → Motor puro de métricas (única fuente de P/A/R agregados; la UI lee App.stats, nunca recalcula)
   Code.gs            → doGet(), endpoints públicos (funciones llamadas por google.script.run)
 ui/
   Index.html         → Shell SPA: navegación + contenedor de vistas

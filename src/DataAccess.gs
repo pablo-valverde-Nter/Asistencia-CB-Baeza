@@ -6,10 +6,11 @@
 
 const SUPABASE_BATCH_SIZE = 500;
 const SUPABASE_BOOLEAN_FIELDS = new Set([
-  'Activa', 'Activo', 'EsAdmin', 'EsExtra', 'AsistenciaGuardada',
+  'Activa', 'Activo', 'EsAdmin', 'EsExtra', 'AsistenciaGuardada', 'Cancelada',
   'EsInvitado', 'Excluido', 'TieneJustificacion', 'NotificadoEntrenador', 'EsProgramada', 'Asistio',
   'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2',
 ]);
+const SUPABASE_INTEGER_FIELDS = new Set(['DiaSemana', 'MinutosRetraso']);
 
 function getSupabaseConfig_() {
   const env = String(SUPABASE_ENV || '').trim().toUpperCase();
@@ -101,7 +102,7 @@ function supabaseFilter_(field, value) {
 
 function normalizeSupabaseValue_(field, value) {
   if (value === '' && SUPABASE_BOOLEAN_FIELDS.has(field)) return null;
-  if (field === 'DiaSemana' && value === '') return null;
+  if (SUPABASE_INTEGER_FIELDS.has(field) && value === '') return null;
   return value;
 }
 

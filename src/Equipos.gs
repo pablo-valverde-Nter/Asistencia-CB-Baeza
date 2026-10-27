@@ -212,7 +212,7 @@ const Equipos = {
 
   /**
    * Asigna un jugador a un equipo con el tipo indicado.
-   * Si ya existe la relación (activa o inactiva), la reactiva y actualiza el tipo.
+   * Si ya existe una relación activa, actualiza el tipo; conserva las bajas como historial.
    * @param {string} jugadorId
    * @param {string} equipoId
    * @param {string} tipo - 'Principal' | 'Secundario'
@@ -232,14 +232,13 @@ const Equipos = {
       }
     }
 
-    // Comprobar si ya existe la relación (para reutilizarla)
     const existentes = findWhere(CONFIG.SHEETS.JUGADORES_EQUIPOS, 'ID_Jugador', jugadorId)
-      .filter(r => r.ID_Equipo === equipoId);
+      .filter(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
 
     if (existentes.length > 0) {
-      const actualizado = updateRow(CONFIG.SHEETS.JUGADORES_EQUIPOS, existentes[0].ID, { Activo: true, Tipo: tipo });
+      const actualizado = updateRow(CONFIG.SHEETS.JUGADORES_EQUIPOS, existentes[0].ID, { Tipo: tipo });
       if (!actualizado) throw new Error('No se pudo actualizar la asignación del jugador.');
-      return { ...existentes[0], Activo: true, Tipo: tipo };
+      return { ...existentes[0], Tipo: tipo };
     }
 
     return appendRow(CONFIG.SHEETS.JUGADORES_EQUIPOS, {
@@ -247,6 +246,7 @@ const Equipos = {
       ID_Equipo:  equipoId,
       Tipo:       tipo,
       Activo:     true,
+      FechaAlta:  Asistencia._timestamp_().slice(0, 10),
     });
   },
 
@@ -258,9 +258,13 @@ const Equipos = {
    */
   desasignarJugadorDeEquipo(jugadorId, equipoId) {
     const relaciones = findWhere(CONFIG.SHEETS.JUGADORES_EQUIPOS, 'ID_Jugador', jugadorId)
-      .filter(r => r.ID_Equipo === equipoId);
-    if (relaciones.length === 0) return true;
-    return updateRow(CONFIG.SHEETS.JUGADORES_EQUIPOS, relaciones[0].ID, { Activo: false });
+      .filter(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
+    const hoy = Asistencia._timestamp_().slice(0, 10);
+    let actualizado = true;
+    relaciones.forEach(r => {
+      if (!updateRow(CONFIG.SHEETS.JUGADORES_EQUIPOS, r.ID, { Activo: false, FechaBaja: hoy })) actualizado = false;
+    });
+    return actualizado;
   },
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -400,12 +404,12 @@ const Equipos = {
     }
 
     const existentes = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
-      .filter(r => r.ID_Equipo === equipoId);
+      .filter(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
 
     if (existentes.length > 0) {
-      const actualizado = updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, existentes[0].ID, { Activo: true, TipoRol: tipoRol });
+      const actualizado = updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, existentes[0].ID, { TipoRol: tipoRol });
       if (!actualizado) throw new Error('No se pudo actualizar la asignación del entrenador.');
-      return { ...existentes[0], Activo: true, TipoRol: tipoRol };
+      return { ...existentes[0], TipoRol: tipoRol };
     }
 
     return appendRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, {
@@ -413,6 +417,7 @@ const Equipos = {
       ID_Equipo:     equipoId,
       Activo:        true,
       TipoRol:       tipoRol,
+      FechaAlta:     Asistencia._timestamp_().slice(0, 10),
     });
   },
 
@@ -424,8 +429,12 @@ const Equipos = {
    */
   desasignarEntrenadorDeEquipo(entrenadorId, equipoId) {
     const relaciones = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
-      .filter(r => r.ID_Equipo === equipoId);
-    if (relaciones.length === 0) return true;
-    return updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, relaciones[0].ID, { Activo: false });
+      .filter(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
+    const hoy = Asistencia._timestamp_().slice(0, 10);
+    let actualizado = true;
+    relaciones.forEach(r => {
+      if (!updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, r.ID, { Activo: false, FechaBaja: hoy })) actualizado = false;
+    });
+    return actualizado;
   },
 };

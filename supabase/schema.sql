@@ -53,7 +53,9 @@ CREATE TABLE IF NOT EXISTS public."Jugadores_Equipos" (
   "ID_Jugador" text REFERENCES public."Jugadores" ("ID") ON DELETE CASCADE,
   "ID_Equipo" text REFERENCES public."Equipos" ("ID") ON DELETE CASCADE,
   "Tipo" text,
-  "Activo" boolean
+  "Activo" boolean,
+  "FechaAlta" text,
+  "FechaBaja" text
 );
 
 CREATE TABLE IF NOT EXISTS public."Entrenadores" (
@@ -78,19 +80,26 @@ CREATE TABLE IF NOT EXISTS public."Entrenadores_Equipos" (
   "ID_Entrenador" text REFERENCES public."Entrenadores" ("ID") ON DELETE CASCADE,
   "ID_Equipo" text REFERENCES public."Equipos" ("ID") ON DELETE CASCADE,
   "Activo" boolean,
-  "TipoRol" text
+  "TipoRol" text,
+  "FechaAlta" text,
+  "FechaBaja" text
 );
 
 CREATE TABLE IF NOT EXISTS public."Sesiones" (
   "ID" text PRIMARY KEY,
   "ID_Equipo" text REFERENCES public."Equipos" ("ID") ON DELETE CASCADE,
   "ID_Temporada" text REFERENCES public."Temporadas" ("ID") ON DELETE CASCADE,
+  "ID_Horario" text,
   "Fecha" text,
   "HoraInicio" text,
   "HoraFin" text,
   "EsExtra" boolean,
   "Notas" text,
-  "AsistenciaGuardada" boolean
+  "AsistenciaGuardada" boolean,
+  "Cancelada" boolean DEFAULT false,
+  "MotivoCancelacion" text,
+  "FechaCancelacion" text,
+  "FechaPrimerRegistro" text
 );
 
 CREATE TABLE IF NOT EXISTS public."Asist_Jugadores" (
@@ -109,7 +118,9 @@ CREATE TABLE IF NOT EXISTS public."Asist_Jugadores" (
   "JustificadoPor" text,
   "MensajeGenerado" text,
   "NotificadoEntrenador" boolean,
-  "EsProgramada" boolean DEFAULT false
+  "EsProgramada" boolean DEFAULT false,
+  "MinutosRetraso" integer CONSTRAINT asist_jugadores_minutos_retraso_chk
+    CHECK ("MinutosRetraso" IS NULL OR ("MinutosRetraso" BETWEEN 1 AND 180))
 );
 
 CREATE TABLE IF NOT EXISTS public."Programaciones_Justificaciones" (

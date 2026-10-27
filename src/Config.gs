@@ -72,6 +72,26 @@ const CONFIG = {
     'Otro',
   ],
 
+  // ── Estadísticas de asistencia ────────────────────────────────────────────────
+  ESTADISTICAS: {
+    MIN_BASE_RANKING: 5,        // mínimo de sesiones registradas para ranking, distribución y logros
+    MIN_BASE_TENDENCIA: 4,
+    DIAS_TENDENCIA: 28,
+    UMBRAL_ALTA: 85,            // % ≥ 85 → verde / segmento alto
+    UMBRAL_MEDIA: 70,           // 70–84 → ámbar / segmento medio; < 70 → rojo / bajo
+    UMBRAL_SESION_BAJA: 60,     // sesión con asistencia < 60 % = sesión de baja asistencia
+    AUSENCIAS_SEGUIDAS: 3,
+    INJUSTIFICADAS_ALERTA: 3,
+    CAIDA_PP: 20,
+    MAX_SESIONES_DETALLE: 60,
+  },
+
+  // ── Motivos de cancelación de sesiones ────────────────────────────────────────
+  MOTIVOS_CANCELACION: [
+    'Instalación no disponible', 'Festivo o vacaciones', 'Climatología',
+    'Falta de jugadores', 'Partido o torneo', 'Otro',
+  ],
+
   // ── Días de la semana ─────────────────────────────────────────────────────────
   DIAS_SEMANA: {
     1: 'Lunes',

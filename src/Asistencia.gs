@@ -16,7 +16,7 @@ const Asistencia = {
    *
    * @param {string} sesionId
    * @param {{
-   *   jugadores:    Array<{ jugadorId: string, estado: string, esInvitado?: boolean }>,
+   *   jugadores:    Array<{ jugadorId: string, estado: string, esInvitado?: boolean, minutosRetraso?: number|null }>,
    *   entrenadores: Array<{ entrenadorId: string, asistio: boolean, esInvitado?: boolean }>
    * }} asistencias
    * @returns {{ success: boolean, jugadoresGuardados: number, entrenadoresGuardados: number }}
@@ -24,6 +24,9 @@ const Asistencia = {
   guardarAsistenciaCompleta(sesionId, asistencias) {
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
     if (!sesion) throw new Error(`Sesión no encontrada: ${sesionId}`);
+    if (sesion.Cancelada === true || sesion.Cancelada === 'TRUE') {
+      throw new Error('La sesión está cancelada. Reactívala para registrar asistencia.');
+    }
 
     const timestamp        = Asistencia._timestamp_();
     const estadosValidos   = new Set(Object.values(CONFIG.ESTADOS_ASISTENCIA));
@@ -44,6 +47,12 @@ const Asistencia = {
       .filter(row => row.Activo === true || row.Activo === 'TRUE').map(row => String(row.ID_Entrenador)));
     const excluidosJugadores = [...new Set(asistencias.excluidosJugadores || [])];
     const excluidosEntrenadores = [...new Set(asistencias.excluidosEntrenadores || [])];
+    (asistencias.jugadores || []).forEach(item => {
+      if (item.estado === CONFIG.ESTADOS_ASISTENCIA.RETRASO && item.minutosRetraso != null && item.minutosRetraso !== '' &&
+          (!Number.isInteger(item.minutosRetraso) || item.minutosRetraso < 1 || item.minutosRetraso > 180)) {
+        throw new Error('Minutos de retraso no válidos.');
+      }
+    });
     excluidosJugadores.forEach(id => {
       const actual = asistenciaJugadorPorId.get(String(id));
         if (!jugadoresEquipo.has(String(id)) &&
@@ -83,6 +92,7 @@ const Asistencia = {
       if (asistenciaExistente) {
         const cambios = {
           Estado: item.estado,
+          MinutosRetraso: item.estado === CONFIG.ESTADOS_ASISTENCIA.RETRASO && item.minutosRetraso !== '' ? (item.minutosRetraso ?? null) : null,
           EsInvitado: item.esInvitado || false,
           Excluido: false,
           FechaRegistro: timestamp,
@@ -103,6 +113,7 @@ const Asistencia = {
           ID_Sesion:     sesionId,
           ID_Jugador:    item.jugadorId,
           Estado:        item.estado,
+          MinutosRetraso: item.estado === CONFIG.ESTADOS_ASISTENCIA.RETRASO && item.minutosRetraso !== '' ? (item.minutosRetraso ?? null) : null,
           EsInvitado:    item.esInvitado || false,
           Excluido:      false,
           FechaRegistro: timestamp,
@@ -162,7 +173,8 @@ const Asistencia = {
     });
 
     // Marcar la sesión como guardada para que persista entre reinicios
-    updateRow(CONFIG.SHEETS.SESIONES, sesionId, { AsistenciaGuardada: true });
+    const fechaPrimerRegistro = sesion.FechaPrimerRegistro || timestamp;
+    updateRow(CONFIG.SHEETS.SESIONES, sesionId, { AsistenciaGuardada: true, FechaPrimerRegistro: fechaPrimerRegistro });
 
     // ── Enviar notificaciones a familias para A y R ───────────────────────────
     const equipo = findById(CONFIG.SHEETS.EQUIPOS, sesion.ID_Equipo);
@@ -189,6 +201,7 @@ const Asistencia = {
       success:               true,
       jugadoresGuardados:    jugadoresGuardados,
       entrenadoresGuardados: entrenadoresGuardados,
+      fechaPrimerRegistro:   fechaPrimerRegistro,
     };
   },
 
@@ -224,16 +237,13 @@ const Asistencia = {
 
     const sesion  = findById(CONFIG.SHEETS.SESIONES, sesionId);
     if (!sesion) throw new Error('Sesión no encontrada.');
+    if (sesion.Cancelada === true || sesion.Cancelada === 'TRUE') throw new Error('La sesión está cancelada.');
 
     const jugador = findById(CONFIG.SHEETS.JUGADORES, jugadorId);
     if (!jugador) throw new Error('Jugador no encontrado.');
 
     const equipo  = findById(CONFIG.SHEETS.EQUIPOS, sesion.ID_Equipo);
 
-    // Para sesiones futuras (notificación previa) se puede no tener registro aún
-    // En ese caso se crea con el estado correspondiente
-    const hoy     = new Date().toISOString().split('T')[0];
-    const estado  = tipoIncidencia === 'Ausencia' ? CONFIG.ESTADOS_ASISTENCIA.AUSENTE : CONFIG.ESTADOS_ASISTENCIA.RETRASO;
     const timestamp = Asistencia._timestamp_();
 
     const mensaje = Notificaciones.generarMensajeJustificacion(
@@ -252,21 +262,11 @@ const Asistencia = {
       EsProgramada:         false,
     };
 
-    // Pre-justificación: en sesiones futuras no fijar Estado (el entrenador lo marcará después)
-    const esFutura = sesion.Fecha > hoy;
     let registro;
     if (registros.length > 0) {
-      // Registro existente: actualizar justificación.
-      // En sesiones futuras no tocar el Estado (la asistencia real aún no ha ocurrido).
-      const updates = esFutura
-        ? { ...camposJustificacion }
-        : { Estado: estado, ...camposJustificacion };
-      updateRow(CONFIG.SHEETS.ASIST_JUGADORES, registros[0].ID, updates);
-      registro = { ...registros[0], ...updates };
+      updateRow(CONFIG.SHEETS.ASIST_JUGADORES, registros[0].ID, camposJustificacion);
+      registro = { ...registros[0], ...camposJustificacion };
     } else {
-      // Sin registro previo.
-      // Para sesiones futuras: pre-justificación sin Estado.
-      // Para sesiones pasadas: crear registro con el Estado inferido del tipo de incidencia.
       const camposBase = {
         ID_Sesion:     sesionId,
         ID_Jugador:    jugadorId,
@@ -275,7 +275,6 @@ const Asistencia = {
         FechaRegistro: timestamp,
         ...camposJustificacion,
       };
-      if (!esFutura) camposBase.Estado = estado;
       registro = appendRow(CONFIG.SHEETS.ASIST_JUGADORES, camposBase);
     }
 
@@ -400,7 +399,7 @@ const Asistencia = {
   },
 
   aplicarProgramacionesSesion(sesion) {
-    if (!sesion || sesion.EsExtra === true || sesion.EsExtra === 'TRUE') return 0;
+    if (!sesion || sesion.Cancelada === true || sesion.Cancelada === 'TRUE' || sesion.EsExtra === true || sesion.EsExtra === 'TRUE') return 0;
     const horarios = findWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', sesion.ID_Equipo);
     const horario = horarios.find(h => (sesion.ID_Horario && h.ID === sesion.ID_Horario) ||
       (!sesion.ID_Horario && h.HoraInicio === sesion.HoraInicio && h.HoraFin === sesion.HoraFin));

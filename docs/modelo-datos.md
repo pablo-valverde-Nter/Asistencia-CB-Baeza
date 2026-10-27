@@ -73,6 +73,8 @@ Relación jugador ↔ equipo. Un jugador puede estar en varios equipos con disti
 | `ID_Equipo` | String (UUID) | FK → `Equipos.ID` |
 | `Tipo` | String | `Principal` o `Secundario` |
 | `Activo` | Boolean | Para dar de baja sin borrar el historial |
+| `FechaAlta` | String (YYYY-MM-DD) | Alta en el equipo; `null` en relaciones anteriores a su registro |
+| `FechaBaja` | String (YYYY-MM-DD) | Baja en el equipo; reasignar crea una fila nueva y conserva la anterior |
 
 **Reglas:**
 - Cada jugador tiene exactamente **un** equipo con `Tipo = "Principal"`.
@@ -105,6 +107,8 @@ Relación entrenador ↔ equipo (asignación permanente).
 | `ID_Entrenador` | String (UUID) | FK → `Entrenadores.ID` |
 | `ID_Equipo` | String (UUID) | FK → `Equipos.ID` |
 | `Activo` | Boolean | Para desasignar sin borrar historial |
+| `FechaAlta` | String (YYYY-MM-DD) | Alta en el equipo; `null` en relaciones anteriores a su registro |
+| `FechaBaja` | String (YYYY-MM-DD) | Baja en el equipo |
 
 **Reglas:** Un entrenador puede estar asignado a varios equipos. Los sustitutos puntuales se registran en `Asist_Entrenadores` con `EsInvitado = true`.
 
@@ -123,6 +127,11 @@ Cada sesión de entrenamiento, generada automáticamente o creada manualmente.
 | `HoraFin` | String (HH:MM) | Hora de fin |
 | `EsExtra` | Boolean | `false` = generada por patrón, `true` = añadida manualmente |
 | `Notas` | String | Observaciones opcionales sobre la sesión |
+| `ID_Horario` | String (UUID) | Horario del que se generó (sin clave foránea) |
+| `Cancelada` | Boolean | Sesión cancelada; no cuenta en estadísticas ni admite asistencia |
+| `MotivoCancelacion` | String | Uno de `CONFIG.MOTIVOS_CANCELACION` |
+| `FechaCancelacion` | String (YYYY-MM-DD HH:MM) | Momento de la cancelación |
+| `FechaPrimerRegistro` | String (YYYY-MM-DD HH:MM) | Primer guardado de asistencia; no se sobrescribe |
 
 **Reglas:**
 - Al inicio de cada semana se auto-generan sesiones según los `Horarios` de cada equipo.
@@ -141,11 +150,13 @@ Registro de asistencia de jugadores por sesión.
 | `Estado` | String | `P` (Presente) / `A` (Ausente) / `R` (Retraso) |
 | `EsInvitado` | Boolean | `true` si el jugador no pertenece al equipo de la sesión |
 | `FechaRegistro` | String (YYYY-MM-DD HH:MM) | Timestamp del registro |
+| `MinutosRetraso` | Integer (1–180) | Minutos de retraso cuando `Estado = R`; `null` si no se indicó |
 
 **Reglas:**
 - Si un jugador no tiene fila para una sesión, su estado es **sin registrar** (se muestra en gris en la UI).
 - `EsInvitado = true` para jugadores de otros equipos que suben a entrenar puntualmente.
 - El estado cicla en la UI: sin registrar → P (verde) → A (rojo) → R (amarillo) → P...
+- `Estado` solo lo escribe el entrenador. Un aviso o justificación de la familia no rellena `Estado`: una A justificada sigue contando como ausencia.
 
 ---
 
