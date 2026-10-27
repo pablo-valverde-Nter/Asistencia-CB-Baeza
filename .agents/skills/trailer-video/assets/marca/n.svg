@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 6.44 96.46 120" role="img" aria-label="N">
+  <defs>
+    <linearGradient id="n-pierna" x1="16.08" y1="113.66" x2="16.08" y2="22.7" gradientUnits="userSpaceOnUse">
+      <stop offset=".25" stop-color="#ec683e"/>
+      <stop offset="1" stop-color="#d13b5f"/>
+    </linearGradient>
+    <linearGradient id="n-sombra-pierna" x1="16.08" y1="83.18" x2="16.08" y2="6.78" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <linearGradient id="n-diagonal" x1="14.82" y1="18.07" x2="81.61" y2="115.44" gradientUnits="userSpaceOnUse">
+      <stop offset=".25" stop-color="#d13b5f"/>
+      <stop offset="1" stop-color="#217bee"/>
+    </linearGradient>
+    <linearGradient id="n-sombra-diagonal" x1="46.31" y1="63.76" x2="80.07" y2="116.88" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+  </defs>
+  <g data-parte="1">
+    <path fill="url(#n-pierna)" d="M32.16,108.22L0,126.78V25.34L32.15,6.78v101.44Z"/>
+    <path fill="url(#n-sombra-pierna)" fill-opacity=".3" d="M32.16,108.22L0,126.78V25.34L32.15,6.78v101.44Z"/>
+  </g>
+  <g data-parte="2">
+    <path fill="url(#n-diagonal)" d="M96.46,108.22l-32.16,18.56L0,25.34,32.15,6.78l64.31,101.44Z"/>
+    <path fill="url(#n-sombra-diagonal)" fill-opacity=".2" d="M96.46,108.22l-32.16,18.56L0,25.34,32.15,6.78l64.31,101.44Z"/>
+  </g>
+  <g data-parte="3">
+    <path fill="#217bee" d="M96.46,108.22l-32.16,18.56V25.34L96.46,6.78v101.44Z"/>
+  </g>
+</svg>

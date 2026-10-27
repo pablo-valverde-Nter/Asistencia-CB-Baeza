@@ -1,0 +1,4 @@
+# Google Apps Script V8 usa JavaScript en archivos .gs.
+language.gs=javascript
+# HtmlService contiene JavaScript en bloques <script>; EJS conserva sus líneas.
+language.html=.ejs

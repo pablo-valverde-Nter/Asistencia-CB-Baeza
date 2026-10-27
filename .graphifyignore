@@ -1,0 +1,6 @@
+.agents/
+.github/
+node_modules/
+graphify-out/
+package-lock.json
+skills-lock.json

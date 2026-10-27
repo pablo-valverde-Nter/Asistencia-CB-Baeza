@@ -111,6 +111,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - Las fechas se almacenan como strings `YYYY-MM-DD` para evitar problemas de zona horaria.
 - Las horas se almacenan como strings `HH:MM` (24h).
 - Para commits, promoción `develop` → `main` y publicación DEV/PRO, usar la skill `publicar-apps-script` y `docs/publicacion.md`; no editar los valores de entorno ni crear una implementación nueva para publicar. Las URLs estables corresponden a IDs de implementación existentes.
+- Tras modificar código, ejecutar `graphify update .` (o mantener `npm run graph:watch`) para que `graphify-out/graph.html` refleje el estado actual; abrir el grafo con `npm run graph`. Detalles en la skill `graphify`.
 
 ### Frontend (JavaScript en HtmlService)
 - Toda comunicación con el servidor usa `google.script.run.withSuccessHandler(fn).withFailureHandler(fn).nombreFuncion(args)`.

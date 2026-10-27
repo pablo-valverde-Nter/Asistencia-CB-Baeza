@@ -1,3 +1,5 @@
 node_modules/
 .deploy.lock
 .clasprc*.json
+graphify-out/
+__pycache__/

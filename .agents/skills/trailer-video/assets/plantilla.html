@@ -1,0 +1,1053 @@
+<!doctype html>
+<html lang="es" data-tema="claro" data-acento="azul">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tráiler en directo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Sora:wght@400;600;700&display=swap">
+<style>
+/* Plantilla de trailer: todo el video es una funcion del tiempo sobre un escenario 1920x1080.
+   Se reproduce en el navegador y se graba fotograma a fotograma a 60 fps (window.__proto).
+   Estilo del Manual de Marca N (references/marca.md): paleta exacta, Sora + Instrument Sans, la N y bandas.
+   Solo se eligen dos cosas, en <html>: data-tema="claro|oscuro" y data-acento="azul|naranja|frambuesa". */
+:root {
+  /* Paleta del manual: valores exactos, no se cambian */
+  --n-naranja: #EC683E;
+  --n-frambuesa: #D13B5F;
+  --n-azul: #217BEE;
+  --n-negro: #100D25;
+  --n-g700: #5D6066;
+  --n-g500: #82858D;
+  --n-g300: #BFBFBF;
+  --n-g200: #E1E1E1;
+  --n-g100: #F3F3F3;
+  --n-blanco: #FFFFFF;
+  --sombra: 16, 13, 37;              /* Black en rgb, para sombras y velos */
+  /* Un solo primario como acento */
+  --accent: var(--n-azul);
+  /* Tema claro (por defecto): los neutros son la base */
+  color-scheme: light;
+  --page: var(--n-g100);
+  --bg: var(--n-blanco);
+  --surface: var(--n-blanco);
+  --text: var(--n-negro);
+  --muted: var(--n-g700);
+  --line: var(--n-g200);
+  --card: var(--n-blanco);
+  --card-text: var(--n-negro);
+  --card-line: var(--n-g200);
+  --scrim: var(--n-blanco);
+  --track: rgba(var(--sombra), .16);
+  --title: "Sora", "Segoe UI", system-ui, sans-serif;
+  --font: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+}
+:root[data-acento="naranja"] { --accent: var(--n-naranja); }
+:root[data-acento="frambuesa"] { --accent: var(--n-frambuesa); }
+:root[data-tema="oscuro"] {
+  color-scheme: dark;
+  --page: var(--n-negro);
+  --bg: var(--n-negro);
+  --surface: var(--n-negro);
+  --text: var(--n-blanco);
+  --muted: var(--n-g300);
+  --line: rgba(255,255,255,.16);
+  --card: var(--n-negro);
+  --card-text: var(--n-blanco);
+  --card-line: rgba(255,255,255,.22);
+  --scrim: var(--n-negro);
+  --track: rgba(255,255,255,.24);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { background: var(--page); color: var(--text); }
+body { margin: 0; font-family: var(--font); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 56px; display: grid; gap: 16px; }
+header { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.hmark { display: flex; flex: none; width: 34px; height: 42px; }
+.hmark .mk { width: 100%; height: 100%; }
+.brand-text { display: flex; align-items: baseline; gap: 2px 16px; flex-wrap: wrap; min-width: 0; padding-left: 16px; border-left: 1px solid var(--line); }
+.word { font-family: var(--title); font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
+.word b { color: var(--accent); font-weight: 700; }
+.tagline { color: var(--muted); }
+.vp { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: var(--bg);
+  box-shadow: 0 24px 60px rgba(var(--sombra), .16), 0 0 0 1px var(--line); }
+.vp:fullscreen { border-radius: 0; background: var(--bg); aspect-ratio: auto; }
+.play-big { position: absolute; inset: 0; margin: auto; width: 96px; height: 96px; border-radius: 50%; border: 0; z-index: 5; cursor: pointer;
+  background: var(--accent); color: var(--n-blanco); display: grid; place-items: center; box-shadow: 0 12px 34px rgba(var(--sombra), .35); }
+.play-big svg { width: 40%; height: 40%; margin-left: 8%; }
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ctl { display: inline-flex; align-items: center; gap: 8px; font: 600 14px/1 var(--font); color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; cursor: pointer; text-decoration: none; }
+.ctl.dl { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.ctl.dl svg { color: var(--accent); }
+.ctl svg { width: 16px; height: 16px; }
+.ctl[aria-pressed="false"] { color: var(--muted); }
+.vol { display: inline-flex; align-items: center; gap: 8px; font: 600 13px/1 var(--font); color: var(--muted); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; }
+.vol input { width: 110px; accent-color: var(--accent); }
+.vol input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bar { position: relative; flex: 1 1 240px; min-width: 0; height: 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); cursor: pointer; }
+.bar .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 6px; background: var(--accent); }
+.time { font: 500 13px/1 var(--font); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chaps { display: flex; flex-wrap: wrap; gap: 8px; }
+.chaps button { font: 500 13px/1.3 var(--font); color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+.chaps button .cht { font-variant-numeric: tabular-nums; color: var(--muted); margin-right: 6px; }
+.chaps button[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.foot { color: var(--muted); font-size: 13px; margin: 0; max-width: 75ch; }
+.ctl:focus-visible, .bar:focus-visible, .chaps button:focus-visible, .play-big:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+body.render { overflow: hidden; }
+body.render .wrap > :not(.vp), body.render .play-big { display: none; }
+body.render .wrap { padding: 0; max-width: none; }
+body.render .vp { position: fixed; left: 0; top: 0; width: 1920px; height: 1080px; border-radius: 0; box-shadow: none; aspect-ratio: auto; }
+
+/* ── Escenario ── */
+.cv { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden; background: var(--bg);
+  color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+.cv * { box-sizing: border-box; }
+.layer { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; }
+/* Bandas de marca: filas de 216 px del acento que se degradan a transparente (portada y cierre del manual) */
+.bgx { position: absolute; inset: 0; overflow: hidden; background: var(--bg); }
+.bgx .bd { position: absolute; height: 216px; }
+.bgx .bd.l { left: 0; transform-origin: 0 50%; }
+.bgx .bd.r { right: 0; transform-origin: 100% 50%; }
+.bgx .bd.l.out, .bgx .bd.r.in { background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 28%, transparent 100%); }
+.bgx .bd.l.in, .bgx .bd.r.out { background: linear-gradient(90deg, transparent 0%, var(--accent) 72%, var(--accent) 100%); }
+.cv b { font-weight: 700; color: var(--accent); }
+.w { display: inline-block; margin-right: .24em; }
+.w:last-child { margin-right: 0; }
+.hh { margin: 0; font-family: var(--title); font-size: 92px; line-height: 1.08; font-weight: 400; letter-spacing: -.03em; }
+.sub { margin: 0; font-size: 30px; line-height: 1.35; font-weight: 500; color: var(--muted); }
+.mk { display: block; flex: none; }
+.mk svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+/* Capitulos: app capturada, camara, etiquetas, cursor, titulo y etiqueta del capitulo */
+.cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+.grp { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+.grp > img { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; max-width: none; display: block; }
+.cov { position: absolute; }
+.caret2 { position: absolute; width: 2px; background: var(--n-negro); }
+.fly { position: absolute; overflow: hidden; }
+.fly.dlg { border-radius: 16px; box-shadow: 0 30px 80px rgba(var(--sombra), .30); }
+.fly.side { box-shadow: -24px 0 60px rgba(var(--sombra), .22); }
+.fly > .grp { position: absolute; }
+.scrim { position: absolute; inset: 0; background: linear-gradient(100deg, color-mix(in srgb, var(--scrim) 94%, transparent) 0%,
+  color-mix(in srgb, var(--scrim) 82%, transparent) 55%, color-mix(in srgb, var(--scrim) 64%, transparent) 100%); }
+.ttl { position: absolute; left: 120px; top: 390px; transform-origin: 0 0; max-width: 1640px; }
+.ttl .n { display: flex; align-items: center; gap: 18px; font-family: var(--title); font-size: 28px; font-weight: 600; letter-spacing: .2em; color: var(--accent); }
+.ttl .n::after { content: ""; width: 150px; height: 3px; border-radius: 2px; background: var(--accent); }
+.ttl .hrow { position: relative; display: inline-block; margin-top: 44px; }
+.ttl .band { position: absolute; left: -120px; top: -26px; bottom: -30px; width: calc(100% + 600px); transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--accent) 0, var(--accent) calc(100% - 440px), transparent 100%); }
+.ttl .hh { position: relative; color: var(--n-blanco); }
+.ttl .hh b { color: inherit; }
+.ttl .sub { margin-top: 56px; max-width: 1240px; color: var(--text); }
+.tag { position: absolute; left: 30px; top: 990px; height: 60px; display: flex; align-items: center; gap: 14px; padding: 10px 22px 10px 14px;
+  border-radius: 14px; background: var(--card); color: var(--card-text); transform-origin: 0 50%; white-space: nowrap;
+  box-shadow: 0 14px 34px rgba(var(--sombra), .20), 0 0 0 1px var(--card-line); }
+.tag .mk { width: 30px; height: 37px; }
+.tag .ico { width: 40px; height: 40px; object-fit: contain; }
+.tag .n { font-family: var(--title); font-size: 22px; font-weight: 700; line-height: 38px; color: var(--accent); padding-right: 14px; border-right: 1.5px solid var(--card-line); }
+.tag .t { font-family: var(--title); font-size: 21px; font-weight: 600; }
+.jbar { position: absolute; left: 660px; top: 22px; width: 600px; display: flex; gap: 6px; z-index: 5; }
+.jbar span { flex: 1; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; box-shadow: 0 0 0 1px rgba(255,255,255,.35); }
+.jbar span i { display: block; height: 100%; width: 0; background: var(--accent); }
+.links2 { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: visible; }
+.links2 path { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1; filter: drop-shadow(0 1px 2px rgba(var(--sombra), .35)); }
+.links2 circle { fill: var(--accent); stroke: var(--n-blanco); stroke-width: 3; }
+.chip { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 10px; padding: 8px 18px 8px 8px; border-radius: 999px;
+  font-family: var(--font); font-size: 21px; font-weight: 600; white-space: nowrap; color: var(--card-text); background: var(--card);
+  box-shadow: 0 0 0 2px var(--accent), 0 14px 32px rgba(var(--sombra), .24); }
+.chip i { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--n-blanco); flex: none; }
+.chip i svg { width: 18px; height: 18px; }
+.spot2 { position: absolute; left: 0; top: 0; border-radius: 14px;
+  box-shadow: 0 0 0 3px var(--accent), 0 0 0 10px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 0 4000px rgba(var(--sombra), .42); }
+.cur { position: absolute; left: 0; top: 0; width: 34px; height: 34px; filter: drop-shadow(0 3px 6px rgba(var(--sombra), .35)); transform-origin: 6px 3px; }
+.ripple { position: absolute; left: 0; top: 0; border-radius: 50%; border: 3px solid var(--accent); }
+
+/* Apertura y cierre */
+.corner { position: absolute; left: 70px; top: 56px; width: 56px; height: 70px; }
+.flash { position: absolute; left: 0; right: 0; top: 540px; text-align: center; font-family: var(--title); font-size: 136px; font-weight: 600; letter-spacing: -.04em; color: var(--text); }
+.mcenter { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.mrow { display: flex; align-items: center; gap: 14px; }
+.chipx { display: flex; align-items: center; gap: 12px; padding: 14px 24px 14px 14px; border-radius: 14px; font-family: var(--title); font-size: 25px; font-weight: 600;
+  color: var(--card-text); background: var(--card); box-shadow: 0 0 0 1px var(--card-line), 0 14px 30px rgba(var(--sombra), .10); }
+.chipx i { font-style: normal; display: inline-flex; width: 38px; height: 38px; border-radius: 50%; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--n-blanco); font-size: 19px; font-weight: 700; }
+.dash { width: 40px; height: 3px; background: linear-gradient(90deg, transparent, var(--accent)); border-radius: 2px; transform-origin: left; }
+.h1 { font-family: var(--title); font-size: 88px; line-height: 1.08; font-weight: 400; letter-spacing: -.035em; color: var(--text); }
+.msub { font-size: 34px; line-height: 1.35; font-weight: 500; color: var(--muted); margin-top: 22px; }
+.mword { font-family: var(--title); font-size: 168px; line-height: 1; font-weight: 600; letter-spacing: -.045em; margin: 18px 0 6px; color: var(--text); }
+.mlogo { display: block; height: 84px; max-width: 560px; object-fit: contain; }
+.nbig { width: 177px; height: 220px; }
+.firma { display: block; height: 190px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 400px); gap: 22px; perspective: 1600px; }
+.tile4 { position: relative; width: 400px; height: 225px; border-radius: 14px; background-size: cover; background-position: top left;
+  box-shadow: 0 0 0 1px var(--card-line), 0 22px 48px rgba(var(--sombra), .16); }
+.tile4 span { position: absolute; left: 10px; bottom: 10px; right: 10px; padding: 8px 12px; border-radius: 10px; font-size: 19px; font-weight: 600; text-align: left;
+  color: var(--card-text); background: var(--card); box-shadow: 0 0 0 1px var(--card-line); }
+.icono { position: absolute; left: 0; top: 0; background-size: contain; background-repeat: no-repeat; background-position: center; filter: drop-shadow(0 16px 32px rgba(var(--sombra), .22)); }
+.fadeout { position: absolute; inset: 0; background: var(--bg); }
+
+/* Apertura "pantallas": capturas en abanico 3D. Sin preserve-3d: cada tarjeta lleva su propia transformacion,
+   asi la opacidad y el desenfoque no aplanan nada (ver lecciones.md) */
+.fan3 { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; perspective: 1800px; perspective-origin: 50% 42%; transform-origin: 50% 42%; }
+.card3 { position: absolute; left: 600px; top: 300px; width: 720px; height: 405px; border-radius: 16px; background-size: cover; background-position: top left;
+  box-shadow: 0 0 0 1px var(--card-line), 0 30px 70px rgba(var(--sombra), .22); }
+/* Apertura "marca": la N grande en el centro, que luego viaja a la esquina */
+.nfloat { position: absolute; left: 871px; top: 430px; }
+/* Transicion "bandas": las 5 filas del acento barren la pantalla y tapan el corte entre partes */
+.wipe { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; z-index: 6; }
+.wipe i { position: absolute; left: 0; height: 216px; width: 3240px;
+  background: linear-gradient(90deg, transparent 0, var(--accent) 360px, var(--accent) 2880px, transparent 100%); }
+/* Rotulos: un titular de marca sobre una banda que sale de un lado, con una cifra opcional que cuenta */
+.rot { position: absolute; left: 0; width: 1920px; }
+.rot .rb { position: absolute; top: 0; bottom: 0; }
+.rot.izq .rb { left: 0; transform-origin: 0 50%; background: linear-gradient(90deg, var(--accent) 0, var(--accent) calc(100% - 380px), transparent 100%); }
+.rot.der .rb { right: 0; transform-origin: 100% 50%; background: linear-gradient(270deg, var(--accent) 0, var(--accent) calc(100% - 380px), transparent 100%); }
+.rot .ri { position: relative; display: flex; align-items: center; gap: 26px; width: fit-content; padding: 24px 0; color: var(--n-blanco); white-space: nowrap; }
+.rot.izq .ri { margin-left: 110px; }
+.rot.der .ri { margin-left: auto; margin-right: 110px; }
+.rot .cf { font-family: var(--title); font-size: 104px; font-weight: 700; line-height: .95; letter-spacing: -.035em; font-variant-numeric: tabular-nums; text-align: right; }
+.rot .rc { display: grid; gap: 4px; }
+.rot .rt { font-family: var(--title); font-size: 44px; font-weight: 600; line-height: 1.1; letter-spacing: -.02em; }
+.rot .rs { font-size: 26px; font-weight: 500; line-height: 1.3; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="hmark" id="hmark"></span>
+    <div class="brand-text">
+      <span class="word" id="word"></span>
+      <span class="tagline">Tráiler en directo · se dibuja en tu navegador, nítido a cualquier tamaño</span>
+    </div>
+  </header>
+  <div class="vp" id="vp">
+    <div class="cv" id="cv"></div>
+    <button class="play-big" id="playBig" type="button" aria-label="Reproducir el tráiler"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z" fill="currentColor"/></svg></button>
+  </div>
+  <audio id="music" preload="auto"></audio>
+  <div class="controls">
+    <button class="ctl" id="toggle" type="button"><svg viewBox="0 0 24 24" id="toggleIcon"><path d="M6 4l14 8-14 8z" fill="currentColor"/></svg><span id="toggleLabel">Reproducir</span></button>
+    <button class="ctl" id="restart" type="button"><svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" fill="currentColor"/></svg>Desde el principio</button>
+    <button class="ctl" id="sound" type="button" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg><span id="soundLabel">Música</span></button>
+    <label class="vol" id="volBox"><span>Volumen</span><input type="range" id="vol" min="0" max="1" step="0.05" value="0.8"></label>
+    <button class="ctl" id="full" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>Pantalla completa</button>
+    <a class="ctl dl" id="descargar" hidden download><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Descargar vídeo</a>
+    <div class="bar" id="bar" role="slider" tabindex="0" aria-label="Posición del tráiler" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="fill" id="fill"></div></div>
+    <span class="time" id="time">0:00</span>
+  </div>
+  <nav class="chaps" id="chaps" aria-label="Capítulos"></nav>
+  <p class="foot">Se dibuja en directo a partir de capturas reales de la app, a 60 fotogramas por segundo y con la música sincronizada.</p>
+</div>
+
+<script>
+(() => {
+  // ═══ Direccion creativa: la decide la IA (references/direccion.md) y la anota en direccion.md ═══
+  // apertura:   "palabras" (palabras una por golpe + pasos + frase) | "pantallas" (capturas en abanico 3D + frase)
+  //             | "marca" (bandas plenas, la N se monta en el centro y viaja a la esquina + frase)
+  // transicion: "bandas" (barrido de las bandas del acento entre partes) | "fundido" (fundido con desenfoque)
+  // cierre:     "completo" (mosaico + app + firma, 12 s) | "directo" (app + firma, 9,6 s)
+  // pantallas:  capturas para la apertura "pantallas" (por defecto, las del RECAP; hasta 5)
+  const ESTILO = { apertura: "palabras", transicion: "bandas", cierre: "completo", pantallas: [] };
+  const W = 1920, XF = ESTILO.transicion === "bandas" ? 0.25 : 0.6;
+  const IM = /*IMGS*/{}/*END*/;
+  const R = /*RECTS*/{}/*END*/;
+  const MARCA = /*MARCA*/{"simbolo": "", "firma": {}}/*END*/;   // la N en linea y la firma con claim (Nfq por defecto)
+  const ICONO = /*ICONO*/""/*END*/;   // icono o mascota de la app (opcional)
+  const LOGO = /*LOGO*/""/*END*/;     // logo del cliente o de la app para el cierre (opcional)
+  const MUSIC = /*MUSIC*/""/*END*/;
+  const VIDEO = /*VIDEO*/{"src": "", "nombre": ""}/*END*/;   // MP4 para el boton de descarga (solo si se pidio)
+  const TEMA = document.documentElement.dataset.tema === "oscuro" ? "oscuro" : "claro";
+  const $ = (id) => document.getElementById(id);
+  const vp = $("vp"), cv = $("cv");
+
+  // ── Tiempo: cada fotograma se calcula a partir de t (segundos) ──
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const P = (t, t0, d) => clamp((t - t0) / d);
+  const lerp = (a, b, p) => a + (b - a) * p;
+  const E = {
+    out: (p) => 1 - Math.pow(1 - p, 3),
+    out5: (p) => 1 - Math.pow(1 - p, 5),
+    in3: (p) => p * p * p,
+    io: (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2),
+    spring: (p) => (p >= 1 ? 1 : 1 - Math.exp(-6.5 * p) * Math.cos(10.5 * p)),
+  };
+  const rnd = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const fmtN = (x, dec = 0) => { const [a, b] = x.toFixed(dec).split("."); return a.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (b ? "," + b : ""); };
+  const fmtT = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  function el(tag, cls, parent, html) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  const NS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    parent.appendChild(e);
+    return e;
+  }
+  const show = (e, on) => { if (e.hidden === on) e.hidden = !on; };
+  const SVGI = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const IC = {
+    check: SVGI('<path d="M20 6 9 17l-5-5"/>'),
+    coin: SVGI('<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.6-1-1.7-1.5-3-1.5-1.7 0-3 .9-3 2.1 0 2.9 6 1.6 6 4.6 0 1.2-1.4 2.3-3 2.3-1.4 0-2.5-.6-3-1.6M12 6v2M12 16v2"/>'),
+    branch: SVGI('<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-12 7"/>'),
+    clock: SVGI('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    doc: SVGI('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
+    layers: SVGI('<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>'),
+    flow: SVGI('<circle cx="5" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="12" cy="5" r="2"/><path d="M7 12h10M12 7v3"/>'),
+    chart: SVGI('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
+    shield: SVGI('<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>'),
+    spark: SVGI('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'),
+    send: SVGI('<path d="M4 12 20 4l-6 16-3-7z"/><path d="m11 13 9-9"/>'),
+    list: SVGI('<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>'),
+    search: SVGI('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'),
+    alert: SVGI('<path d="M12 3 2 21h20z"/><path d="M12 10v4M12 18h.01"/>'),
+    help: SVGI('<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/>'),
+    chat: SVGI('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>'),
+    bolt: SVGI('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
+    rocket: SVGI('<path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2M14 4c3 0 6 3 6 6l-7 7-6-6z"/><circle cx="14.5" cy="9.5" r="1.5"/>'),
+    user: SVGI('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
+  };
+  const CURSOR = '<svg viewBox="0 0 32 32" width="34" height="34"><path d="M6 3 L6 25 L11.5 19.6 L15.4 28.4 L19.3 26.7 L15.5 18 L23 18 Z" fill="#ffffff" stroke="#100D25" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+
+  function wordsHTML(text, hot = []) {
+    return text.split(" ").map((w) => {
+      const k = w.toLowerCase().replace(/[.,]/g, "");
+      return `<span class="w">${hot.includes(k) ? `<b>${w}</b>` : w}</span>`;
+    }).join("");
+  }
+  function riseWords(spans, t, start, step, k = 1) {
+    spans.forEach((s, i) => {
+      const p = E.out(P(t, start + i * step, 0.75));
+      s.style.opacity = p * k;
+      s.style.transform = `translateY(${(1 - p) * 44}px) rotate(${(1 - p) * 2}deg)`;
+      s.style.filter = p < 0.999 ? `blur(${(1 - p) * 10}px)` : "none";
+    });
+  }
+  function rise(e, t, start, k = 1, dur = 0.7, dy = 28) {
+    const p = E.out(P(t, start, dur));
+    e.style.opacity = p * k;
+    e.style.transform = `translateY(${(1 - p) * dy}px)`;
+    e.style.filter = p < 0.999 ? `blur(${(1 - p) * 8}px)` : "none";
+  }
+  function riseNoBlur(e, t, start, k = 1, dur = 0.9, dy = 30) {
+    const p = E.out(P(t, start, dur));
+    e.style.opacity = p * k;
+    e.style.transform = `translateY(${(1 - p) * dy}px)`;
+  }
+
+  // ── Marca: la N, las bandas y el icono de la app ──
+  // brandMark: una copia de la N en linea (sus tres piezas llevan data-parte). Cada copia lleva ids propios:
+  // un degradado definido dentro de una capa oculta (display: none) no se pinta en las demas.
+  let nMarks = 0;
+  function brandMark(parent, cls = "") {
+    const e = el("span", `mk ${cls}`.trim(), parent);
+    if (!MARCA.simbolo) { e.hidden = true; return { el: e, parts: [] }; }
+    const k = ++nMarks;
+    e.innerHTML = MARCA.simbolo.replace(/id="n-/g, `id="n${k}-`).replace(/#n-/g, `#n${k}-`);
+    return { el: e, parts: [...e.querySelectorAll("[data-parte]")] };
+  }
+  // nReveal: la N se monta por piezas (pierna izquierda desde abajo, diagonal, pierna derecha desde arriba).
+  // step: separacion entre piezas (0,6 = una por golpe de musica a 100 ppm).
+  function nReveal(parts, t, t0, step = 0.13, dur = 0.6) {
+    const from = [[0, 34], [-12, -20], [0, -34]];
+    parts.forEach((g, i) => {
+      const p = E.out(P(t, t0 + i * step, dur));
+      const [fx, fy] = from[i % 3];
+      g.style.opacity = clamp(p * 1.6);
+      g.style.transform = p < 1 ? `translate(${fx * (1 - p)}px, ${fy * (1 - p)}px)` : "";
+    });
+  }
+  // Bandas: [fila (216 px), lado, largo en px, sentido]. out = solida en el borde de la pantalla;
+  // in = solida en su extremo interior. La columna central queda libre (como la ultima pagina del manual).
+  const BANDAS = [[0, "l", 800, "out"], [1, "l", 640, "in"], [2, "l", 470, "out"], [3, "l", 750, "in"], [4, "l", 310, "out"],
+                  [0, "r", 425, "in"], [1, "r", 640, "in"], [2, "r", 730, "out"], [3, "r", 750, "in"], [4, "r", 840, "out"]];
+  function makeBg(parent) {
+    const b = el("div", "bgx", parent);
+    const bands = BANDAS.map(([row, side, len, dir]) => {
+      const e = el("div", `bd ${side} ${dir}`, b);
+      Object.assign(e.style, { top: `${row * 216}px`, width: `${len}px` });
+      return e;
+    });
+    // k: intensidad (0,2 = tinte detras de texto; 1 = bandas plenas). t0: entran desde los bordes.
+    // reach: cuanto entran hacia el centro (0,55 con texto encima, para que ningun borde duro corte una linea; 1 = completas).
+    return (t, k = 0.2, t0 = 0, reach = 0.55) => {
+      bands.forEach((e, i) => {
+        const p = E.out5(P(t, t0 + (i % 5) * 0.07 + (i < 5 ? 0 : 0.035), 0.9));
+        e.style.opacity = k;
+        e.style.transform = `scaleX(${p * reach * (1 + 0.035 * Math.sin(t * 0.5 + i * 1.7))})`;
+      });
+    };
+  }
+  function iconoEl(parent, size, cls = "icono") {
+    const m = el("div", cls, parent);
+    Object.assign(m.style, { width: `${size}px`, height: `${size}px`, backgroundImage: `url(${ICONO})` });
+    return m;
+  }
+
+  // ── Referencias a la app capturada: "captura.elemento" ──
+  function rect(ref) {
+    if (typeof ref === "string") {
+      const [s, k] = ref.split(".");
+      const r = R[s] && R[s].r[k];
+      if (!r) throw new Error(`sin rectangulo: ${ref}`);
+      return r;
+    }
+    if (typeof ref[0] === "number") return ref;
+    const rs = ref.map(rect);
+    const x = Math.min(...rs.map((r) => r[0])), y = Math.min(...rs.map((r) => r[1]));
+    const x2 = Math.max(...rs.map((r) => r[0] + r[2])), y2 = Math.max(...rs.map((r) => r[1] + r[3]));
+    return [x, y, x2 - x, y2 - y];
+  }
+  function point(target) {
+    if (typeof target === "string") { const r = rect(target); return [r[0] + r[2] / 2, r[1] + r[3] / 2]; }
+    if (typeof target[0] === "string" && typeof target[1] === "number") { const r = rect(target[0]); return [r[0] + r[2] * target[1], r[1] + r[3] * target[2]]; }
+    return target;
+  }
+  function camAt(K, t) {
+    const last = K.length - 1;
+    if (t <= K[0][0]) return K[0].slice(1);
+    if (t >= K[last][0]) return K[last].slice(1);
+    let k = 0;
+    while (t > K[k + 1][0]) k++;
+    const h = K[k + 1][0] - K[k][0], u = (t - K[k][0]) / h;
+    const tan = (j, c) => (j === 0 || j === last ? 0 : (K[j + 1][c] - K[j - 1][c]) / (K[j + 1][0] - K[j - 1][0]));
+    const h00 = 2 * u ** 3 - 3 * u ** 2 + 1, h10 = u ** 3 - 2 * u ** 2 + u, h01 = -2 * u ** 3 + 3 * u ** 2, h11 = u ** 3 - u ** 2;
+    return [1, 2, 3].map((c) => h00 * K[k][c] + h10 * h * tan(k, c) + h01 * K[k + 1][c] + h11 * h * tan(k + 1, c));
+  }
+
+  // ═══ Capitulos sobre la app capturada ═══════════════════════════════════════
+  // Cada capitulo dura un numero entero de compases (a 100 ppm, 1 compas = 2,4 s) y sigue el patron:
+  //   0-2,2 s titulo grande sobre una banda del acento y la app difuminada -> el titulo se encoge y pasa a ser
+  //   la etiqueta (abajo a la izq., con la N o el icono de la app)
+  //   2,8 s en adelante: camara, cursor, clics, focos y etiquetas sobre las capturas.
+  // stills: [t, captura, modo, duracion, opciones]   modos: cut | fade | dialog | unroll | drop | slide
+  //   dialog: { from: "captura.boton", dialog: "captura.ventana" }  (la ventana sale del boton)
+  //   drop / slide: { rect: "captura.menu" }   unroll: { shift, y0, y1 }  (un desplegable que se abre hacia abajo)
+  // covers: [{ still, kind: "type", rect, text: [x0, anchoTexto, nCaracteres], t0, t1, focus, color, caret }]  (escritura)
+  //         [{ still, kind: "wipe", rect, t0, d, color }]  (una zona que aparece)
+  // typepatch: escritura sobre una captura que despues cambia (mismos campos + until)
+  // cam: [[t, objetivo, zoom], ...]   objetivo = "captura.elemento" | [x, y] | ["captura.elemento", fx, fy]
+  // cursor: { start: [x, y], show: [desde, hasta], moves: [[t0, t1, objetivo], ...], clicks: [t, ...] }
+  // spots: [{ ref, pad, r, t0, t1 }]   calls: [{ ref, text, icon, side: left|right|top|bottom, gap, dx, at, t0, t1 }]
+  // rotulos: [{ t0, t1, text, sub, pos: "izq"|"der", y, cifra: { de, a, dec, prefijo, sufijo } }]  (el "momento" del
+  //   capitulo: un titular sobre una banda; con cifra, un numero que cuenta hasta su valor. y = arriba del rotulo, 720 por defecto)
+  const CH = [
+    { id: "ejemplo", n: "01", title: "Título del capítulo", hot: ["capítulo"], tag: "Título corto para la etiqueta",
+      sub: "Una frase que cuenta qué aporta esta parte de la app.", dur: 12.0,
+      stills: [[0, "inicio", "cut"]],
+      cam: [[0, [960, 540], 1.06], [3.0, "inicio.boton", 1.3], [9.0, "inicio.boton", 1.36], [12.6, [960, 540], 1.1]],
+      cursor: { start: [1200, 700], show: [2.8, 11.4], moves: [[3.2, 4.0, "inicio.boton"]], clicks: [4.1] },
+      spots: [{ ref: "inicio.boton", pad: 8, r: 12, t0: 4.4, t1: 8.8 }],
+      calls: [{ ref: "inicio.boton", text: "Lo que hace este botón", icon: "spark", side: "right", gap: 70, t0: 4.6, t1: 11.0 }] },
+  ];
+  const TTL_DY = 600;   // lo que baja el titulo (top 390 px) para acabar en la etiqueta (top 990 px)
+
+  function makeGroup(spec, name) {
+    const g = el("div", "grp");
+    g.appendChild(Object.assign(new Image(), { src: IM[name], alt: "" }));
+    const covers = (spec.covers || []).filter((c) => c.still === name).map((c) => {
+      const e = el("div", "cov", g);
+      Object.assign(e.style, { left: `${c.rect[0]}px`, top: `${c.rect[1]}px`, width: `${c.rect[2]}px`, height: `${c.rect[3]}px`, background: c.color });
+      const caret = c.kind === "type" ? el("div", "caret2", g) : null;
+      if (caret) Object.assign(caret.style, { top: `${c.rect[1] + 2}px`, height: `${c.rect[3] - 4}px`, background: c.caret || "" });
+      return { c, e, caret };
+    });
+    return { el: g, covers };
+  }
+  function renderCovers(g, lt) {
+    g.covers.forEach(({ c, e, caret }) => {
+      if (c.kind === "type") {
+        const [x0, w, n] = c.text;
+        const k = Math.floor(n * P(lt, c.t0, c.t1 - c.t0));
+        const rev = (w * k) / n;
+        const left = x0 + rev;
+        e.style.left = `${left}px`;
+        e.style.width = `${Math.max(0, c.rect[0] + c.rect[2] - left)}px`;
+        const typing = lt >= c.t0 && lt <= c.t1;
+        const on = lt >= (c.focus ?? c.t0) && lt <= c.t1 + 1.6 && (typing || Math.floor(lt * 2.5) % 2 === 0);
+        caret.style.left = `${left + 0.5}px`;
+        caret.style.opacity = on ? 1 : 0;
+      } else if (c.kind === "wipe") {
+        const q = E.io(P(lt, c.t0, c.d));
+        e.style.clipPath = `inset(${c.rect[3] * q}px 0 0 0)`;
+        e.style.opacity = q >= 1 ? 0 : 1;
+      }
+    });
+  }
+
+  function buildChapter(spec, root) {
+    const S = { spec };
+    S.cam = el("div", "cam", root);
+    S.groups = {};
+    [...new Set(spec.stills.map((s) => s[1]))].forEach((name) => {
+      const g = makeGroup(spec, name);
+      S.cam.appendChild(g.el);
+      S.groups[name] = g;
+    });
+    S.patches = [];
+    spec.stills.forEach(([t, name, mode, d, o], i) => {
+      if (!["dialog", "drop", "slide"].includes(mode)) return;
+      const r = rect(mode === "dialog" ? o.dialog : o.rect);
+      const box = el("div", "fly" + (mode === "dialog" ? " dlg" : mode === "slide" ? " side" : ""), S.cam);
+      Object.assign(box.style, { left: `${r[0]}px`, top: `${r[1]}px`, width: `${r[2]}px`, height: `${r[3]}px` });
+      const g = makeGroup(spec, name);
+      Object.assign(g.el.style, { left: `${-r[0]}px`, top: `${-r[1]}px` });
+      box.appendChild(g.el);
+      S.patches.push({ i, mode, t, d, box, g, r, from: mode === "dialog" ? point(o.from) : null });
+    });
+    (spec.typepatch || []).forEach((tp) => {
+      const box = el("div", "fly", S.cam);
+      const r = tp.rect;
+      Object.assign(box.style, { left: `${r[0]}px`, top: `${r[1]}px`, width: `${r[2]}px`, height: `${r[3]}px` });
+      const g = makeGroup({ covers: [{ still: tp.still, kind: "type", rect: [r[0], r[1], r[2], r[3]], text: tp.text, t0: tp.t0, t1: tp.t1, focus: tp.t0 - 0.2, color: tp.color, caret: tp.caret }] }, tp.still);
+      Object.assign(g.el.style, { left: `${-r[0]}px`, top: `${-r[1]}px` });
+      box.appendChild(g.el);
+      S.patches.push({ mode: "type", tp, box, g });
+    });
+    S.camK = spec.cam.map(([t, target, s]) => [t, ...point(target), s]);
+    S.spots = (spec.spots || []).map((sp) => ({ ...sp, r: rect(sp.ref), rad: sp.r ?? 14, e: el("div", "spot2", root) }));
+    const svg = sv("svg", { class: "links2", viewBox: "0 0 1920 1080" }, root);
+    S.calls = (spec.calls || []).map((c) => ({ ...c, rr: rect(c.ref), path: sv("path", { pathLength: 1 }, svg), dot: sv("circle", { r: 7 }, svg),
+                                              chip: el("div", "chip", root, `<i>${IC[c.icon] || IC.check}</i><span>${c.text}</span>`) }));
+    S.rots = (spec.rotulos || []).map((r) => {
+      const e = el("div", `rot ${r.pos === "der" ? "der" : "izq"}`, root);
+      e.style.top = `${r.y ?? 720}px`;
+      const o = { r, e, band: el("i", "rb", e), inner: el("div", "ri", e), cf: null, ghost: null };
+      if (r.cifra) {
+        o.cf = el("span", "cf", o.inner);
+        o.ghost = el("span", "cf", e, cifraTxt(r.cifra, r.cifra.a));   // mide el ancho final: el numero no baila al contar
+        Object.assign(o.ghost.style, { position: "absolute", left: "0", top: "0", visibility: "hidden" });
+      }
+      const col = el("div", "rc", o.inner);
+      el("span", "rt", col, r.text);
+      if (r.sub) el("span", "rs", col, r.sub);
+      return o;
+    });
+    S.ripple = el("div", "ripple", root);
+    S.cursor = el("div", "cur", root, CURSOR);
+    S.curMoves = spec.cursor.moves.map(([t0, t1, to]) => [t0, t1, point(to)]);
+    S.scrim = el("div", "scrim", root);
+    S.title = el("div", "ttl", root, `<div class="n">${spec.n}</div><div class="hrow"><i class="band"></i><h2 class="hh">${wordsHTML(spec.title, spec.hot)}</h2></div><p class="sub">${spec.sub}</p>`);
+    S.tN = S.title.querySelector(".n");
+    S.tBand = S.title.querySelector(".band");
+    S.tWords = [...S.title.querySelectorAll(".w")];
+    S.tSub = S.title.querySelector(".sub");
+    S.tag = el("div", "tag", root);
+    if (ICONO) Object.assign(el("img", "ico", S.tag), { src: ICONO, alt: "" });
+    else brandMark(S.tag);
+    el("span", "n", S.tag, spec.n);
+    el("span", "t", S.tag, spec.tag);
+    return S;
+  }
+
+  function cursorAt(S, lt) {
+    const c = S.spec.cursor;
+    let pos = c.start;
+    for (const [t0, t1, to] of S.curMoves) {
+      if (lt < t0) break;
+      if (lt <= t1) {
+        const a = pos, b = to, p = E.io(P(lt, t0, t1 - t0)), dx = b[0] - a[0], dy = b[1] - a[1], k = 0.18;
+        const ctl = [(a[0] + b[0]) / 2 - dy * k, (a[1] + b[1]) / 2 + dx * k];
+        return [(1 - p) ** 2 * a[0] + 2 * (1 - p) * p * ctl[0] + p * p * b[0], (1 - p) ** 2 * a[1] + 2 * (1 - p) * p * ctl[1] + p * p * b[1]];
+      }
+      pos = to;
+    }
+    return pos;
+  }
+
+  function placeCall(c, rr, t) {
+    const out = 1 - E.io(P(t, c.t1, 0.35));
+    if (t < c.t0 || out <= 0) { c.chip.style.opacity = 0; c.path.style.opacity = 0; c.dot.style.opacity = 0; return; }
+    const dp = E.spring(P(t, c.t0, 0.45)), lp = E.out(P(t, c.t0 + 0.08, 0.45)), cp = E.spring(P(t, c.t0 + 0.25, 0.6));
+    const cw = c.cw, ch = c.ch, g = c.gap, at = c.at ?? 0.5, dx = c.dx || 0;
+    let ax, ay, x, y, ex, ey;
+    if (c.side === "right") { ax = rr.x + rr.w; ay = rr.y + rr.h * at; x = ax + g; y = ay - ch / 2; }
+    else if (c.side === "left") { ax = rr.x; ay = rr.y + rr.h * at; x = ax - g - cw; y = ay - ch / 2; }
+    else if (c.side === "top") { ax = rr.x + rr.w * at; ay = rr.y; x = ax - cw / 2 + dx; y = ay - g - ch; }
+    else { ax = rr.x + rr.w * at; ay = rr.y + rr.h; x = ax - cw / 2 + dx; y = ay + g; }
+    x = clamp(x, 16, 1920 - cw - 16);
+    y = clamp(y, 16, 1080 - ch - 16);
+    if (c.side === "right") { ex = x; ey = y + ch / 2; } else if (c.side === "left") { ex = x + cw; ey = y + ch / 2; }
+    else if (c.side === "top") { ex = x + cw / 2; ey = y + ch; } else { ex = x + cw / 2; ey = y; }
+    const mx = (ax + ex) / 2, my = (ay + ey) / 2, hz = c.side === "left" || c.side === "right";
+    c.path.setAttribute("d", hz ? `M${ax},${ay} C${mx},${ay} ${mx},${ey} ${ex},${ey}` : `M${ax},${ay} C${ax},${my} ${ex},${my} ${ex},${ey}`);
+    c.path.style.strokeDashoffset = 1 - lp;
+    c.path.style.opacity = out;
+    c.dot.setAttribute("cx", ax);
+    c.dot.setAttribute("cy", ay);
+    c.dot.style.transformOrigin = `${ax}px ${ay}px`;
+    c.dot.style.transform = `scale(${dp})`;
+    c.dot.style.opacity = out;
+    c.chip.style.transformOrigin = { right: "0% 50%", left: "100% 50%", top: "50% 100%", bottom: "50% 0%" }[c.side];
+    c.chip.style.transform = `translate(${x}px, ${y}px) scale(${0.55 + 0.45 * cp})`;
+    c.chip.style.opacity = clamp(cp * 1.6) * out;
+  }
+
+  function cifraTxt(c, v) { return `${c.prefijo || ""}${fmtN(v, c.dec || 0)}${c.sufijo || ""}`; }
+  function renderRotulos(S, lt) {
+    S.rots.forEach((o) => {
+      const r = o.r, on = lt >= r.t0 && lt < r.t1;
+      show(o.e, on);
+      if (!on) return;
+      if (o.cf) {
+        o.cf.style.minWidth = `${o.ghost.offsetWidth}px`;
+        o.cf.textContent = cifraTxt(r.cifra, lerp(r.cifra.de ?? 0, r.cifra.a, E.out(P(lt, r.t0 + 0.2, 1.1))));
+      }
+      const a = E.out5(P(lt, r.t0, 0.55)), z = E.io(P(lt, r.t1 - 0.4, 0.4));
+      o.band.style.width = `${o.inner.offsetWidth + 110 + 420}px`;
+      o.band.style.transform = `scaleX(${a * (1 - z)})`;
+      o.inner.style.opacity = E.out(P(lt, r.t0 + 0.2, 0.55)) * (1 - E.io(P(lt, r.t1 - 0.5, 0.3)));
+      o.inner.style.transform = `translateX(${(1 - E.out(P(lt, r.t0 + 0.2, 0.6))) * (r.pos === "der" ? 40 : -40)}px)`;
+    });
+  }
+
+  function renderChapter(lt, S) {
+    const spec = S.spec, dur = spec.dur;
+    S.calls.forEach((c) => { c.cw = c.chip.offsetWidth; c.ch = c.chip.offsetHeight; });
+    const [cx, cy, s] = camAt(S.camK, lt);
+    const tx = clamp(960 - s * cx, 1920 - 1920 * s, 0), ty = clamp(540 - s * cy, 1080 - 1080 * s, 0);
+    S.cam.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+    const toS = (x, y) => [tx + s * x, ty + s * y];
+    const rS = (r) => ({ x: tx + s * r[0], y: ty + s * r[1], w: s * r[2], h: s * r[3] });
+    const blur = 10 * (1 - E.io(P(lt, 2.2, 0.8))) + 10 * E.io(P(lt, dur - 0.7, 0.7));
+    S.cam.style.filter = blur > 0.05 ? `blur(${blur}px)` : "none";
+    S.scrim.style.opacity = clamp(1 - E.io(P(lt, 2.3, 0.7)) + E.io(P(lt, dur - 0.6, 0.6)));
+
+    // Capturas y transiciones entre ellas.
+    const st = spec.stills;
+    let i = 0;
+    while (i + 1 < st.length && lt >= st[i + 1][0]) i++;
+    const [t, name, mode, d = 0, o = {}] = st[i];
+    const p = d > 0 ? clamp((lt - t) / d) : 1;
+    const prevName = i > 0 ? st[i - 1][1] : null;
+    const look = {};
+    for (const n in S.groups) look[n] = null;
+    const cur = { o: 1, tf: "", f: "none", clip: "none" }, prev = { o: 1, tf: "", f: "none", clip: "none" };
+    let showPrev = false;
+    if (i > 0) {
+      if (mode === "fade") { cur.o = E.io(p); showPrev = p < 1; }
+      else if (mode === "dialog") {
+        const k = E.out(P(lt, t, 0.45));
+        prev.f = `blur(${3 * k}px) brightness(${1 - 0.3 * k}) saturate(${1 - 0.25 * k})`;
+        cur.o = E.io(P(lt, t + d - 0.25, 0.25));
+        showPrev = cur.o < 1;
+      } else if (mode === "unroll") {
+        const q = E.io(p);
+        prev.tf = q > 0 ? `translateY(${-o.shift * q}px)` : "";
+        cur.tf = `translateY(${o.shift * (1 - q)}px)`;
+        cur.clip = p < 1 ? `inset(0 0 ${1080 - lerp(o.y0, o.y1, q)}px 0)` : "none";
+        showPrev = p < 1;
+      } else if (mode === "drop" || mode === "slide") {
+        cur.o = E.io(P(lt, t + d - 0.12, 0.12));
+        showPrev = cur.o < 1;
+      }
+    }
+    look[name] = cur;
+    if (showPrev && prevName && prevName !== name) look[prevName] = prev;
+    for (const n in S.groups) {
+      const g = S.groups[n], L = look[n];
+      show(g.el, !!L);
+      if (!L) continue;
+      g.el.style.opacity = L.o;
+      g.el.style.transform = L.tf;
+      g.el.style.filter = L.f;
+      g.el.style.clipPath = L.clip;
+      g.el.style.zIndex = L === cur ? 2 : 1;
+      renderCovers(g, lt);
+    }
+    S.patches.forEach((pa) => {
+      if (pa.mode === "type") {
+        const on = lt >= pa.tp.t0 - 0.05 && lt < pa.tp.until;
+        show(pa.box, on);
+        if (!on) return;
+        pa.box.style.zIndex = 3;   // por encima de la captura actual (z-index 2), si no, no se ve
+        renderCovers(pa.g, lt);
+        return;
+      }
+      const on = i === pa.i && lt < pa.t + pa.d;
+      show(pa.box, on);
+      if (!on) return;
+      pa.box.style.zIndex = 3;
+      renderCovers(pa.g, lt);
+      if (pa.mode === "dialog") {
+        const q = E.out5(P(lt, pa.t, pa.d * 0.875));
+        const [dcx, dcy] = [pa.r[0] + pa.r[2] / 2, pa.r[1] + pa.r[3] / 2];
+        pa.box.style.transform = `translate(${(pa.from[0] - dcx) * (1 - q)}px, ${(pa.from[1] - dcy) * (1 - q)}px) scale(${lerp(0.06, 1, q)})`;
+        pa.box.style.opacity = clamp((lt - pa.t) / 0.12);
+      } else if (pa.mode === "drop") {
+        const q = E.out(P(lt, pa.t, pa.d));
+        pa.box.style.clipPath = `inset(0 0 ${(1 - q) * pa.r[3]}px 0)`;
+        pa.box.style.transform = `translateY(${-8 * (1 - q)}px)`;
+      } else if (pa.mode === "slide") {
+        const q = E.out(P(lt, pa.t, pa.d));
+        pa.box.style.transform = `translateX(${(1920 - pa.r[0]) * (1 - q)}px)`;
+      }
+    });
+
+    // Foco, etiquetas, cursor y onda en cada clic.
+    S.spots.forEach((sp) => {
+      const v = Math.min(E.out(P(lt, sp.t0, 0.5)), 1 - E.io(P(lt, sp.t1, 0.4)));
+      sp.e.style.opacity = v;
+      if (v <= 0) return;
+      const r = rS(sp.r), pad = sp.pad * s;
+      Object.assign(sp.e.style, { width: `${r.w + 2 * pad}px`, height: `${r.h + 2 * pad}px`, transform: `translate(${r.x - pad}px, ${r.y - pad}px)`, borderRadius: `${sp.rad}px` });
+    });
+    S.calls.forEach((c) => placeCall(c, rS(c.rr), lt));
+    renderRotulos(S, lt);
+    const [px, py] = toS(...cursorAt(S, lt));
+    const clicks = spec.cursor.clicks;
+    const press = Math.max(0, ...clicks.map((tc) => Math.sin(Math.PI * P(lt, tc - 0.05, 0.2))));
+    S.cursor.style.transform = `translate(${px - 6}px, ${py - 3}px) scale(${1 - 0.15 * press})`;
+    S.cursor.style.opacity = Math.min(E.out(P(lt, spec.cursor.show[0], 0.4)), 1 - P(lt, spec.cursor.show[1], 0.4));
+    let rp = -1, rpos = [0, 0];
+    for (const tc of clicks) { const q = P(lt, tc, 0.7); if (q > 0 && q < 1) { rp = q; rpos = toS(...cursorAt(S, tc)); } }
+    S.ripple.style.opacity = rp > 0 ? 1 - rp : 0;
+    if (rp > 0) {
+      const size = 20 + 100 * E.out(rp);
+      Object.assign(S.ripple.style, { width: `${size}px`, height: `${size}px`, transform: `translate(${rpos[0] - size / 2}px, ${rpos[1] - size / 2}px)` });
+    }
+
+    // Titulo sobre una banda del acento, que se encoge hasta la etiqueta del capitulo.
+    rise(S.tN, lt, 0.1);
+    S.tBand.style.transform = `scaleX(${E.out5(P(lt, 0.05, 0.65))})`;
+    riseWords(S.tWords, lt, 0.25, 0.09);
+    S.tSub.style.opacity = E.out(P(lt, 0.75, 0.6)) * (1 - P(lt, 2.2, 0.25));
+    const m = E.io(P(lt, 2.2, 0.8));
+    S.title.style.transform = `translate(${30 * m}px, ${TTL_DY * m}px) scale(${lerp(1, 0.2, m)})`;
+    S.title.style.opacity = 1 - P(lt, 2.65, 0.35);
+    const tg = Math.min(E.spring(P(lt, 2.75, 0.5)), 1 - E.io(P(lt, dur - 0.6, 0.3)));
+    S.tag.style.opacity = clamp(tg * 1.5);
+    S.tag.style.transform = `translateX(${(1 - Math.min(tg, 1)) * -14}px) scale(${0.9 + 0.1 * tg})`;
+  }
+
+  // ═══ Apertura (9,6 s): tres estilos a elegir en ESTILO.apertura ════════════════════
+  // Todas son funciones puras de t. Sus "golpes" (segundos en que cae algo) llevan una campana en la musica.
+  const BRAND = { word: "Mi<b>App</b>", claim: "Lo que hace la app, en <b>una frase</b>.", sub: "Una línea de apoyo.",
+                  words: ["Paso uno", "Paso dos", "Paso tres", "Paso cuatro"], closing: "Una frase de cierre." };
+  // "palabras": la N en la esquina, palabras una por golpe, los pasos numerados y la frase.
+  function buildIntroPalabras(root) {
+    const S = { bg: makeBg(root) };
+    S.mark = brandMark(root, "corner");
+    S.flashes = BRAND.words.map((w) => el("div", "flash", root, w));
+    const c = el("div", "mcenter", root);
+    const row = el("div", "mrow", c);
+    S.chips = []; S.dashes = [];
+    BRAND.words.forEach((w, i) => { if (i) S.dashes.push(el("span", "dash", row)); S.chips.push(el("span", "chipx", row, `<i>${i + 1}</i>${w}`)); });
+    S.h1 = el("div", "h1", c, BRAND.claim);
+    S.h1.style.marginTop = "56px";
+    S.sub = el("div", "msub", c, BRAND.sub);
+    return S;
+  }
+  function renderIntroPalabras(t, S) {
+    S.bg(t, 0.2, 0, 0.55);
+    nReveal(S.mark.parts, t, 0.2);
+    S.flashes.forEach((f, i) => {
+      const p = (t - (0.6 + i * 0.6)) / 0.62;
+      if (p < 0 || p > 1) { f.style.opacity = 0; return; }
+      const q = p < 0.22 ? E.out(p / 0.22) : 1, o = p > 0.78 ? (p - 0.78) / 0.22 : 0;
+      f.style.opacity = q * (1 - o);
+      f.style.transform = `translateY(${-90 - 36 * o + (1 - q) * 36}px) scale(${lerp(1.25, 1, q) - 0.08 * o})`;
+      f.style.filter = (1 - q) + o > 0.01 ? `blur(${16 * (1 - q) + 10 * o}px)` : "none";
+    });
+    const t0 = 0.6 + BRAND.words.length * 0.6 + 0.4;
+    S.chips.forEach((c, i) => { const q = E.spring(P(t, t0 + i * 0.07, 0.7)); c.style.opacity = clamp(q * 2); c.style.transform = `scale(${0.6 + 0.4 * q})`; });
+    S.dashes.forEach((d, i) => { d.style.transform = `scaleX(${E.out(P(t, t0 + (i + 1) * 0.07, 0.4))})`; });
+    rise(S.h1, t, t0 + 0.6, 1, 0.9, 34);
+    rise(S.sub, t, t0 + 1.2, 1, 0.9, 34);
+  }
+  // "pantallas": capturas reales que entran en abanico 3D, una por golpe, y se apartan para dejar sitio a la frase.
+  const pantallasIntro = () => (ESTILO.pantallas && ESTILO.pantallas.length ? ESTILO.pantallas : RECAP.map((r) => r[0]))
+    .filter((n) => IM[n]).slice(0, 5);
+  function buildIntroPantallas(root) {
+    const S = { bg: makeBg(root) };
+    S.mark = brandMark(root, "corner");
+    S.fan = el("div", "fan3", root);
+    S.cards = pantallasIntro().map((n) => { const e = el("div", "card3", S.fan); e.style.backgroundImage = `url(${IM[n]})`; return e; });
+    const c = el("div", "mcenter", root);
+    c.style.paddingTop = "380px";   // la frase, debajo del abanico
+    S.h1 = el("div", "h1", c, BRAND.claim);
+    S.sub = el("div", "msub", c, BRAND.sub);
+    return S;
+  }
+  function renderIntroPantallas(t, S) {
+    S.bg(t, 0.2, 0, 0.55);
+    nReveal(S.mark.parts, t, 0.2);
+    const n = S.cards.length, t0 = 0.6 + n * 0.6 + 0.3;
+    const back = E.io(P(t, t0, 0.9));
+    S.fan.style.transform = `translateY(${-200 * back}px) scale(${1 - 0.38 * back})`;
+    S.cards.forEach((e, i) => {
+      const q = E.spring(P(t, 0.6 + i * 0.6 - 0.25, 0.75));   // aterriza en su golpe (0,6 s + 0,6 s por tarjeta)
+      const k = i - (n - 1) / 2, side = i % 2 ? -1 : 1;
+      const x = lerp(side * 760, k * 250, q), y = lerp(420, k * k * 14, q), z = lerp(-420, -Math.abs(k) * 60, q);
+      e.style.opacity = clamp(q * 3);
+      e.style.zIndex = String(100 - Math.round(Math.abs(k) * 10));
+      e.style.transform = `translate3d(${x}px, ${y}px, ${z}px) rotateY(${lerp(side * -40, k * -9, q)}deg) rotateZ(${lerp(side * 14, k * 5, q)}deg)`;
+    });
+    rise(S.h1, t, t0 + 0.5, 1, 0.9, 34);
+    rise(S.sub, t, t0 + 1.1, 1, 0.9, 34);
+  }
+  // "marca": las bandas llenan la pantalla, la N se monta pieza a pieza (una por golpe) y viaja a la esquina.
+  function buildIntroMarca(root) {
+    const S = { bg: makeBg(root) };
+    S.big = brandMark(root, "nbig nfloat");
+    const c = el("div", "mcenter", root);
+    S.h1 = el("div", "h1", c, BRAND.claim);
+    S.sub = el("div", "msub", c, BRAND.sub);
+    return S;
+  }
+  function renderIntroMarca(t, S) {
+    const m = E.io(P(t, 2.7, 0.9));
+    S.bg(t, lerp(1, 0.2, m), 0, lerp(1, 0.55, m));
+    nReveal(S.big.parts, t, 0.35, 0.6, 0.5);
+    S.big.el.style.transform = `translate(${(98 - 960) * m}px, ${(91 - 540) * m}px) scale(${lerp(1, 70 / 220, m)})`;
+    rise(S.h1, t, 3.5, 1, 0.9, 34);
+    rise(S.sub, t, 4.1, 1, 0.9, 34);
+  }
+  const INTROS = {
+    palabras: { build: buildIntroPalabras, render: renderIntroPalabras, golpes: () => BRAND.words.map((w, i) => 0.6 + i * 0.6) },
+    pantallas: { build: buildIntroPantallas, render: renderIntroPantallas, golpes: () => pantallasIntro().map((n, i) => 0.6 + i * 0.6) },
+    marca: { build: buildIntroMarca, render: renderIntroMarca, golpes: () => (MARCA.simbolo ? [0.6, 1.2, 1.8] : []) },
+  };
+  const INTRO = INTROS[ESTILO.apertura] || INTROS.palabras;
+
+  // ═══ Cierre: mosaico de capturas, la app y la firma (bandas + N, como la ultima pagina del manual) ══
+  // "completo" (12 s): mosaico -> app -> firma. "directo" (9,6 s): app -> firma. La firma cae en el ultimo compas.
+  const RECAP = [["inicio", "Lo primero que ves"]];   // [captura, texto] (hasta 8)
+  const DIRECTO = ESTILO.cierre === "directo", OUTRO_DUR = DIRECTO ? 9.6 : 12.0;
+  function buildOutro(root) {
+    const S = { bg: makeBg(root) };
+    S.a = el("div", "mcenter", root);
+    S.a.hidden = DIRECTO;
+    S.h = el("div", "h1", S.a, "Todo esto, en <b>una sola app</b>.");
+    Object.assign(S.h.style, { fontSize: "64px", marginBottom: "40px" });
+    S.tiles = el("div", "tiles", S.a);
+    S.tiles.style.gridTemplateColumns = `repeat(${Math.min(4, RECAP.length)}, 400px)`;
+    S.tl = RECAP.map(([n, txt]) => { const e = el("div", "tile4", S.tiles, `<span>${txt}</span>`); e.style.backgroundImage = `url(${IM[n]})`; return e; });
+    // La app: icono, nombre, frase y logo del cliente (tal cual, sin filtros).
+    S.b = el("div", "mcenter", root);
+    if (ICONO) { S.ico = iconoEl(S.b, 170); S.ico.style.position = "relative"; }
+    S.word = el("div", "mword", S.b, BRAND.word);
+    S.sub = el("div", "msub", S.b, BRAND.closing);
+    if (!BRAND.closing) S.sub.hidden = true;
+    if (LOGO) { S.logo = Object.assign(el("img", "mlogo", S.b), { src: LOGO, alt: "" }); S.logo.style.marginTop = "44px"; }
+    // Firma: la N que se monta por piezas o, con submarca, su logo con claim.
+    S.c = el("div", "mcenter", root);
+    const firma = MARCA.firma && MARCA.firma[TEMA];
+    if (firma) S.firma = Object.assign(el("img", "firma", S.c), { src: firma, alt: "" });
+    else S.mark = brandMark(S.c, "nbig");
+    S.fade = el("div", "fadeout", root);
+    return S;
+  }
+  function renderOutro(t, S) {
+    const P0 = DIRECTO ? 0.35 : 5.15, FIRMA = OUTRO_DUR - 2.4;   // la app entra en P0; la firma, en el ultimo compas
+    const full = E.io(P(t, FIRMA - 0.3, 0.8));   // las bandas se llenan y llegan al centro
+    S.bg(t, lerp(0.2, 1, full), 0, lerp(0.55, 1, full));
+    if (!DIRECTO) {
+      rise(S.h, t, 0.1, 1 - E.io(P(t, 4.8, 0.7)), 0.9, 34);
+      S.tl.forEach((e, i) => { const q = E.out(P(t, 0.35 + i * 0.11, 0.7)); e.style.opacity = q; e.style.transform = `rotateY(${70 * (1 - q)}deg) translateZ(${-120 * (1 - q)}px)`; });
+      const f = E.io(P(t, 4.8, 1.0));
+      S.tiles.style.transform = `scale(${1 - 0.45 * f}) translateY(${160 * f}px)`;
+      S.tiles.style.opacity = 1 - f;
+      S.tiles.style.filter = f > 0.01 ? `blur(${8 * f}px)` : "none";
+    }
+    const out = 1 - E.io(P(t, FIRMA - 0.45, 0.45));
+    if (S.ico) riseNoBlur(S.ico, t, P0, out);
+    rise(S.word, t, P0 + 0.22, out, 0.9, 34);
+    rise(S.sub, t, P0 + 0.44, out, 0.9, 34);
+    if (S.logo) riseNoBlur(S.logo, t, P0 + 0.66, out);
+    if (S.firma) riseNoBlur(S.firma, t, FIRMA + 0.15);   // los logos entran sin filtros
+    if (S.mark) nReveal(S.mark.parts, t, FIRMA + 0.1);
+    S.fade.style.opacity = E.io(P(t, OUTRO_DUR - 0.7, 0.7));
+  }
+
+  // ═══ Linea de tiempo (100 pulsaciones por minuto: compas de 2,4 s) ════════════════
+  const SEGS = [
+    { id: "intro", title: "Apertura", desc: "Lo que hace la app", dur: 9.6, build: INTRO.build, render: INTRO.render },
+    ...CH.map((c) => ({ id: c.id, n: c.n, title: c.tag, desc: c.sub, dur: c.dur, spec: c, build: (root) => buildChapter(c, root), render: renderChapter })),
+    { id: "outro", title: "Cierre", desc: "Resumen y marca", dur: OUTRO_DUR, build: buildOutro, render: renderOutro },
+  ];
+  let acc = 0;
+  SEGS.forEach((s) => { s.start = acc; acc += s.dur; });
+  // Velocidad de reproduccion.
+  const SPEED = 1.0;   // < 1 alarga todo (p. ej. 0.9 = un 10 % mas pausado); la musica usa el mismo valor
+  const TOTAL_C = acc, TOTAL = acc / SPEED;
+  SEGS.forEach((s) => { s.at = s.start / SPEED; });
+  const CHAPS = SEGS.filter((s) => s.n);
+  SEGS.forEach((s) => { s.root = el("div", "layer", cv); s.S = s.build(s.root); s.root.hidden = true; });
+  const jbar = el("div", "jbar", cv, "<span><i></i></span>".repeat(CHAPS.length));
+  const jsegs = [...jbar.querySelectorAll("i")];
+  // Transicion "bandas": las 5 filas barren la pantalla de izquierda a derecha, un poco escalonadas, y la tapan
+  // entera mientras cambia la parte (centro del barrido 0,12 s despues del corte; tapa unos +-0,15 s).
+  const wipe = ESTILO.transicion === "bandas" ? el("div", "wipe", cv, "<i></i>".repeat(5)) : null;
+  const wipeRows = wipe ? [...wipe.querySelectorAll("i")] : [];
+  wipeRows.forEach((e, r) => { e.style.top = `${r * 216}px`; });
+  const CORTES = SEGS.slice(1).map((s) => s.start + 0.12);
+  function renderWipe(t) {
+    if (!wipe) return;
+    let u = Infinity;
+    CORTES.forEach((c) => { if (Math.abs(t - c) < Math.abs(u)) u = t - c; });
+    const on = Math.abs(u) < 0.75;
+    show(wipe, on);
+    if (!on) return;
+    wipeRows.forEach((e, r) => {
+      const v = clamp((u - (r - 2) * 0.03) / 0.55, -1, 1);
+      e.style.transform = `translateX(${-660 + 2580 * Math.sign(v) * Math.pow(Math.abs(v), 2.2)}px)`;
+    });
+  }
+
+  function render(t) {
+    t = clamp(t * SPEED, 0, TOTAL_C);
+    SEGS.forEach((s, k) => {
+      const lt = t - s.start;
+      const on = lt >= 0 && lt < s.dur + XF;
+      show(s.root, on);
+      if (!on) return;
+      s.root.style.opacity = k === 0 ? 1 : E.io(P(lt, 0, XF));
+      s.render(lt, s.S);
+    });
+    const first = CHAPS[0], lastC = CHAPS[CHAPS.length - 1];
+    jbar.style.opacity = Math.min(E.io(P(t, first.start, XF)), 1 - E.io(P(t, lastC.start + lastC.dur, XF)));
+    CHAPS.forEach((c, i) => { jsegs[i].style.width = `${100 * clamp((t - c.start) / c.dur)}%`; });
+    renderWipe(t);
+  }
+
+  // ── Reproductor: el reloj es el del navegador y la musica se mantiene alineada con el ──
+  const music = $("music");
+  if (MUSIC) music.src = MUSIC;
+  brandMark($("hmark"));
+  $("word").innerHTML = BRAND.word;
+  if (VIDEO.src) Object.assign($("descargar"), { href: VIDEO.src, download: VIDEO.nombre || "trailer.mp4", hidden: false });
+  document.title = `${BRAND.word.replace(/<[^>]+>/g, "")} · Tráiler en directo`;
+  const POSTER = 6.0;   // segundo que se ve antes de darle a reproducir
+  let playing = false, startedAt = 0, offset = POSTER, raf = 0, fresh = true, sound = !!MUSIC;
+  if (!MUSIC) { $("sound").hidden = true; $("volBox").hidden = true; }
+  // Volumen: se recuerda en este navegador (si se puede).
+  const vol = $("vol");
+  try { const v = parseFloat(localStorage.getItem("trailer-vol")); if (v >= 0 && v <= 1) vol.value = String(v); } catch (e) { /* sin almacenamiento */ }
+  music.volume = parseFloat(vol.value);
+  vol.addEventListener("input", () => {
+    music.volume = parseFloat(vol.value);
+    try { localStorage.setItem("trailer-vol", vol.value); } catch (e) { /* sin almacenamiento */ }
+    if (parseFloat(vol.value) > 0 && !sound) { sound = true; syncMusic(now(), true); labels(); }
+  });
+  function fit() {
+    if (document.body.classList.contains("render")) return;
+    const w = vp.clientWidth, h = vp.clientHeight, s = Math.min(w / W, h / 1080);
+    cv.style.transform = `translate(${(w - W * s) / 2}px, ${(h - 1080 * s) / 2}px) scale(${s})`;
+  }
+  new ResizeObserver(fit).observe(vp);
+  document.addEventListener("fullscreenchange", fit);
+  fit();
+  const now = () => (playing ? offset + (performance.now() - startedAt) / 1000 : offset);
+  const chapBtns = [];
+  function draw(t) {
+    render(t);
+    const shown = fresh ? 0 : t;
+    $("fill").style.width = `${(shown / TOTAL) * 100}%`;
+    $("bar").setAttribute("aria-valuenow", String(Math.round((shown / TOTAL) * 100)));
+    $("time").textContent = `${fmtT(shown)} / ${fmtT(TOTAL)}`;
+    let k = -1;
+    SEGS.forEach((s, i) => { if (t + 0.01 >= s.at) k = i; });
+    chapBtns.forEach((b, i) => b.setAttribute("aria-current", String(!fresh && i === k)));
+  }
+  function syncMusic(t, hard) {
+    if (!MUSIC) return;
+    if (!playing || !sound) { if (!music.paused) music.pause(); return; }
+    if (hard || Math.abs(music.currentTime - t) > 0.12) { try { music.currentTime = t; } catch (e) { /* aun cargando */ } }
+    if (music.paused) music.play().catch(() => { sound = false; labels(); });
+  }
+  let lastSync = 0;
+  function loop() {
+    const t = Math.min(now(), TOTAL);
+    draw(t);
+    if (performance.now() - lastSync > 1000) { lastSync = performance.now(); syncMusic(t, false); }
+    if (t >= TOTAL) { offset = TOTAL; stop(); return; }
+    raf = requestAnimationFrame(loop);
+  }
+  function labels() {
+    $("toggleLabel").textContent = playing ? "Pausa" : "Reproducir";
+    $("toggleIcon").innerHTML = playing ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z" fill="currentColor"/>' : '<path d="M6 4l14 8-14 8z" fill="currentColor"/>';
+    $("playBig").hidden = playing;
+    $("sound").setAttribute("aria-pressed", String(sound));
+    $("soundLabel").textContent = sound ? "Música" : "Sin música";
+  }
+  function play() {
+    if (playing) return;
+    if (fresh || offset >= TOTAL - 0.05) offset = 0;
+    fresh = false;
+    playing = true;
+    startedAt = performance.now();
+    labels();
+    syncMusic(offset, true);
+    raf = requestAnimationFrame(loop);
+  }
+  function stop() {
+    if (playing) offset = now();
+    playing = false;
+    cancelAnimationFrame(raf);
+    syncMusic(offset, false);
+    labels();
+  }
+  function seek(t) {
+    fresh = false;
+    offset = clamp(t, 0, TOTAL);
+    if (playing) { startedAt = performance.now(); syncMusic(offset, true); }
+    draw(offset);
+  }
+  $("toggle").addEventListener("click", () => (playing ? stop() : play()));
+  $("playBig").addEventListener("click", play);
+  $("restart").addEventListener("click", () => { seek(0); play(); });
+  $("sound").addEventListener("click", () => { sound = !sound; syncMusic(now(), true); labels(); });
+  $("full").addEventListener("click", () => {
+    const req = vp.requestFullscreen || vp.webkitRequestFullscreen;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else if (req) Promise.resolve(req.call(vp)).catch(() => {});
+  });
+  $("bar").addEventListener("click", (e) => { const b = $("bar").getBoundingClientRect(); seek(((e.clientX - b.left) / b.width) * TOTAL); });
+  $("bar").addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") { e.preventDefault(); seek(now() + 5); }
+    if (e.key === "ArrowLeft") { e.preventDefault(); seek(now() - 5); }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === " " && e.target === document.body) { e.preventDefault(); playing ? stop() : play(); } });
+  SEGS.forEach((s) => {
+    const b = el("button", "", $("chaps"), `<span class="cht">${fmtT(s.at)}</span>`);
+    b.type = "button";
+    b.appendChild(document.createTextNode(`${s.n ? s.n + " · " : ""}${s.title}`));
+    b.addEventListener("click", () => { seek(s.at); play(); });
+    chapBtns.push(b);
+  });
+  labels();
+
+  // Listo para grabar: todas las variantes de las fuentes de marca cargadas (las capas ocultas no las piden)
+  // y las imagenes decodificadas.
+  const FUENTES = ["400 40px Sora", "600 40px Sora", "700 40px Sora",
+                   "400 20px 'Instrument Sans'", "500 20px 'Instrument Sans'", "600 20px 'Instrument Sans'", "700 20px 'Instrument Sans'"];
+  const ready = Promise.all([...(document.fonts ? FUENTES.map((f) => document.fonts.load(f).catch(() => null)) : []),
+    document.fonts ? document.fonts.ready : null,
+    ...[...document.images].map((im) => (im.decode ? im.decode().catch(() => null) : null))]);
+  window.__proto = {
+    ready,
+    duration: () => TOTAL,
+    speed: () => SPEED,
+    seek: (t) => { stop(); seek(t); },
+    render: () => { document.body.classList.add("render"); cv.style.transform = "none"; },
+    chapters: () => SEGS.map((s) => ({ id: s.id, n: s.n || "", t: s.title, s: s.desc, at: Math.round(s.at * 100) / 100 })),
+    beats: () => SEGS.map((s) => s.at),
+    golpes: () => INTRO.golpes().map((g) => g / SPEED),   // campanas de la apertura (musica.py)
+    momentos: () => CHAPS.flatMap((c) => (c.spec.rotulos || []).map((r) => (c.start + r.t0) / SPEED)),   // destellos
+    estilo: () => ({ ...ESTILO, speed: SPEED, tema: TEMA, acento: document.documentElement.dataset.acento || "azul",
+                     firma: MARCA.nombre || "", video: !!VIDEO.src }),
+  };
+  draw(offset);
+  ready.then(() => draw(offset));
+})();
+</script>
+</body>
+</html>

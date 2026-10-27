@@ -5,7 +5,9 @@
     "deploy:doctor": "node scripts/deploy.mjs doctor",
     "deploy:dev": "node scripts/deploy.mjs dev",
     "deploy:pro": "node scripts/deploy.mjs pro",
-    "test:deploy": "node --test tests/deploy.test.mjs"
+    "test:deploy": "node --test tests/deploy.test.mjs",
+    "graph": "graphify update . && node -e \"import('open').then(({ default: open }) => open('graphify-out/graph.html'))\"",
+    "graph:watch": "graphify watch ."
   },
   "devDependencies": {
     "@google/clasp": "3.3.0",
