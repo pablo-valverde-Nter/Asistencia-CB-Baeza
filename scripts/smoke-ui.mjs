@@ -46,7 +46,7 @@ function installShim(fixture, ahora) {
     : { tipo: 'entrenador', email: 'luis@example.test', pin: '1234' }));
 }
 
-// Only infrastructure is stubbed. cargarDatos/getEstadisticas below are the real Code.gs.
+// Only infrastructure is stubbed. Bootstrap and statistics endpoints below are real Code.gs.
 function backendStubs() {
   const fixture = window.__fixture;
   const tables = {
@@ -94,7 +94,7 @@ function installRunner(backend) {
           setTimeout(() => {
             try {
               if (name === 'logCliente') { if (success) success(undefined, user); return; }
-              if (name !== 'cargarDatos' && name !== 'getEstadisticas') {
+              if (name !== 'cargarDatos' && name !== 'getEstadisticas' && name !== 'getEstadisticasLote') {
                 window.__calls.push({ funcion: String(name), argumentos: args });
                 throw new Error('Llamada no permitida en smoke: ' + String(name));
               }
@@ -115,7 +115,7 @@ function installRunner(backend) {
 
 function driveViews() {
   const pause = () => new Promise(resolve => setTimeout(resolve, 50));
-  const result = { errores: window.__errors, llamadas: window.__calls, textos: {} };
+  const result = { errores: window.__errors, llamadas: window.__calls, textos: {}, inmediatas: {} };
   function publish() {
     let pre = document.getElementById('smoke-result');
     if (!pre) { pre = document.createElement('pre'); pre.id = 'smoke-result'; pre.hidden = true; document.body.append(pre); }
@@ -127,7 +127,10 @@ function driveViews() {
     for (let turn = 0; turn < 80; turn++) {
       await pause();
       const loading = App.stats && Object.values(App.stats.detalles || {}).some(e => e.estado === 'cargando');
-      idle = !window.__pending && !loading ? idle + 1 : 0;
+      const animating = [...document.querySelectorAll('.view.active .stats-ring')].some(element =>
+        element.dataset.ringValue !== '' &&
+        element.querySelector('.stats-ring-number').textContent !== Number(element.dataset.ringValue) + '%');
+      idle = !window.__pending && !loading && !animating ? idle + 1 : 0;
       if (idle === 2) return;
     }
     throw new Error('Tiempo agotado esperando estadísticas de ' + App.state.currentView);
@@ -136,6 +139,16 @@ function driveViews() {
     try {
       await settle();
       if (!App.cache.temporadas.length || App.state.rol !== window.__role) throw new Error('Bootstrap incompleto para ' + window.__role);
+      if (window.__role === 'admin') {
+        App.state.detalleEquipoId = 'equipo-cadete';
+        for (const view of ['equipo-detalle', 'informes']) {
+          App.navigate(view, {}, false);
+          const element = document.getElementById('view-' + view);
+          result.inmediatas[view] = Boolean(element && element.classList.contains('active') &&
+            element.innerText.trim() && !element.querySelector('.stat-skeleton'));
+          if (!result.inmediatas[view]) result.errores.push(view + ': estadísticas no renderizadas inmediatamente tras bootstrap/precarga');
+        }
+      }
       const views = window.__role === 'jugador'
         ? ['perfil-jugador', 'mis-stats', 'mi-equipo']
         : ['equipos', 'equipos-admin', 'jugadores-admin', 'entrenadores-admin', 'equipo-detalle', 'jugador-detalle', 'entrenador-detalle', 'informes'];
@@ -150,10 +163,27 @@ function driveViews() {
           if (!element || !element.classList.contains('active')) throw new Error('Vista no disponible: ' + view);
           result.textos[view] = element.innerText;
           if (!element.innerText.trim()) throw new Error('Vista vacía: ' + view);
+          if (window.__role === 'admin' && view === 'informes') {
+            const button = [...element.querySelectorAll('button[onclick]')].find(button =>
+              button.getAttribute('onclick').includes("App.views['equipo-detalle'].cargar("));
+            if (!button) throw new Error('Informes sin botón de detalle de equipo');
+            App.state.detalleEquipoId = null;
+            button.click();
+            result.navegacionEquipo = App.state.currentView === 'equipo-detalle' &&
+              Boolean(App.cache.equipos.find(equipo => equipo.ID === App.state.detalleEquipoId)) &&
+              document.getElementById('view-equipo-detalle').classList.contains('active');
+            if (!result.navegacionEquipo) throw new Error('El botón de informes no abre el detalle del equipo');
+          }
         } catch (error) { result.errores.push(view + ': ' + (error.stack || error.message)); }
       }
       const finalView = new URLSearchParams(location.search).get('final') || views.at(-1);
-      if (views.includes(finalView)) { App.navigate(finalView, {}, false); await settle(); }
+      if (views.includes(finalView)) {
+        App.state.detalleEquipoId = 'equipo-cadete';
+        App.state.detalleJugadorId = 'jugador-bruno';
+        App.state.detalleEntrenadorId = 'entrenador-luis';
+        App.navigate(finalView, {}, false);
+        await settle();
+      }
       window.scrollTo(0, 0);
     } catch (error) { result.errores.push(error.stack || error.message); }
     publish();
@@ -246,7 +276,7 @@ async function main() {
   html = html.replace(/<script\b[^>]*src=["'][^"']*supabase[^"']*["'][^>]*>\s*<\/script>/gi, '');
   const shim = script(`(${installShim})(${json(datos)},${json(AHORA)});\n` +
     `const smokeBackend = (() => { const { Auth, getSheetData, Utilities, Logger, getSupabaseRealtimeConfig_ } = (${backendStubs})();\n` +
-    config + '\n' + engine + '\n' + code + '\nreturn { cargarDatos, getEstadisticas }; })();\n' +
+    config + '\n' + engine + '\n' + code + '\nreturn { cargarDatos, getEstadisticas, getEstadisticasLote }; })();\n' +
     `(${installRunner})(smokeBackend);`);
   html = html.replace('<head>', '<head>' + shim);
   const bodyEnd = html.lastIndexOf('</body>');
@@ -294,8 +324,15 @@ async function main() {
       for (const error of result.errores) console.log('  ERROR ' + role + ': ' + error);
       for (const call of result.llamadas) console.log('  LLAMADA ' + role + ': ' + JSON.stringify(call));
       await access(screenshot);
-      await captureMobile(browser, url.href, output, role, screenshot);
-      console.log('Captura ' + role + ': ' + screenshot);
+      const mobileViews = role === 'admin'
+        ? ['equipos', 'equipo-detalle', 'jugador-detalle', 'informes']
+        : ['perfil-jugador', 'mis-stats', 'mi-equipo'];
+      for (const view of mobileViews) {
+        url.searchParams.set('final', view);
+        const mobileScreenshot = join(output, role + '-' + view + '-412x915.png');
+        await captureMobile(browser, url.href, output, role + '-' + view, mobileScreenshot);
+        console.log('Captura ' + role + '/' + view + ' (412x915): ' + mobileScreenshot);
+      }
     } catch (error) {
       check(role + ': ejecución del harness', false);
       console.log('  ERROR ' + role + ': ' + error.message);
@@ -303,6 +340,10 @@ async function main() {
   }
   const admin = results.admin?.textos || {};
   const player = results.jugador?.textos || {};
+  for (const view of ['equipo-detalle', 'informes']) {
+    check(view + ': estadísticas inmediatas sin skeleton tras bootstrap/precarga', results.admin?.inmediatas?.[view]);
+  }
+  check('informes: botón de equipo navega al detalle', results.admin?.navegacionEquipo);
   check('informes: asistencia del club ' + expectedClub + '%', (admin.informes || '').includes(expectedClub + '%'));
   check('equipo-detalle: asistencia ' + expectedTeam + '%', (admin['equipo-detalle'] || '').includes(expectedTeam + '%'));
   check('equipo-detalle: Cancelada', /Cancelada/i.test(admin['equipo-detalle'] || ''));

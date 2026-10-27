@@ -1,12 +1,18 @@
 /** Cálculos puros de asistencia. Todas las fechas son hora local, sin conversión de zona. */
 const Estadisticas = {
-  consultar(datos, consulta, contexto, ahora) {
+  /** `indices` (Map opcional) reutiliza el indexado entre consultas del mismo lote con igual filtro. */
+  consultar(datos, consulta, contexto, ahora, indices) {
     consulta = consulta || {};
     contexto = contexto || {};
     const filtro = this.normalizarFiltro_(datos.temporadas || [], consulta, ahora);
     const entidad = contexto.rol === 'jugador' ? 'propio' : (consulta.entidad || 'resumen');
     if (entidad === 'club' && contexto.rol !== 'admin') throw new Error('Consulta de estadísticas no permitida.');
-    const x = this.indexar_(datos, filtro, ahora);
+    const claveIndice = [filtro.temporadaId, filtro.periodo, filtro.desde, filtro.hasta].join('|');
+    let x = indices && indices.get(claveIndice);
+    if (!x) {
+      x = this.indexar_(datos, filtro, ahora);
+      if (indices) indices.set(claveIndice, x);
+    }
     let resultado;
     switch (entidad) {
       case 'resumen': resultado = this.resumen_(x, contexto); break;
@@ -28,14 +34,22 @@ const Estadisticas = {
 
   verdadero_(valor) { return valor === true || valor === 'TRUE'; },
   fechaMs_(fecha) {
-    const p = String(fecha).split(/[- T:]/).map(Number);
-    return Date.UTC(p[0], p[1] - 1, p[2], p[3] || 0, p[4] || 0, p[5] || 0);
+    const f = String(fecha);
+    return Date.UTC(+f.slice(0, 4), +f.slice(5, 7) - 1, +f.slice(8, 10), +f.slice(11, 13) || 0, +f.slice(14, 16) || 0, +f.slice(17, 19) || 0);
   },
   desplazar_(fecha, dias) { return new Date(this.fechaMs_(fecha) + dias * 86400000).toISOString().slice(0, 10); },
-  semana_(fecha) {
-    const dia = new Date(this.fechaMs_(fecha)).getUTCDay() || 7;
-    return this.desplazar_(fecha, 1 - dia);
+  // Memo por fecha: se consulta una vez por fila en series semanales y por día.
+  calendario_: new Map(),
+  diaSemana_(fecha) {
+    let c = this.calendario_.get(fecha);
+    if (!c) {
+      const dia = new Date(this.fechaMs_(fecha)).getUTCDay() || 7;
+      c = { dia, semana: this.desplazar_(fecha, 1 - dia) };
+      this.calendario_.set(fecha, c);
+    }
+    return c;
   },
+  semana_(fecha) { return this.diaSemana_(fecha).semana; },
   normalizarFiltro_(temporadas, consulta, ahora) {
     let seleccionada = null;
     let reciente = null;
@@ -130,7 +144,8 @@ const Estadisticas = {
       const estado = String(fila.Estado || '').trim().toUpperCase();
       if (this.verdadero_(fila.Excluido) || !['P', 'A', 'R'].includes(estado)) continue;
       const rel = this.relacion_(x.relacionesJugador, fila.ID_Jugador, s.ID_Equipo, s.Fecha);
-      const registro = { fila, s, estado, tipo: rel ? rel.Tipo : (this.verdadero_(fila.EsInvitado) ? 'Invitado' : null) };
+      const registro = { fila, s, estado, clave: s.Fecha + ' ' + (s.HoraInicio || ''),
+        tipo: rel ? rel.Tipo : (this.verdadero_(fila.EsInvitado) ? 'Invitado' : null) };
       if (x.sesionesRecientes.has(s.ID)) {
         this.agregarIndice_(x.recientesJugador, fila.ID_Jugador, registro);
         this.agregarIndice_(x.recientesJugadorEquipo, fila.ID_Jugador + ':' + s.ID_Equipo, registro);
@@ -182,7 +197,7 @@ const Estadisticas = {
     const fin = s.HoraFin.split(':').map(Number);
     return Math.max(0, (fin[0] - inicio[0]) * 60 + fin[1] - inicio[1]);
   },
-  ordenarFilas_(filas) { return filas.slice().sort((a, b) => (b.s.Fecha + (b.s.HoraInicio || '')).localeCompare(a.s.Fecha + (a.s.HoraInicio || ''))); },
+  ordenarFilas_(filas) { return filas.slice().sort((a, b) => a.clave < b.clave ? 1 : a.clave > b.clave ? -1 : 0); },
   metricas_(x, filas, filasRecientes) {
     const conteo = this.conteo_(filas);
     const porcentajes = this.porcentajes_(conteo);
@@ -218,8 +233,9 @@ const Estadisticas = {
     const semanas = new Map();
     const dias = new Map();
     for (const r of filas) {
-      this.agregarIndice_(semanas, this.semana_(r.s.Fecha), r);
-      this.agregarIndice_(dias, new Date(this.fechaMs_(r.s.Fecha)).getUTCDay() || 7, r);
+      const c = this.diaSemana_(r.s.Fecha);
+      this.agregarIndice_(semanas, c.semana, r);
+      this.agregarIndice_(dias, c.dia, r);
     }
     const serieSemanal = [];
     for (const [semana, registros] of semanas) {

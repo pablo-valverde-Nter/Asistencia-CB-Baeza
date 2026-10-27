@@ -77,6 +77,7 @@ function cargarDatos(auth) {
 
   try {
     Logger.log(`[cargarDatos:${traceId}] inicio tipo=${auth && auth.tipo} id=${auth && (auth.email || auth.usuario)}`);
+    precargarTablasSeguro_(traceId);
     const contexto = Auth.getContextoUsuario(auth);
     if (!contexto.success) {
       Logger.log(`[cargarDatos:${traceId}] fallo contexto: ${contexto.error}`);
@@ -226,6 +227,43 @@ function ahoraMadrid_() { return Utilities.formatDate(new Date(), 'Europe/Madrid
 
 function contextoEstadisticas_(contexto) { return { rol: contexto.rol, jugadorId: contexto.jugador ? contexto.jugador.ID : null }; }
 
+/** Una sola ronda paralela a Supabase; Auth y las lecturas posteriores salen de la caché de la ejecución. */
+function precargarTablasSeguro_(traceId) {
+  try {
+    precargarTablas_(Object.values(CONFIG.SHEETS));
+  } catch (e) {
+    Logger.log(`[precarga:${traceId || ''}] ${e.message}`);
+  }
+}
+
+function consultarEstadisticas_(auth, consultas) {
+  precargarTablasSeguro_();
+  const contexto = Auth.getContextoUsuario(auth);
+  if (!contexto.success) throw new Error(contexto.error);
+  const datos = {
+    temporadas:          getSheetData(CONFIG.SHEETS.TEMPORADAS),
+    equipos:             getSheetData(CONFIG.SHEETS.EQUIPOS),
+    horarios:            getSheetData(CONFIG.SHEETS.HORARIOS),
+    jugadores:           getSheetData(CONFIG.SHEETS.JUGADORES),
+    jugadoresEquipos:    getSheetData(CONFIG.SHEETS.JUGADORES_EQUIPOS),
+    entrenadores:        getSheetData(CONFIG.SHEETS.ENTRENADORES),
+    entrenadoresEquipos: getSheetData(CONFIG.SHEETS.ENTRENADORES_EQUIPOS),
+    sesiones:            getSheetData(CONFIG.SHEETS.SESIONES),
+    asistJugadores:      getSheetData(CONFIG.SHEETS.ASIST_JUGADORES),
+    asistEntrenadores:   getSheetData(CONFIG.SHEETS.ASIST_ENTRENADORES),
+  };
+  const ctx = contextoEstadisticas_(contexto);
+  const ahora = ahoraMadrid_();
+  const indices = new Map();
+  return consultas.map(consulta => {
+    try {
+      return { success: true, estadisticas: Estadisticas.consultar(datos, consulta || {}, ctx, ahora, indices) };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+}
+
 /**
  * Estadísticas agregadas para otro periodo o un detalle (equipo, jugador, entrenador, club).
  * @param {Object} auth
@@ -234,24 +272,24 @@ function contextoEstadisticas_(contexto) { return { rol: contexto.rol, jugadorId
  */
 function getEstadisticas(auth, consulta) {
   try {
-    const contexto = Auth.getContextoUsuario(auth);
-    if (!contexto.success) return { success: false, error: contexto.error };
-    const datos = {
-      temporadas:          getSheetData(CONFIG.SHEETS.TEMPORADAS),
-      equipos:             getSheetData(CONFIG.SHEETS.EQUIPOS),
-      horarios:            getSheetData(CONFIG.SHEETS.HORARIOS),
-      jugadores:           getSheetData(CONFIG.SHEETS.JUGADORES),
-      jugadoresEquipos:    getSheetData(CONFIG.SHEETS.JUGADORES_EQUIPOS),
-      entrenadores:        getSheetData(CONFIG.SHEETS.ENTRENADORES),
-      entrenadoresEquipos: getSheetData(CONFIG.SHEETS.ENTRENADORES_EQUIPOS),
-      sesiones:            getSheetData(CONFIG.SHEETS.SESIONES),
-      asistJugadores:      getSheetData(CONFIG.SHEETS.ASIST_JUGADORES),
-      asistEntrenadores:   getSheetData(CONFIG.SHEETS.ASIST_ENTRENADORES),
-    };
-    return {
-      success: true,
-      estadisticas: Estadisticas.consultar(datos, consulta || {}, contextoEstadisticas_(contexto), ahoraMadrid_()),
-    };
+    return consultarEstadisticas_(auth, [consulta])[0];
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Varias consultas con una sola lectura de datos (precarga de detalles en el cliente).
+ * @param {Object} auth
+ * @param {Array<Object>} consultas máximo 60
+ * @returns {{success:boolean, resultados?:Array<Object>, error?:string}}
+ */
+function getEstadisticasLote(auth, consultas) {
+  try {
+    if (!Array.isArray(consultas) || !consultas.length || consultas.length > 60) {
+      throw new Error('Lote de estadísticas no válido.');
+    }
+    return { success: true, resultados: consultarEstadisticas_(auth, consultas) };
   } catch (e) {
     return { success: false, error: e.message };
   }

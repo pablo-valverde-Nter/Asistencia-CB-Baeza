@@ -76,3 +76,35 @@ test('la URL con barra final o espacios mantiene la misma identidad de proyecto'
   vm.runInContext("supabaseRequest_('Equipos', 'get', '')", context);
   assert.equal(requests[0].url, `${urls.DEV}/rest/v1/Equipos`);
 });
+
+test('la precarga lee en paralelo, sirve lecturas repetidas de memoria y una escritura la invalida', () => {
+  const requests = [];
+  const parallel = [];
+  const table = { Equipos: [{ ID: 'e1', Nombre: 'A' }, { ID: 'e2', Nombre: 'B' }], Sesiones: [{ ID: 's1', ID_Equipo: 'e1' }] };
+  const respond = url => {
+    const name = url.split('/rest/v1/')[1].split('?')[0];
+    return { getResponseCode: () => 200, getContentText: () => JSON.stringify(url.includes('offset=0') ? table[name] || [] : []) };
+  };
+  const context = vm.createContext({
+    SUPABASE_ENV: 'DEV', SUPABASE_EXPECTED_URL: urls.DEV,
+    SCHEMA: { Equipos: ['ID', 'Nombre'], Sesiones: ['ID', 'ID_Equipo'] },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: name => ({
+      SUPABASE_DEV_URL: urls.DEV, SUPABASE_DEV_SECRET_KEY: 'sb_secret_dummy_dev' })[name] }) },
+    UrlFetchApp: {
+      fetch(url, options) { requests.push({ url, method: options.method }); return respond(url); },
+      fetchAll(list) { parallel.push(list.map(r => r.url)); return list.map(r => respond(r.url)); },
+    },
+  });
+  vm.runInContext(source, context);
+  vm.runInContext("precargarTablas_(['Equipos', 'Sesiones'])", context);
+  assert.equal(parallel.length, 1);
+  assert.equal(parallel[0].length, 2);
+  assert.equal(vm.runInContext("getSheetData('Equipos').length", context), 2);
+  assert.equal(vm.runInContext("findWhere('Sesiones', 'ID_Equipo', 'e1').length", context), 1);
+  assert.equal(vm.runInContext("findById('Equipos', 'e2').Nombre", context), 'B');
+  assert.equal(requests.length, 0);
+
+  vm.runInContext("updateRow('Equipos', 'e1', { Nombre: 'C' })", context);
+  vm.runInContext("getSheetData('Equipos')", context);
+  assert.deepEqual(requests.map(r => r.method), ['patch', 'get']);
+});

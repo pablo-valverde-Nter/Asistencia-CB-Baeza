@@ -11,8 +11,12 @@ const SUPABASE_BOOLEAN_FIELDS = new Set([
   'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2',
 ]);
 const SUPABASE_INTEGER_FIELDS = new Set(['DiaSemana', 'MinutosRetraso']);
+// Caché por ejecución: cada llamada de google.script.run arranca vacía y cualquier escritura la vacía.
+const SUPABASE_TABLE_CACHE_ = new Map();
+let SUPABASE_CONFIG_CACHE_ = null;
 
 function getSupabaseConfig_() {
+  if (SUPABASE_CONFIG_CACHE_) return SUPABASE_CONFIG_CACHE_;
   const env = String(SUPABASE_ENV || '').trim().toUpperCase();
   if (env !== 'DEV' && env !== 'PRO') {
     throw new Error('Versión sin preparar: publica con deploy:dev o deploy:pro.');
@@ -34,12 +38,13 @@ function getSupabaseConfig_() {
   if (url !== expectedUrl) {
     throw new Error(`La URL de ${urlProperty} no coincide con esta versión ${env}. Conexión bloqueada.`);
   }
-  return {
+  SUPABASE_CONFIG_CACHE_ = {
     env: env,
     url: url,
     key: key,
     realtimeKey: properties.getProperty(realtimeKeyProperty) || '',
   };
+  return SUPABASE_CONFIG_CACHE_;
 }
 
 function getSupabaseRealtimeConfig_() {
@@ -51,7 +56,7 @@ function assertSupabaseTable_(tableName) {
   if (!SCHEMA[tableName]) throw new Error(`Tabla no permitida: ${tableName}`);
 }
 
-function supabaseRequest_(tableName, method, query, payload, prefer, range) {
+function supabaseRequestParams_(tableName, method, query, payload, prefer, range) {
   assertSupabaseTable_(tableName);
   const config = getSupabaseConfig_();
   const queryString = query ? `?${query}` : '';
@@ -75,11 +80,10 @@ function supabaseRequest_(tableName, method, query, payload, prefer, range) {
     muteHttpExceptions: true,
   };
   if (payload !== undefined) options.payload = JSON.stringify(payload);
+  return { url: `${config.url}/rest/v1/${encodeURIComponent(tableName)}${queryString}`, options: options };
+}
 
-  const response = UrlFetchApp.fetch(
-    `${config.url}/rest/v1/${encodeURIComponent(tableName)}${queryString}`,
-    options
-  );
+function parseSupabaseResponse_(response) {
   const status = response.getResponseCode();
   const body = response.getContentText();
   if (status < 200 || status >= 300) {
@@ -96,6 +100,43 @@ function supabaseRequest_(tableName, method, query, payload, prefer, range) {
   return JSON.parse(body);
 }
 
+function supabaseRequest_(tableName, method, query, payload, prefer, range) {
+  const request = supabaseRequestParams_(tableName, method, query, payload, prefer, range);
+  if (method !== 'get') SUPABASE_TABLE_CACHE_.clear();
+  return parseSupabaseResponse_(UrlFetchApp.fetch(request.url, request.options));
+}
+
+function supabasePageParams_(sheetName, offset) {
+  return supabaseRequestParams_(sheetName, 'get', `select=*&limit=${SUPABASE_BATCH_SIZE}&offset=${offset}`,
+    undefined, undefined, `${offset}-${offset + SUPABASE_BATCH_SIZE - 1}`);
+}
+
+/**
+ * Lee en paralelo la primera página de varias tablas y las deja en la caché de la ejecución.
+ * Las tablas que fallen se omiten: getSheetData las vuelve a pedir y devuelve su error concreto.
+ */
+function precargarTablas_(sheetNames) {
+  const pendientes = sheetNames.filter(name => !SUPABASE_TABLE_CACHE_.has(name));
+  if (!pendientes.length) return;
+  const requests = pendientes.map(name => {
+    const request = supabasePageParams_(name, 0);
+    return Object.assign({ url: request.url }, request.options);
+  });
+  const responses = UrlFetchApp.fetchAll(requests);
+  pendientes.forEach((name, i) => {
+    try {
+      const rows = parseSupabaseResponse_(responses[i]);
+      for (let offset = SUPABASE_BATCH_SIZE; rows.length === offset; offset += SUPABASE_BATCH_SIZE) {
+        const request = supabasePageParams_(name, offset);
+        rows.push(...parseSupabaseResponse_(UrlFetchApp.fetch(request.url, request.options)));
+      }
+      SUPABASE_TABLE_CACHE_.set(name, rows);
+    } catch (ignored) {
+      // getSheetData repite la lectura de esta tabla y propaga el error.
+    }
+  });
+}
+
 function supabaseFilter_(field, value) {
   return `${encodeURIComponent(field)}=eq.${encodeURIComponent(String(value))}`;
 }
@@ -108,23 +149,23 @@ function normalizeSupabaseValue_(field, value) {
 
 function getSheetData(sheetName) {
   assertSupabaseTable_(sheetName);
-  const rows = [];
-  for (let offset = 0; ; offset += SUPABASE_BATCH_SIZE) {
-    const page = supabaseRequest_(
-      sheetName,
-      'get',
-      `select=*&limit=${SUPABASE_BATCH_SIZE}&offset=${offset}`,
-      undefined,
-      undefined,
-      `${offset}-${offset + SUPABASE_BATCH_SIZE - 1}`
-    );
-    rows.push(...page);
-    if (page.length < SUPABASE_BATCH_SIZE) break;
+  if (!SUPABASE_TABLE_CACHE_.has(sheetName)) {
+    const rows = [];
+    for (let offset = 0; ; offset += SUPABASE_BATCH_SIZE) {
+      const request = supabasePageParams_(sheetName, offset);
+      const page = parseSupabaseResponse_(UrlFetchApp.fetch(request.url, request.options));
+      rows.push(...page);
+      if (page.length < SUPABASE_BATCH_SIZE) break;
+    }
+    SUPABASE_TABLE_CACHE_.set(sheetName, rows);
   }
-  return rows;
+  return SUPABASE_TABLE_CACHE_.get(sheetName).slice();
 }
 
 function findById(sheetName, id) {
+  if (SUPABASE_TABLE_CACHE_.has(sheetName)) {
+    return SUPABASE_TABLE_CACHE_.get(sheetName).find(row => String(row.ID) === String(id)) || null;
+  }
   const rows = supabaseRequest_(sheetName, 'get', `${supabaseFilter_('ID', id)}&select=*&limit=1`);
   return rows[0] || null;
 }
@@ -132,6 +173,9 @@ function findById(sheetName, id) {
 function findWhere(sheetName, field, value) {
   assertSupabaseTable_(sheetName);
   if (!SCHEMA[sheetName].includes(field)) throw new Error(`Campo no permitido: ${field}`);
+  if (SUPABASE_TABLE_CACHE_.has(sheetName)) {
+    return SUPABASE_TABLE_CACHE_.get(sheetName).filter(row => String(row[field]) === String(value));
+  }
   return supabaseRequest_(sheetName, 'get', `${supabaseFilter_(field, value)}&select=*`);
 }
 

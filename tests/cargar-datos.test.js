@@ -65,4 +65,9 @@ test('getEstadisticas aplica permisos del motor', () => {
   const ok = ctx.getEstadisticas({}, { entidad: 'equipo', id: datos.equipos[0].ID });
   assert.equal(ok.success, true);
   assert.equal(ok.estadisticas.entidad, 'equipo');
+  const lote = JSON.parse(JSON.stringify(ctx.getEstadisticasLote({}, [
+    { entidad: 'equipo', id: datos.equipos[0].ID }, { entidad: 'club' }, { entidad: 'jugador', id: 'nadie' }])));
+  assert.deepEqual(lote.resultados.map(r => r.success ? r.estadisticas.entidad : r.error),
+    ['equipo', 'Consulta de estadísticas no permitida.', 'Jugador no encontrado.']);
+  assert.deepEqual(lote.resultados[0].estadisticas, JSON.parse(JSON.stringify(ok.estadisticas)));
 });
