@@ -347,6 +347,8 @@ input, select, textarea { font-family: inherit; }
 .eq-home-next { color:var(--texto-sec); font-size:.66rem; padding:0 0 4px; }
 .eq-home-next strong { color:var(--texto); font-weight:650; }
 .eq-pending-badge { display:inline-grid; place-items:center; width:17px; height:17px; flex:none; border-radius:50%; background:var(--ambar); color:var(--ambar); font-size:.72rem; font-weight:900; }
+.eq-notifications { position:relative; display:grid; place-items:center; flex:0 0 42px; width:42px; height:42px; border:1px solid var(--on-accent-wash); border-radius:10px; background:var(--on-accent-wash); color:var(--on-accent); font-size:1.35rem; }
+.eq-notifications-count { position:absolute; top:-6px; right:-6px; display:grid; place-items:center; min-width:19px; height:19px; padding:0 5px; border:2px solid var(--brand-bg); border-radius:10px; background:var(--stats-gold); color:var(--chart-ink); font-size:.62rem; font-weight:900; line-height:1; }
 .eq-big-btns {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
   padding: 10px 14px 14px;
@@ -704,6 +706,13 @@ input, select, textarea { font-family: inherit; }
   display: flex; align-items: center; justify-content: center;
   font-size: .78rem; font-weight: 700; flex-shrink: 0;
   transition: background .15s, color .15s;
+}
+.jug-dorsal.has-avatar { position: relative; padding: 3px; }
+.jug-dorsal.has-avatar .club-avatar { box-shadow: 0 0 0 2px var(--blanco); }
+.jug-dorsal-num {
+  position: absolute; right: -4px; bottom: -3px; min-width: 18px; height: 18px; padding: 0 4px;
+  border-radius: 9px; background: var(--blanco); color: var(--texto); border: 1px solid var(--borde);
+  font-size: .62rem; font-weight: 800; line-height: 16px; text-align: center;
 }
 .jug-nombre { font-size: .88rem; font-weight: 600; }
 .jug-tipo   { font-size: .7rem; color: var(--texto-sec); }
@@ -1905,6 +1914,7 @@ input, select, textarea { font-family: inherit; }
 .account-profile-hero { text-align:center; padding:10px 0 24px; }
 .account-profile-hero .club-avatar { box-shadow:0 0 0 5px var(--blanco),0 0 0 6px var(--borde); }
 .account-profile-hero h2 { font-size:1.28rem; margin:16px 0 5px; }
+.account-hero-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
 .account-profile-hero p { color:var(--texto-sec); font-size:.82rem; margin:0 0 16px; }
 .account-card { padding:20px; margin:0 0 16px; background:var(--blanco); border:1px solid var(--borde); border-radius:18px; box-shadow:0 3px 14px rgba(35,15,53,.035); }
 .account-card h2 { font-size:1rem; margin:0 0 18px; color:var(--texto); }
@@ -1933,8 +1943,7 @@ input, select, textarea { font-family: inherit; }
 .avatar-choice:hover { background:var(--morado-s); }
 .avatar-upload { cursor:pointer; display:flex; justify-content:center; }
 .avatar-upload:has(+ input:focus-visible) { outline:2px solid var(--morado); outline-offset:3px; }
-.policy-nav { display:flex; gap:16px; margin:0 0 20px; flex-wrap:wrap; }
-.policy-nav a,.policy-text a { color:var(--morado); font-size:.8rem; }
+.policy-text a { color:var(--morado); font-size:.8rem; }
 .policy-text { scroll-margin-top:calc(var(--hdr-h) + 16px); }
 .policy-text h3 { font-size:.86rem; margin:22px 0 8px; }
 .policy-text p,.policy-text li { font-size:.8rem; line-height:1.8; }
@@ -2027,4 +2036,45 @@ input::placeholder,textarea::placeholder { color:var(--texto-sec); opacity:1; }
 
 .account-menu-icon { width:20px; height:20px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; color:var(--morado); }
 body:has(#modal-overlay.open .avatar-picker) #toast-container { top:calc(var(--hdr-h) + 12px); bottom:auto; }
+.person-inline { display:inline-flex; align-items:center; gap:9px; text-align:left; vertical-align:middle; white-space:normal; }
+p.person-inline { display:flex; margin:9px 0; }
+.person-inline .club-avatar,.list-item > .club-avatar,.sr-item > .club-avatar,.asig-item > .club-avatar,.jug-card > .club-avatar,.ent-row > .club-avatar,.ent-ro-mini > .club-avatar,.jug-ro-mini > .club-avatar { flex-shrink:0; }
+.jug-card > .club-avatar { pointer-events:none; }
+.ent-row > .club-avatar { margin-right:8px; }
+.ent-row > .club-avatar + div { flex:1; min-width:0; }
+.ent-ro-mini { gap:8px; }
+.detalle-avatar:has(.club-avatar) { width:72px; height:72px; background:none; }
+.eq-perfil-avatar:has(.club-avatar),#perfil-jugador-avatar:has(.club-avatar) { width:80px; height:80px; background:none; }
+.ranking-row { gap:8px; }
+.ranking-podium-card > .club-avatar { margin:2px auto 6px; }
+.stats-table .person-inline { min-width:175px; padding:5px 8px; }
+.contact-missing-row .person-inline { background:none; padding:0; color:var(--texto); }
+.account-staff-family { min-width:0; margin:16px 0; padding:12px; border:1px solid var(--borde); border-radius:12px; }
+.account-staff-family legend { padding:0 6px; font-weight:600; }
+.account-staff-team { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:10px 0; border-bottom:1px solid var(--borde); }
+.account-staff-team + .btn-danger { margin-top:20px; }
+.detalle-settings .account-menu-icon { width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:1.8; }
+.account-settings-list { border:1px solid var(--borde); border-radius:18px; overflow:hidden; background:var(--blanco); }
+.account-settings-row { display:flex; align-items:center; gap:14px; padding:19px 16px; width:100%; min-height:86px; background:none; border:0; color:var(--texto); text-align:left; cursor:pointer; }
+.account-settings-row + .account-settings-row { border-top:1px solid var(--borde); }
+.account-settings-row:hover,.account-settings-row:focus-visible { background:var(--morado-s); }
+.account-settings-row:focus-visible { outline:2px solid var(--morado); outline-offset:-3px; }
+.account-settings-icon { display:flex; align-items:center; justify-content:center; width:42px; height:42px; flex-shrink:0; border-radius:12px; background:var(--morado-s); }
+.account-settings-copy { flex:1; min-width:0; }
+.account-settings-copy strong { display:block; font-size:.86rem; line-height:1.4; }
+.account-settings-copy > span { display:block; font-size:.73rem; line-height:1.5; color:var(--texto-sec); margin-top:4px; }
+.account-settings-chevron { color:var(--texto-sec); font-size:1.6rem; font-weight:400; }
+.account-summary { margin:0; }
+.account-summary-row { display:flex; justify-content:space-between; gap:16px; padding:11px 0; border-bottom:1px solid var(--borde); font-size:.8rem; line-height:1.5; }
+.account-summary-row:last-child { border:0; }
+.account-summary dt { color:var(--texto-sec); flex-shrink:0; }
+.account-summary dd { margin:0; text-align:right; overflow-wrap:anywhere; min-width:0; font-weight:600; }
+.recovery-destinations { border:0; padding:0; margin:0 0 20px; }
+.recovery-destination { display:flex; align-items:center; gap:12px; padding:16px 12px; border:1px solid var(--borde); border-radius:12px; margin-bottom:10px; cursor:pointer; }
+.recovery-destination:has(input:checked) { border-color:var(--morado); background:var(--morado-s); }
+.recovery-destination input { width:18px; height:18px; flex-shrink:0; accent-color:var(--morado); }
+.recovery-destination strong,.recovery-destination span span { display:block; font-size:.82rem; overflow-wrap:anywhere; }
+.recovery-destination span span { color:var(--texto-sec); margin-top:5px; }
+.recovery-code,.recovery-secret { font-size:1.3rem; letter-spacing:.2em; text-align:center; }
+.recovery-error { color:var(--rojo)!important; margin:12px 0 0!important; }
 </style>

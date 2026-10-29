@@ -22,9 +22,6 @@ const App = {
     formDias:          {},
     formEntOriginales: [],
     formJugOriginales: [],
-    // Form jugador / entrenador
-    formJugadorId:     null,
-    formEntrenadorId:  null,
     _volverAEquipoFormDespues: false,
     // Cache
     _todosJugadores:    [],
@@ -138,13 +135,15 @@ const App = {
 
     // Reemplaza las relaciones de un equipo en cache con el estado actual del formulario
     _setRelacionesEquipo(equipoId, jugadores, entrenadores) {
+      var relacionesEntrenadores = App.cache.entrenadoresEquipos;
       App.cache.jugadoresEquipos   = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
       App.cache.entrenadoresEquipos= App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
       jugadores.forEach(function(j) {
         App.cache.jugadoresEquipos.push({ ID: 'je_'+j.ID+'_'+equipoId, ID_Equipo: equipoId, ID_Jugador: j.ID, Tipo: j.Tipo, Activo: true });
       });
       entrenadores.forEach(function(e) {
-        App.cache.entrenadoresEquipos.push({ ID: 'ee_'+e.ID+'_'+equipoId, ID_Equipo: equipoId, ID_Entrenador: e.ID, Activo: true });
+        var relacion = relacionesEntrenadores.find(function(r) { return r.ID_Equipo === equipoId && r.ID_Entrenador === e.ID && r.Activo !== false && r.Activo !== 'FALSE'; });
+        App.cache.entrenadoresEquipos.push(Object.assign({},relacion || {},{ ID: relacion ? relacion.ID : 'ee_'+e.ID+'_'+equipoId, ID_Equipo: equipoId, ID_Entrenador: e.ID, TipoRol: relacion && relacion.TipoRol || 'Entrenador', Activo: true }));
       });
     },
   },
@@ -882,6 +881,8 @@ const App = {
     }
     if (nestedTeamForm) App.state._equipoFormDirty = App.state._formIsDirty;
     if (App.state.currentView === 'sesion' && view !== 'sesion') App.views.sesion._stopAutoSave();
+    if (App.state.currentView === 'recuperar-acceso' && view !== 'recuperar-acceso') App.views['recuperar-acceso'].limpiar();
+    if (App.account && ['login','equipos','gestion','perfil-jugador','mis-entrenamientos'].includes(view)) App.account.target = null;
     if (push === undefined) push = true;
     if (view === 'login') {
       App.state.viewHistory = [];
@@ -923,9 +924,9 @@ const App = {
       'equipos-admin':     'Equipos',
       'equipo-form':       App.state.formEquipoId ? 'Editar equipo' : 'Nuevo equipo',
       'jugadores-admin':   'Jugadores',
-      'jugador-form':      App.state.formJugadorId ? 'Editar jugador' : 'Nuevo jugador',
+      'jugador-form':      'Nuevo jugador',
       'entrenadores-admin':'Entrenadores',
-      'entrenador-form':   App.state.formEntrenadorId ? 'Editar entrenador' : 'Nuevo entrenador',
+      'entrenador-form':   'Nuevo entrenador',
       'historial-equipo':  'Historial',
       'jugador-detalle':   'Perfil',
       'entrenador-detalle':'Perfil',
@@ -938,8 +939,14 @@ const App = {
       'informes':               'Informes',
       'perfil-usuario':          'Perfil',
       'ajustes':                 'Ajustes',
+      'ajustes-idioma':          'Idioma',
+      'ajustes-apariencia':      'Apariencia',
       'seguridad':               'Seguridad',
-      'politicas':               'Privacidad y cookies',
+      'perfil-editar':           'Editar perfil',
+      'seguridad-opcion':        'Seguridad',
+      'recuperar-acceso':        'Recuperar acceso',
+      'politica-privacidad':     'Política de privacidad',
+      'politica-cookies':        'Política de cookies',
     };
     document.getElementById('header-title').textContent = titulos[view] || 'CB Baeza';
 
@@ -983,7 +990,7 @@ const App = {
   },
 
   goBack() {
-    var _dirtyViews = ['equipo-form', 'jugador-form', 'entrenador-form', 'sesion', 'perfil-usuario', 'seguridad'];
+    var _dirtyViews = ['equipo-form', 'jugador-form', 'entrenador-form', 'sesion', 'perfil-editar', 'seguridad-opcion'];
     if (_dirtyViews.indexOf(App.state.currentView) >= 0 && App.state._formIsDirty) {
       App.openModal('Cambios sin guardar',
         '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
@@ -1018,8 +1025,8 @@ const App = {
 
   editarDetalle() {
     var v = App.state.currentView;
-    if      (v === 'jugador-detalle')    App.views['jugador-form'].cargar(App.state.detalleJugadorId);
-    else if (v === 'entrenador-detalle') App.views['entrenador-form'].cargar(App.state.detalleEntrenadorId);
+    if      (v === 'jugador-detalle')    App.account.open('jugador', App.state.detalleJugadorId, 'perfil-usuario');
+    else if (v === 'entrenador-detalle') App.account.open('entrenador', App.state.detalleEntrenadorId, 'perfil-usuario');
     else if (v === 'equipo-detalle')     App.views['equipo-form'].cargar(App.state.detalleEquipoId);
   },
 
@@ -1028,8 +1035,8 @@ const App = {
       // Para equipo nuevo: resetear estado ANTES de navegar para que render()
       // no mezcle datos de una edición anterior.
       'equipos-admin':      function() { App.state.formEquipoId = null; App.views['equipo-form']._reset(); App.navigate('equipo-form'); },
-      'jugadores-admin':    function() { App.state.formJugadorId = null; App.navigate('jugador-form'); },
-      'entrenadores-admin': function() { App.state.formEntrenadorId = null; App.navigate('entrenador-form'); },
+      'jugadores-admin':    function() { App.navigate('jugador-form'); },
+      'entrenadores-admin': function() { App.navigate('entrenador-form'); },
     };
     if (acciones[App.state.currentView]) acciones[App.state.currentView]();
   },
@@ -1062,17 +1069,16 @@ const App = {
         var usuario = App.state.usuario;
         var perfilEl = document.getElementById('equipos-perfil');
         if (perfilEl) {
-          var ini = '', nombrePerfil = '', emailPerfil = '';
+          var nombrePerfil = '', emailPerfil = '';
           if (usuario) {
-            ini = (usuario.Nombre ? usuario.Nombre[0] : '') + (usuario.Apellidos ? usuario.Apellidos[0] : '');
             nombrePerfil = usuario.Nombre + ' ' + usuario.Apellidos;
             emailPerfil = usuario.Email || '';
           } else if (App.state.esAdmin) {
-            ini = 'A'; nombrePerfil = 'Administrador';
+            nombrePerfil = 'Administrador';
           }
           var rolLabel = App.state.esAdmin ? 'Administrador' : 'Entrenador';
           perfilEl.innerHTML = '<div class="equipos-perfil-bloque">' +
-            '<div class="eq-perfil-avatar">' + (ini || '?') + '</div>' +
+            '<div class="eq-perfil-avatar">' + App.avatarHtml(usuario && usuario.FotoURL,nombrePerfil,80) + '</div>' +
             '<div class="eq-perfil-nombre">' + (nombrePerfil || '') + '</div>' +
             (emailPerfil ? '<div class="eq-perfil-email">' + emailPerfil + '</div>' : '') +
             '<div class="eq-perfil-rol">' + rolLabel + '</div>' +
@@ -1111,8 +1117,10 @@ const App = {
           var visorHtml = esVisor ? '<span class="chip-visor">&#x1F441; Visor</span>' : '';
           var eqId = eq.ID;
           var eqNombre = _esc(eq.Nombre);
+          var unread = esVisor ? 0 : App.notifications.unreadCount(eq.ID);
+          var notificationHtml = esVisor ? '' : '<button type="button" class="eq-notifications" aria-label="Notificaciones de ' + eqNombre + (unread ? ': ' + unread + ' nuevas' : '') + '" title="Notificaciones" onclick="App.notifications.openInbox(\'' + eqId + '\')"><span aria-hidden="true">&#x1F4EC;</span>' + (unread ? '<span class="eq-notifications-count">' + unread + '</span>' : '') + '</button>';
           return '<article class="equipo-card-big">' +
-            '<div class="eq-big-hdr"><div class="eq-home-title"><span class="eq-home-eyebrow">Tu equipo</span><h2 class="eq-nombre">' + _statsTexto(eq.Nombre) + '</h2><span class="eq-meta">' + _statsTexto(eq.Categoria) + ' · ' + _statsTexto(eq.Modalidad) + '</span></div>' + visorHtml + '</div>' +
+            '<div class="eq-big-hdr"><div class="eq-home-title"><span class="eq-home-eyebrow">Tu equipo</span><h2 class="eq-nombre">' + _statsTexto(eq.Nombre) + '</h2><span class="eq-meta">' + _statsTexto(eq.Categoria) + ' · ' + _statsTexto(eq.Modalidad) + '</span></div>' + visorHtml + notificationHtml + '</div>' +
             '<div class="eq-big-stats"><div class="eq-home-metrics"><div><span class="eq-home-label">Asistencia ' + (resumenEquipo ? _statsTexto(App.stats.resumen.filtro.temporadaNombre) : '') + _statsInfoBoton('Asistencia') + '</span><strong class="eq-home-percentage">' + _pctTexto(asistencia) + '</strong></div><div class="eq-home-roster"><strong>' + plantilla + '</strong><span>en plantilla</span></div></div>' +
             '<div class="eq-home-bar" role="img" aria-label="Asistencia: ' + _pctTexto(asistencia) + '"><span style="width:' + (asistencia == null ? 0 : asistencia) + '%"></span></div>' +
             '<div class="eq-home-next">' + (proxima ? 'Próximo entreno · <strong>' + _statsTexto(_fmtFecha(proxima.Fecha).d + ' ' + _fmtFecha(proxima.Fecha).m) + ' · ' + _statsTexto(proxima.HoraInicio) + '</strong>' : 'Sin próximos entrenamientos') + '</div></div>' +
@@ -1427,7 +1435,7 @@ const App = {
               var preaviso = item.preaviso || '';
               var inv = item.esInvitado;
               return '<div class="jug-card ' + estado + (preaviso ? ' has-preaviso' : '') + '" data-id="' + j.ID + '" data-estado="' + estado + '" data-preaviso="' + preaviso + '" data-min="' + (item.minutosRetraso || '') + '" data-inv="' + inv + '" data-justif="' + (item.tieneJustif ? 'true' : 'false') + '" data-tipo-justif="' + _esc(item.tipoJustif || '') + '" onclick="App.views.sesion.toggleEstado(this)">' +
-                '<div class="jug-dorsal">' + (j.Dorsal || '-') + '</div>' +
+                '<div class="jug-dorsal has-avatar">' + App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,32) + (j.Dorsal ? '<span class="jug-dorsal-num">' + _esc(String(j.Dorsal)) + '</span>' : '') + '</div>' +
                 '<div style="flex:1;min-width:0"><div class="jug-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
                 '<div class="jug-tipo">' + (inv ? 'Invitado' : (j.Tipo || '')) + '</div>' +
                 (preaviso ? '<div class="preaviso-tag">Avisó: ' + (preaviso === 'A' ? 'Ausencia' : 'Retraso') + (item.motivoJustif ? ' · ' + _esc(item.motivoJustif) : '') + '</div>' : '') +
@@ -1442,7 +1450,7 @@ const App = {
           ? entrenadores.map(function(item) {
               var e = item.entrenador; var asistio = item.asistio; var inv = item.esInvitado;
               return '<div class="ent-row" data-id="' + e.ID + '" data-inv="' + inv + '">' +
-                '<div><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
+                App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,28) + '<div><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
                 '<div class="ent-sub">' + (inv ? 'Invitado' : '') + '</div></div>' +
                 '<label class="toggle-sw"><input type="checkbox" ' + (asistio ? 'checked' : '') + ' onchange="App.state._formIsDirty=true;App.state._sesionEditVersion++">' +
                 '<div class="toggle-sl"></div></label></div>';
@@ -1867,10 +1875,9 @@ const App = {
       },
 
       _htmlBuscadorItem: function(i) {
-        var ini = (i.Nombre ? i.Nombre[0] : '') + (i.Apellidos ? i.Apellidos[0] : '');
         var sub = i.Dorsal ? 'Dorsal ' + i.Dorsal : (i.Email || '');
         return '<div class="sr-item" onclick=\'App.views.sesion._seleccionar(' + JSON.stringify(i) + ')\'>' +
-          '<div class="sr-avatar">' + ini + '</div>' +
+          App.avatarHtml(i.FotoURL,i.Nombre + ' ' + i.Apellidos,36) +
           '<div><div class="sr-name">' + i.Apellidos + ', ' + i.Nombre + '</div>' +
           '<div class="sr-sub">' + sub + '</div></div></div>';
       },
@@ -1899,7 +1906,7 @@ const App = {
           div.dataset.estado = '';
           div.dataset.inv = String(!esDelEquipo);
           div.onclick = function() { App.views.sesion.toggleEstado(this); };
-          div.innerHTML = '<div class="jug-dorsal">' + (item.Dorsal || '-') + '</div>' +
+          div.innerHTML = '<div class="jug-dorsal has-avatar">' + App.avatarHtml(item.FotoURL,item.Nombre + ' ' + item.Apellidos,32) + (item.Dorsal ? '<span class="jug-dorsal-num">' + _esc(String(item.Dorsal)) + '</span>' : '') + '</div>' +
             '<div><div class="jug-nombre">' + item.Apellidos + ', ' + item.Nombre + '</div>' +
             '<div class="jug-tipo">' + (esDelEquipo ? 'Equipo' : 'Invitado') + '</div></div>' +
             App.views.sesion._htmlMinutos(null) + '<div class="estado-chip">?</div>';
@@ -1910,7 +1917,7 @@ const App = {
           div2.className = 'ent-row';
           div2.dataset.id = item.ID;
           div2.dataset.inv = String(!esDelEquipo);
-          div2.innerHTML = '<div><div class="ent-nombre">' + item.Apellidos + ', ' + item.Nombre + '</div>' +
+          div2.innerHTML = App.avatarHtml(item.FotoURL,item.Nombre + ' ' + item.Apellidos,28) + '<div><div class="ent-nombre">' + item.Apellidos + ', ' + item.Nombre + '</div>' +
             '<div class="ent-sub">' + (esDelEquipo ? 'Equipo' : 'Invitado') + '</div></div>' +
             '<label class="toggle-sw"><input type="checkbox" onchange="App.state._formIsDirty=true;App.state._sesionEditVersion++"><div class="toggle-sl"></div></label>';
           document.getElementById('sesion-ents').appendChild(div2);
@@ -2036,7 +2043,7 @@ const App = {
               var icon = item.estado === 'A' ? '&#x2717;' : '&#x23F0;';
               var label = item.estado === 'A' ? 'Ausente' : 'Retraso';
               return '<div class="list-item" style="padding:10px 16px">' +
-                '<div class="li-avatar" style="width:34px;height:34px;font-size:.75rem">' + (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '') + '</div>' +
+                App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,36) +
                 '<div style="flex:1"><div class="li-name" style="font-size:.86rem">' + j.Apellidos + ', ' + j.Nombre + '</div></div>' +
                 '<span style="font-size:.72rem;font-weight:700;color:' + (item.estado === 'A' ? 'var(--rojo)' : 'var(--naranja)') + '">' + icon + ' ' + label + '</span>' +
                 '</div>';
@@ -2070,7 +2077,7 @@ const App = {
               var chipClass = item.estado === 'A' ? 'A' : 'R';
               var tipoLabel = item.estado === 'A' ? 'Ausente' : 'Retraso';
               return '<div class="justif-ro-item" onclick="App.views[\'sesion-guardada\'].verJustif(' + idx + ')">' +
-                '<div class="jrm-avatar" style="background:var(--verde);color:var(--button-ink);flex-shrink:0">' + (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '') + '</div>' +
+                App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,28) +
                 '<div style="flex:1;min-width:0">' +
                   '<div class="li-name" style="font-size:.86rem">' + _esc(j.Apellidos) + ', ' + _esc(j.Nombre) + '</div>' +
                   (item.motivoJustif ? '<div style="font-size:.73rem;color:var(--texto-sec)">' + _esc(item.motivoJustif) + '</div>' : '') +
@@ -2099,7 +2106,7 @@ const App = {
               var justifBadge = (esIncidencia && item.tieneJustif)
                 ? '<span class="justif-badge" style="font-size:.6rem;padding:2px 5px"></span>' : '';
               return '<div class="jug-ro-mini ' + estado + '">' +
-                '<div class="jrm-avatar">' + (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '') + '</div>' +
+                App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,28) +
                 '<div class="jrm-info"><span class="jrm-nombre">' + j.Apellidos + ', ' + j.Nombre + '</span>' +
                 tagHtml + justifTag + '</div>' +
                 '<span class="ro-chip ' + chipClass + '">' + chipLabel + '</span>' +
@@ -2114,7 +2121,7 @@ const App = {
               var chipClass = asistio === null ? 'none' : asistio ? 'P' : 'A';
               var chipLabel = asistio === null ? '–' : asistio ? 'Asistió' : 'No asistió';
               return '<div class="ent-ro-mini">' +
-                '<div style="flex:1"><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
+                App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,28) + '<div style="flex:1"><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
                 (item.esInvitado ? '<div class="ent-sub">Invitado</div>' : '') + '</div>' +
                 '<span class="ro-chip ' + chipClass + '">' + chipLabel + '</span></div>';
             }).join('')
@@ -2339,7 +2346,7 @@ const App = {
       _renderListas: function() {
         document.getElementById('eq-ents-lista').innerHTML = App.state.formEntrenadores.length
           ? App.state.formEntrenadores.map(function(e) {
-              return '<div class="asig-item"><div class="asig-info">' +
+              return '<div class="asig-item">' + App.avatarHtml((App.cache.getEntrenadorById(e.ID) || {}).FotoURL,e.Nombre + ' ' + e.Apellidos,36) + '<div class="asig-info">' +
                 '<div class="asig-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div></div>' +
                 '<div class="btn-rm" onclick="App.views[\'equipo-form\']._quitarEnt(\'' + e.ID + '\')">&#x2715;</div></div>';
             }).join('')
@@ -2347,7 +2354,7 @@ const App = {
 
         document.getElementById('eq-jugs-lista').innerHTML = App.state.formJugadores.length
           ? App.state.formJugadores.map(function(j) {
-              return '<div class="asig-item"><div class="asig-info">' +
+              return '<div class="asig-item">' + App.avatarHtml((App.cache.getJugadorById(j.ID) || {}).FotoURL,j.Nombre + ' ' + j.Apellidos,36) + '<div class="asig-info">' +
                 '<div class="asig-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
                 '<div class="asig-sub">Dorsal ' + (j.Dorsal || '-') + ' &middot; ' + (j.Tipo || 'Principal') + '</div></div>' +
                 '<div class="btn-rm" onclick="App.views[\'equipo-form\']._quitarJug(\'' + j.ID + '\')">&#x2715;</div></div>';
@@ -2387,10 +2394,9 @@ const App = {
       },
 
       _htmlItem: function(i, tipo) {
-        var ini = (i.Nombre ? i.Nombre[0] : '') + (i.Apellidos ? i.Apellidos[0] : '');
         var sub = tipo === 'jug' ? 'Dorsal ' + (i.Dorsal || '-') : (i.Email || '');
         return '<div class="sr-item" onclick=\'App.views["equipo-form"]._elegir(' + JSON.stringify(i) + ',"' + tipo + '")\'>' +
-          '<div class="sr-avatar">' + ini + '</div>' +
+          App.avatarHtml(i.FotoURL,i.Nombre + ' ' + i.Apellidos,36) +
           '<div><div class="sr-name">' + i.Apellidos + ', ' + i.Nombre + '</div>' +
           '<div class="sr-sub">' + sub + '</div></div></div>';
       },
@@ -2445,10 +2451,8 @@ const App = {
         App.closeModal();
         App.state._volverAEquipoFormDespues = true;
         if (tipo === 'ent') {
-          App.state.formEntrenadorId = null;
           App.navigate('entrenador-form');
         } else {
-          App.state.formJugadorId = null;
           App.navigate('jugador-form');
         }
       },
@@ -2730,12 +2734,11 @@ const App = {
         var sinEquipo = lista.filter(function(j) { return !conEquipo.has(j.ID); });
 
         function htmlJugador(j) {
-          var ini = (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '');
           var st = statsJug[j.ID] || { base: 0, asistenciaPct: null, alertas: [] };
           var colorClass = _nivelClase(st.asistenciaPct);
           var statsHtml = '<div class="jug-list-stats"><span class="jls-big ' + colorClass + '">' + _pctTexto(st.asistenciaPct) + '</span><span class="jls-de">' + st.base + ' ses.</span>' + _statsInfoBoton('Asistencia') + '</div>';
           return '<div class="list-item" onclick="App.views[\'jugador-detalle\'].cargar(\'' + j.ID + '\')">' +
-            '<div class="li-avatar">' + ini + '</div>' +
+            App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,36) +
             '<div style="flex:1"><div class="li-name">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
             '<div class="li-sub">Dorsal ' + (j.Dorsal || '-') + '</div>' + ((st.alertas || []).length ? '<div class="jug-list-alertas">' + _htmlAlerta(st.alertas[0]) + '</div>' : '') + '</div>' +
             statsHtml +
@@ -2810,25 +2813,17 @@ const App = {
     // -- Form jugador ---------------------------------------
     'jugador-form': {
       render: function() {
-        var delZone = document.getElementById('jugador-delete-zone');
-        if (delZone) delZone.style.display = App.state.formJugadorId ? '' : 'none';
-        if (!App.state.formJugadorId && !App.state._jugadorDraftRestore) App.views['jugador-form']._reset();
+        if (!App.state._jugadorDraftRestore) App.views['jugador-form']._reset();
         App.state._jugadorDraftRestore = false;
         var setDirty = function() { App.state._formIsDirty = true; };
         ['jug-nombre','jug-apellidos','jug-dorsal','jug-fechanac','jug-tel','jug-email',
-         'jug-padre1-notificar','jug-padre2-notificar'].forEach(function(id) {
+         'jug-padre1-nombre','jug-padre1-apellidos','jug-padre1-tel','jug-padre1-email','jug-padre1-notificar',
+         'jug-padre2-nombre','jug-padre2-apellidos','jug-padre2-tel','jug-padre2-email','jug-padre2-notificar'].forEach(function(id) {
           var field = document.getElementById(id);
           if (!field) return;
           field.oninput = setDirty;
           field.onchange = setDirty;
         });
-        // Zona de credenciales: solo visible para admin al editar un jugador existente
-        var cZone  = document.getElementById('jug-credenciales-zona');
-        var pinZ   = document.getElementById('jug-pin-zona');
-        var aviso  = document.getElementById('jug-cred-aviso');
-        if (cZone) cZone.style.display = (App.state.formJugadorId && App.state.esAdmin) ? '' : 'none';
-        if (pinZ)  pinZ.style.display  = (App.state.formJugadorId && App.state.esAdmin) ? '' : 'none';
-        if (aviso) aviso.style.display  = (App.state.formJugadorId && App.state.esAdmin) ? '' : 'none';
       },
       _reset: function() {
         App.state._formIsDirty = false;
@@ -2837,57 +2832,12 @@ const App = {
         });
         document.getElementById('jug-dorsal').value   = '';
         document.getElementById('jug-fechanac').value = '';
-        ['jug-padre1-nombre','jug-padre1-tel','jug-padre1-email','jug-padre2-nombre','jug-padre2-tel','jug-padre2-email'].forEach(function(id) {
+        ['jug-padre1-nombre','jug-padre1-apellidos','jug-padre1-tel','jug-padre1-email','jug-padre2-nombre','jug-padre2-apellidos','jug-padre2-tel','jug-padre2-email'].forEach(function(id) {
           var el = document.getElementById(id); if (el) el.value = '';
         });
         ['jug-padre1-notificar','jug-padre2-notificar'].forEach(function(id) {
           var el = document.getElementById(id); if (el) el.checked = true;
         });
-        var cZone = document.getElementById('jug-credenciales-zona');
-        if (cZone) cZone.style.display = 'none';
-        ['jug-usuario','jug-codigo-padres','jug-pin','jug-pin-confirm'].forEach(function(id) {
-          var el = document.getElementById(id); if (el) el.value = '';
-        });
-      },
-      cargar: function(jugadorId) {
-        App.state.formJugadorId = jugadorId;
-        App.state._formIsDirty = false;
-        var j = App.state._todosJugadores.find(function(x) { return x.ID === jugadorId; });
-        App.navigate('jugador-form');
-        if (j) {
-          document.getElementById('jug-nombre').value    = j.Nombre || '';
-          document.getElementById('jug-apellidos').value = j.Apellidos || '';
-          document.getElementById('jug-dorsal').value    = j.Dorsal || '';
-          document.getElementById('jug-fechanac').value  = j.FechaNac || '';
-          document.getElementById('jug-tel').value       = j.Telefono || '';
-          document.getElementById('jug-email').value     = j.Email || '';
-          var p1n = document.getElementById('jug-padre1-nombre'); if (p1n) p1n.value = j.NombrePadre1    || '';
-          var p1a = document.getElementById('jug-padre1-apellidos'); if (p1a) p1a.value = j.ApellidosPadre1 || '';
-          var p1t = document.getElementById('jug-padre1-tel');    if (p1t) p1t.value = j.TelefonoPadre1 || '';
-          var p1e = document.getElementById('jug-padre1-email');  if (p1e) p1e.value = j.EmailPadre1     || '';
-          var p2n = document.getElementById('jug-padre2-nombre'); if (p2n) p2n.value = j.NombrePadre2    || '';
-          var p2a = document.getElementById('jug-padre2-apellidos'); if (p2a) p2a.value = j.ApellidosPadre2 || '';
-          var p2t = document.getElementById('jug-padre2-tel');    if (p2t) p2t.value = j.TelefonoPadre2 || '';
-          var p2e = document.getElementById('jug-padre2-email');  if (p2e) p2e.value = j.EmailPadre2     || '';
-          var p1notify = document.getElementById('jug-padre1-notificar');
-          if (p1notify) p1notify.checked = j.NotificarAusenciasPadre1 !== false && j.NotificarAusenciasPadre1 !== 'FALSE';
-          var p2notify = document.getElementById('jug-padre2-notificar');
-          if (p2notify) p2notify.checked = j.NotificarAusenciasPadre2 !== false && j.NotificarAusenciasPadre2 !== 'FALSE';
-          // Zona de credenciales: solo para admin
-          var cZone = document.getElementById('jug-credenciales-zona');
-          var pinZ  = document.getElementById('jug-pin-zona');
-          var aviso = document.getElementById('jug-cred-aviso');
-          var esAdm = App.state.esAdmin;
-          if (cZone) cZone.style.display = esAdm ? '' : 'none';
-          if (pinZ)  pinZ.style.display  = esAdm ? '' : 'none';
-          if (aviso) aviso.style.display  = esAdm ? '' : 'none';
-          if (esAdm) {
-            var uEl = document.getElementById('jug-usuario'); if (uEl) uEl.value = j.Usuario || '';
-            var cEl = document.getElementById('jug-codigo-padres'); if (cEl) cEl.value = j.CodigoPadres || '';
-            var pEl  = document.getElementById('jug-pin'); if (pEl) pEl.value = '';
-            var pcEl = document.getElementById('jug-pin-confirm'); if (pcEl) pcEl.value = '';
-          }
-        }
       },
       guardar: function(force, emailWarningConfirmed) {
         var _n = document.getElementById('jug-nombre');
@@ -2918,52 +2868,9 @@ const App = {
         if (datos.TelefonoPadre1 && !_validarTel(datos.TelefonoPadre1)) { showToast('El teléfono del familiar 1 no es válido', 'error'); return; }
         if (datos.EmailPadre2 && !_validarEmail(datos.EmailPadre2)) { showToast('El email del familiar 2 no es válido', 'error'); return; }
         if (datos.TelefonoPadre2 && !_validarTel(datos.TelefonoPadre2)) { showToast('El teléfono del familiar 2 no es válido', 'error'); return; }
-        // Credenciales (solo admin al editar)
-        var jugId = App.state.formJugadorId;
-        var credNuevo = null;
-        if (jugId && App.state.esAdmin) {
-          var _uEl  = document.getElementById('jug-usuario');
-          var _cEl  = document.getElementById('jug-codigo-padres');
-          var _pEl  = document.getElementById('jug-pin');
-          var _pcEl = document.getElementById('jug-pin-confirm');
-          var nuevoUsuario = _uEl  ? _uEl.value.trim()  : '';
-          var nuevoCodigo  = _cEl  ? _cEl.value.trim()  : '';
-          var nuevoPin     = _pEl  ? _pEl.value.trim()  : '';
-          var nuevoPin2    = _pcEl ? _pcEl.value.trim() : '';
-          if (nuevoPin || nuevoPin2) {
-            if (nuevoPin !== nuevoPin2) { showToast('Los dos PINs no coinciden', 'error'); return; }
-            if (!/^[0-9]{4,6}$/.test(nuevoPin)) { showToast('El PIN debe tener entre 4 y 6 dígitos numéricos', 'error'); return; }
-          }
-          // Detectar si algo cambió
-          var jugOrig = App.cache.getJugadorById(jugId) || {};
-          var usuarioCambio   = nuevoUsuario && nuevoUsuario !== String(jugOrig.Usuario || '').toLowerCase();
-          var codigoCambio    = nuevoCodigo  && nuevoCodigo.toUpperCase() !== String(jugOrig.CodigoPadres || '');
-          var pinCambio       = !!nuevoPin;
-          if (usuarioCambio || pinCambio || codigoCambio) {
-            credNuevo = {
-              usuario:  usuarioCambio ? nuevoUsuario : null,
-              pin:      pinCambio     ? nuevoPin     : null,
-              codigo:   codigoCambio  ? nuevoCodigo  : null,
-            };
-          }
-        }
-        // 4f-4: Confirmaci\u00f3n cuando el admin modifica credenciales de un jugador
-        if (credNuevo && !App.state._credGuardadoConfirmado) {
-          var _forzar = force;
-          var _nombreCred = datos.Nombre + ' ' + datos.Apellidos;
-          confirmarYGuardar(
-            'Modificar credenciales',
-            'Se cambiar\u00e1n las credenciales de acceso de <strong>' + _esc(_nombreCred) + '</strong>.' +
-            '<br><span style="font-size:.8rem">Aseg\u00farate de comunicarle los nuevos datos.</span>',
-            function() { App.state._credGuardadoConfirmado = true; App.views['jugador-form'].guardar(_forzar); }
-          );
-          return;
-        }
-        App.state._credGuardadoConfirmado = false;
         if (!force) {
           var dup = App.cache.jugadores.find(function(j) {
-            return j.ID !== jugId &&
-                   String(j.Nombre || '').toLowerCase() === datos.Nombre.toLowerCase() &&
+            return String(j.Nombre || '').toLowerCase() === datos.Nombre.toLowerCase() &&
                    String(j.Apellidos || '').toLowerCase() === datos.Apellidos.toLowerCase();
           });
           if (dup) {
@@ -2985,49 +2892,6 @@ const App = {
           ));
           return;
         }
-        var formHistory = App.state.viewHistory.slice();
-        if (jugId) {
-          var operationToken = App.operation.begin('player-update:' + jugId);
-          if (!operationToken) return;
-          App.state._formIsDirty = false;
-          App.state.formJugadorId = null;
-          var _hIdx = App.state.viewHistory.lastIndexOf('jugadores-admin');
-          App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'jugador-form' && v !== 'jugador-detalle'; });
-          App.navigate('jugadores-admin', null, false);
-          App.sync.start();
-          server('actualizarJugador', jugId, datos).then(function(result) {
-            if (!result || result.success === false || result.actualizado === false) {
-              throw new Error(result && result.error || 'No se pudo actualizar el jugador');
-            }
-            App.cache.upsert('jugadores', Object.assign({}, App.cache.getJugadorById(jugId), datos, { ID: jugId }));
-            App.state._todosJugadores = App.cache.jugadores;
-            if (credNuevo) {
-              return server('actualizarCredencialesJugador', jugId, credNuevo.usuario, credNuevo.pin, credNuevo.codigo).then(function(credentialResult) {
-                if (!credentialResult || credentialResult.success === false || credentialResult.actualizado === false) {
-                  throw new Error(credentialResult && credentialResult.error || 'No se pudieron actualizar las credenciales');
-                }
-                var jugadorActualizado = App.cache.getJugadorById(jugId);
-                if (jugadorActualizado) {
-                  if (credNuevo.usuario) jugadorActualizado.Usuario = credNuevo.usuario;
-                  if (credNuevo.codigo) jugadorActualizado.CodigoPadres = credNuevo.codigo;
-                  if (credNuevo.pin) jugadorActualizado.PIN = credNuevo.pin;
-                }
-              });
-            }
-          }).then(function() {
-            App.sync.done();
-            App.state._todosJugadores = App.cache.jugadores;
-            App.views['jugadores-admin'].render();
-            App.operation.succeed(operationToken);
-          }).catch(function(error) {
-            App.sync.done();
-            App.state.formJugadorId = jugId;
-            App.state.viewHistory = formHistory;
-            App.state._formIsDirty = true;
-            App.navigate('jugador-form', {}, false);
-            App.operation.fail(operationToken, (error && error.message) || 'No se pudo actualizar el jugador');
-          });
-        } else {
           var crearDesdeEquipo = !!App.state._volverAEquipoFormDespues;
           var historyAntesCrear = App.state.viewHistory.slice();
           var operationToken = App.operation.begin('player-create');
@@ -3042,7 +2906,6 @@ const App = {
               if (res.jugador) App.cache.upsert('jugadores', res.jugador);
               App.state._todosJugadores = App.cache.jugadores;
               App.state._volverAEquipoFormDespues = false;
-              App.state.formJugadorId = null;
               App.state._formIsDirty = false;
               if (crearDesdeEquipo) {
                 var nuevoJug = res.jugador;
@@ -3078,47 +2941,8 @@ const App = {
               App.navigate('jugador-form', {}, false);
               App.operation.fail(operationToken, (err && err.message) || 'Error al crear jugador');
             });
-        }
       },
 
-      eliminar: function() {
-        var jugId = App.state.formJugadorId;
-        if (!jugId) return;
-        var j = App.state._todosJugadores.find(function(x) { return x.ID === jugId; });
-        var nombre = j ? (j.Nombre + ' ' + j.Apellidos) : 'este jugador';
-        App.openModal('Eliminar jugador',
-          _htmlConfirmModal('danger',
-            '\u00bfSeguro que quieres eliminar a <strong>' + nombre + '</strong>?',
-            'Se eliminar\u00e1n sus asistencias y asignaciones a equipos.',
-            "App.views['jugador-form']._confirmarEliminar()"
-          )
-        );
-      },
-      _confirmarEliminar: function() {
-        var jugId = App.state.formJugadorId;
-        App.closeModal();
-        var historyBefore = App.state.viewHistory.slice();
-        // ELIMINACIÓN OPTIMISTA: actualizar cache y navegar de inmediato
-        var jBackup = Object.assign({}, App.cache.getJugadorById(jugId));
-        var relBackup = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Jugador === jugId; });
-        App.cache.remove('jugadores', jugId);
-        App.cache.jugadoresEquipos = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Jugador !== jugId; });
-        App.cache.asistencias = {};
-        App.state._todosJugadores = App.cache.jugadores;
-        App.state.formJugadorId = null;
-        App.state._formIsDirty = false;
-        var _hIdx = App.state.viewHistory.lastIndexOf('jugadores-admin');
-        App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'jugador-form' && v !== 'jugador-detalle'; });
-        App.navigate('jugadores-admin', null, false);
-        App.sync.run('eliminarJugador', [jugId], function() {
-          if (jBackup && jBackup.ID) App.cache.upsert('jugadores', jBackup);
-          relBackup.forEach(function(r) { App.cache.jugadoresEquipos.push(r); });
-          App.state._todosJugadores = App.cache.jugadores;
-          App.state.formJugadorId = jugId;
-          App.state.viewHistory = historyBefore;
-          App.navigate('jugador-form', {}, false);
-        });
-      },
     },
 
     // -- Lista entrenadores (admin) -------------------------
@@ -3142,13 +2966,12 @@ const App = {
         }
         var statsMap = App.stats.resumen && App.stats.resumen.datos.entrenadores || {};
         el.innerHTML = lista.map(function(e) {
-          var ini = (e.Nombre ? e.Nombre[0] : '') + (e.Apellidos ? e.Apellidos[0] : '');
           var adminBadge = (e.EsAdmin === true || e.EsAdmin === 'TRUE') ? ' <span class="badge-admin">Admin</span>' : '';
           var isMeBadge = (App.state.usuario && e.ID === App.state.usuario.ID) ? ' <span style="font-size:0.7em; background:var(--brand-bg); color:var(--on-accent); padding:2px 6px; border-radius:10px; margin-left:4px;">(T\u00fa)</span>' : '';
           var st = statsMap[e.ID] || { sesiones: 0, presenciaPct: null };
           var statsHtml = '<div class="ent-mini-stats"><span class="ems-big">' + _pctTexto(st.presenciaPct) + '</span><span class="ems-de">' + st.sesiones + ' ses.</span>' + _statsInfoBoton('Presencia') + '</div>';
           return '<div class="list-item" onclick="App.views[\'entrenador-detalle\'].cargar(\'' + e.ID + '\')">' +
-            '<div class="li-avatar">' + ini + '</div>' +
+            App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,36) +
             '<div style="flex:1"><div class="li-name">' + e.Apellidos + ', ' + e.Nombre + adminBadge + isMeBadge + '</div>' +
             '<div class="li-sub">' + e.Email + '</div></div>' +
             statsHtml +
@@ -3168,9 +2991,7 @@ const App = {
     // -- Form entrenador ------------------------------------
     'entrenador-form': {
       render: function() {
-        var delZone = document.getElementById('entrenador-delete-zone');
-        if (delZone) delZone.style.display = App.state.formEntrenadorId ? '' : 'none';
-        if (!App.state.formEntrenadorId && !App.state._entrenadorDraftRestore) App.views['entrenador-form']._reset();
+        if (!App.state._entrenadorDraftRestore) App.views['entrenador-form']._reset();
         App.state._entrenadorDraftRestore = false;
         var setDirty = function() { App.state._formIsDirty = true; };
         ['ent-nombre','ent-apellidos','ent-email','ent-tel'].forEach(function(id) {
@@ -3179,68 +3000,16 @@ const App = {
         // Sección admin solo visible para admins
         var adminWrap = document.getElementById('ent-admin-wrap');
         if (adminWrap) adminWrap.classList.toggle('hidden', !App.state.esAdmin);
-        // Zona credenciales (admin editando o editando propio) vs PIN para nuevo entrenador
-        var credZone   = document.getElementById('ent-credenciales-zona');
-        var pinNuevo   = document.getElementById('ent-pin-zona-nuevo');
-        var editando   = !!App.state.formEntrenadorId;
-        var editandoPropio = editando && App.state.usuario && App.state.formEntrenadorId === App.state.usuario.ID;
-        if (credZone)  credZone.style.display  = (editando && (App.state.esAdmin || editandoPropio)) ? '' : 'none';
-        if (pinNuevo)  pinNuevo.style.display   = (!editando && App.state.esAdmin) ? '' : 'none';
+        var pinNuevo = document.getElementById('ent-pin-zona-nuevo');
+        if (pinNuevo) pinNuevo.style.display = App.state.esAdmin ? '' : 'none';
       },
       _reset: function() {
         App.state._formIsDirty = false;
         ['ent-nombre','ent-apellidos','ent-email','ent-tel'].forEach(function(id) {
           document.getElementById(id).value = '';
         });
-        document.getElementById('ent-email').disabled = false;
-        document.getElementById('ent-email-aviso').classList.add('hidden');
-        var avi2 = document.getElementById('ent-email-aviso-admin'); if (avi2) avi2.classList.add('hidden');
-        var avi3 = document.getElementById('ent-email-aviso-propio'); if (avi3) avi3.classList.add('hidden');
-        var pinEl  = document.getElementById('ent-pin');         if (pinEl)  pinEl.value  = '';
-        var pinCEl = document.getElementById('ent-pin-confirm'); if (pinCEl) pinCEl.value = '';
         var pinNEl = document.getElementById('ent-pin-nuevo');   if (pinNEl) pinNEl.value = '';
         var esAdminEl = document.getElementById('ent-es-admin'); if (esAdminEl) esAdminEl.checked = false;
-      },
-      cargar: function(entrenadorId) {
-        App.state.formEntrenadorId = entrenadorId;
-        App.state._formIsDirty = false;
-        var e = App.cache.getEntrenadorById(entrenadorId) ||
-          (App.state.usuario && App.state.usuario.ID === entrenadorId ? App.state.usuario : null) ||
-          App.state._todosEntrenadores.find(function(x) { return x.ID === entrenadorId; });
-        App.navigate('entrenador-form');
-        if (e) {
-          document.getElementById('ent-nombre').value    = e.Nombre || '';
-          document.getElementById('ent-apellidos').value = e.Apellidos || '';
-          document.getElementById('ent-email').value     = e.Email || '';
-          document.getElementById('ent-tel').value       = e.Telefono || '';
-          var esAdminEl = document.getElementById('ent-es-admin');
-          if (esAdminEl) esAdminEl.checked = (e.EsAdmin === true || e.EsAdmin === 'TRUE');
-          // Credenciales: admin o dueño pueden editar email
-          var editandoPropio = App.state.usuario && entrenadorId === App.state.usuario.ID;
-          if (App.state.esAdmin || editandoPropio) {
-            document.getElementById('ent-email').disabled = false;
-            document.getElementById('ent-email-aviso').classList.add('hidden');
-            var avi2 = document.getElementById('ent-email-aviso-admin');
-            if (avi2) {
-              if (App.state.esAdmin && !editandoPropio) avi2.classList.remove('hidden');
-              else avi2.classList.add('hidden');
-            }
-            var avi3 = document.getElementById('ent-email-aviso-propio');
-            if (avi3) {
-              if (editandoPropio) avi3.classList.remove('hidden');
-              else avi3.classList.add('hidden');
-            }
-          } else {
-            document.getElementById('ent-email').disabled = true;
-            document.getElementById('ent-email-aviso').classList.remove('hidden');
-            var avi2b = document.getElementById('ent-email-aviso-admin');
-            if (avi2b) avi2b.classList.add('hidden');
-            var avi3b = document.getElementById('ent-email-aviso-propio');
-            if (avi3b) avi3b.classList.add('hidden');
-          }
-          var pinEl  = document.getElementById('ent-pin');         if (pinEl)  pinEl.value  = '';
-          var pinCEl = document.getElementById('ent-pin-confirm'); if (pinCEl) pinCEl.value = '';
-        }
       },
       guardar: function(force) {
         var _n = document.getElementById('ent-nombre');
@@ -3251,45 +3020,20 @@ const App = {
           Email:     document.getElementById('ent-email').value.trim(),
           Telefono:  document.getElementById('ent-tel').value.trim(),
         };
-        var entId = App.state.formEntrenadorId;
-        var editandoPropio = App.state.usuario && entId === App.state.usuario.ID;
-        // Recoger PIN según modo: credenciales (edición admin/propio) o pin-nuevo (creación)
-        if (entId && (App.state.esAdmin || editandoPropio)) {
-          // Edición admin o propio: PIN con confirmación
-          var _pinEl  = document.getElementById('ent-pin');
-          var _pinCEl = document.getElementById('ent-pin-confirm');
-          var pinVal  = _pinEl  ? _pinEl.value.trim()  : '';
-          var pinVal2 = _pinCEl ? _pinCEl.value.trim() : '';
-          if (pinVal || pinVal2) {
-            if (pinVal !== pinVal2) { showToast('Los dos PINs no coinciden', 'error'); return; }
-            if (!/^[0-9]{4,6}$/.test(pinVal)) { showToast('El PIN debe tener entre 4 y 6 dígitos numéricos', 'error'); return; }
-            datos.PIN = pinVal;
-          }
-        } else if (!entId) {
-          // Creación: pin-nuevo opcional
-          var _pinNEl = document.getElementById('ent-pin-nuevo');
-          if (_pinNEl && _pinNEl.value.trim()) datos.PIN = _pinNEl.value.trim();
-        }
+        var pinNuevo = document.getElementById('ent-pin-nuevo');
+        if (pinNuevo && pinNuevo.value.trim()) datos.PIN = pinNuevo.value.trim();
         var _esAdminEl = document.getElementById('ent-es-admin');
         if (App.state.esAdmin && _esAdminEl) datos.EsAdmin = _esAdminEl.checked;
         if (!datos.Nombre || !datos.Apellidos) { showToast('Nombre y apellidos son obligatorios', 'error'); return; }
-        if (!datos.Email && !entId) { showToast('El email es obligatorio para nuevos entrenadores', 'error'); return; }
+        if (!datos.Email) { showToast('El email es obligatorio para nuevos entrenadores', 'error'); return; }
         if (datos.Email && !_validarEmail(datos.Email)) { showToast('El email no tiene un formato válido', 'error'); return; }
         if (datos.Telefono && !_validarTel(datos.Telefono)) { showToast('El teléfono no tiene un formato válido (mín. 9 dígitos)', 'error'); return; }
         if (!force) {
-          // Detectar email duplicado (al crear o si admin cambia email)
-          if (datos.Email) {
-            var entOrig = entId ? App.cache.getEntrenadorById(entId) : null;
-            var emailCambio = !entOrig || String(entOrig.Email || '').toLowerCase() !== datos.Email.toLowerCase();
-            if (emailCambio) {
-              var dupEmail = App.cache.entrenadores.find(function(e) { return e.ID !== entId && String(e.Email || '').toLowerCase() === datos.Email.toLowerCase(); });
-              if (dupEmail) { showToast('Ya existe un entrenador con ese email', 'error'); return; }
-            }
-          }
+          var dupEmail = App.cache.entrenadores.find(function(e) { return String(e.Email || '').toLowerCase() === datos.Email.toLowerCase(); });
+          if (dupEmail) { showToast('Ya existe un entrenador con ese email', 'error'); return; }
           // Detectar nombre duplicado
           var dup = App.cache.entrenadores.find(function(e) {
-            return e.ID !== entId &&
-                   String(e.Nombre || '').toLowerCase() === datos.Nombre.toLowerCase() &&
+            return String(e.Nombre || '').toLowerCase() === datos.Nombre.toLowerCase() &&
                    String(e.Apellidos || '').toLowerCase() === datos.Apellidos.toLowerCase();
           });
           if (dup) {
@@ -3300,25 +3044,6 @@ const App = {
             return;
           }
         }
-        var formHistory = App.state.viewHistory.slice();
-        if (entId) {
-          // EDICIÓN OPTIMISTA: actualizar cache y navegar de inmediato
-          var original = Object.assign({}, App.cache.getEntrenadorById(entId));
-          App.cache.upsert('entrenadores', Object.assign({ ID: entId }, datos));
-          App.state._todosEntrenadores = App.cache.entrenadores;
-          App.state._formIsDirty = false;
-          App.state.formEntrenadorId = null;
-          var _hIdx = App.state.viewHistory.lastIndexOf('entrenadores-admin');
-          App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'entrenador-form' && v !== 'entrenador-detalle'; });
-          App.navigate('entrenadores-admin', null, false);
-          App.sync.run('actualizarEntrenador', [entId, datos], function() {
-            App.cache.upsert('entrenadores', original);
-            App.state._todosEntrenadores = App.cache.entrenadores;
-            App.state.formEntrenadorId = entId;
-            App.state.viewHistory = formHistory;
-            App.navigate('entrenador-form', {}, false);
-          });
-        } else {
           var crearDesdeEquipo = !!App.state._volverAEquipoFormDespues;
           var historyAntesCrear = App.state.viewHistory.slice();
           var operationToken = App.operation.begin('coach-create');
@@ -3333,7 +3058,6 @@ const App = {
               if (res.entrenador) App.cache.upsert('entrenadores', res.entrenador);
               App.state._todosEntrenadores = App.cache.entrenadores;
               App.state._formIsDirty = false;
-              App.state.formEntrenadorId = null;
               App.state._volverAEquipoFormDespues = false;
               if (crearDesdeEquipo) {
                 var nuevoEnt = res.entrenador;
@@ -3354,47 +3078,8 @@ const App = {
               App.navigate('entrenador-form', {}, false);
               App.operation.fail(operationToken, (err && err.message) || 'Error al crear entrenador');
             });
-        }
       },
 
-      eliminar: function() {
-        var entId = App.state.formEntrenadorId;
-        if (!entId) return;
-        var e = App.state._todosEntrenadores.find(function(x) { return x.ID === entId; });
-        var nombre = e ? (e.Nombre + ' ' + e.Apellidos) : 'este entrenador';
-        App.openModal('Eliminar entrenador',
-          _htmlConfirmModal('danger',
-            '\u00bfSeguro que quieres eliminar a <strong>' + nombre + '</strong>?',
-            'Se eliminar\u00e1n sus asistencias y asignaciones a equipos.',
-            "App.views['entrenador-form']._confirmarEliminar()"
-          )
-        );
-      },
-      _confirmarEliminar: function() {
-        var entId = App.state.formEntrenadorId;
-        App.closeModal();
-        var historyBefore = App.state.viewHistory.slice();
-        // ELIMINACIÓN OPTIMISTA: actualizar cache y navegar de inmediato
-        var eBackup = Object.assign({}, App.cache.getEntrenadorById(entId));
-        var relBackup = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Entrenador === entId; });
-        App.cache.remove('entrenadores', entId);
-        App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Entrenador !== entId; });
-        App.cache.asistencias = {};
-        App.state._todosEntrenadores = App.cache.entrenadores;
-        App.state.formEntrenadorId = null;
-        App.state._formIsDirty = false;
-        var _hIdx = App.state.viewHistory.lastIndexOf('entrenadores-admin');
-        App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'entrenador-form' && v !== 'entrenador-detalle'; });
-        App.navigate('entrenadores-admin', null, false);
-        App.sync.run('eliminarEntrenador', [entId], function() {
-          if (eBackup && eBackup.ID) App.cache.upsert('entrenadores', eBackup);
-          relBackup.forEach(function(r) { App.cache.entrenadoresEquipos.push(r); });
-          App.state._todosEntrenadores = App.cache.entrenadores;
-          App.state.formEntrenadorId = entId;
-          App.state.viewHistory = historyBefore;
-          App.navigate('entrenador-form', {}, false);
-        });
-      },
     },
 
     // -- Historial completo de equipo ----------------------
@@ -3488,15 +3173,14 @@ const App = {
 
         var entrada = App.stats.resumen ? App.stats.detalle('jugador', id) : null;
 
-        var ini = (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '');
         var html = '<div class="detalle-perfil">' +
-          '<div class="detalle-avatar">' + ini + '</div>' +
+          '<div class="detalle-avatar">' + App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,72) + '</div>' +
           '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
-          '<div class="detalle-sub">Dorsal ' + (j.Dorsal || '-') + '</div>' +
+          (j.Dorsal ? '<div class="detalle-sub">Dorsal ' + _esc(String(j.Dorsal)) + '</div>' : '') +
           (j.FechaNac ? '<div class="detalle-meta">Nac. ' + j.FechaNac + '</div>' : '') +
           '</div>' +
           '<button class="detalle-settings" type="button" aria-label="Contacto del jugador" title="Contacto" onclick="_statsContacto(\'jugador\',App.state.detalleJugadorId)">☎</button>' +
-          (App.puedeEditarDetalle('jugador-detalle') ? '<button class="detalle-settings" type="button" aria-label="Ajustes del jugador" title="Ajustes" onclick="App.editarDetalle()">&#x2699;&#xFE0F;</button>' : '') +
+          (App.puedeEditarDetalle('jugador-detalle') ? App.account.accionesDetalleHtml('jugador', id) : '') +
           '</div>';
 
 
@@ -3522,15 +3206,14 @@ const App = {
 
         var entrada = App.stats.resumen ? App.stats.detalle('entrenador', id) : null;
 
-        var ini = (e.Nombre ? e.Nombre[0] : '') + (e.Apellidos ? e.Apellidos[0] : '');
         var html = '<div class="detalle-perfil">' +
-          '<div class="detalle-avatar">' + ini + '</div>' +
+          '<div class="detalle-avatar">' + App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,72) + '</div>' +
           '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
           '<div class="detalle-sub">' + (e.Email || '') + '</div>' +
           (e.Telefono ? '<div class="detalle-meta">' + e.Telefono + '</div>' : '') +
           '</div>' +
           '<button class="detalle-settings" type="button" aria-label="Contacto del entrenador" title="Contacto" onclick="_statsContacto(\'entrenador\',App.state.detalleEntrenadorId)">☎</button>' +
-          (App.puedeEditarDetalle('entrenador-detalle') ? '<button class="detalle-settings" type="button" aria-label="Ajustes del entrenador" title="Ajustes" onclick="App.editarDetalle()">&#x2699;&#xFE0F;</button>' : '') +
+          (App.puedeEditarDetalle('entrenador-detalle') ? App.account.accionesDetalleHtml('entrenador', id) : '') +
           '</div>';
 
         html += _htmlFiltroStats();
@@ -3572,6 +3255,7 @@ const App = {
           '</div>';
 
         html += _htmlFiltroStats();
+        html += _statsBloque('Equipo técnico',App.cache.getEntrenadoresByEquipo(id).map(function(e) { return '<button class="btn btn-secondary btn-sm person-inline" onclick="App.views[\'entrenador-detalle\'].cargar(' + _statsArgumento(e.ID) + ')">' + App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,36) + '<span>' + _statsTexto(e.Nombre + ' ' + e.Apellidos) + '</span></button>'; }).join('') || '<p>Sin entrenadores asignados</p>');
         if (d) {
           var s = d.sesiones;
           html += _statsHero(d,d.comparativaClubPp) +
@@ -3636,8 +3320,7 @@ const App = {
       render: function() {
         var j = App.state.jugador;
         if (!j) return;
-        var ini = (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '');
-        document.getElementById('perfil-jugador-avatar').textContent = ini;
+        document.getElementById('perfil-jugador-avatar').innerHTML = App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,80);
         document.getElementById('perfil-jugador-nombre').textContent = j.Nombre + ' ' + j.Apellidos;
         var relPrincipal = App.cache.jugadoresEquipos.find(function(r) {
           return r.ID_Jugador === j.ID && r.Tipo === 'Principal' && (r.Activo === true || r.Activo === 'TRUE');
@@ -3817,14 +3500,14 @@ const App = {
         if (!eq) { el.innerHTML = '<div class="empty-state"><p>No asignado a ningún equipo</p></div>'; return; }
         var medals = ['🥇','🥈','🥉'];
         var podium = eq.ranking.slice(0,3).map(function(item,idx) {
-          return '<div class="ranking-podium-card podium-' + (idx+1) + (item.esYo ? ' ranking-yo' : '') + '"><span class="podium-medal" aria-label="Posición ' + item.posicion + '">' + medals[idx] + '</span><strong class="podium-name">' + _statsRachaTexto(item.nombre + ' ' + item.apellidos) + (item.esYo ? '<span class="ranking-you">Tú</span>' : '') + '</strong><span class="ranking-val">' + _pctTexto(item.asistenciaPct) + '</span>' + _statsMiniRacha(item.rachaActual) + '<div class="podium-logros">' + item.logros.map(_htmlLogro).join('') + '</div></div>';
+          return '<div class="ranking-podium-card podium-' + (idx+1) + (item.esYo ? ' ranking-yo' : '') + '"><span class="podium-medal" aria-label="Posición ' + item.posicion + '">' + medals[idx] + '</span>' + App.avatarHtml(item.foto,item.nombre + ' ' + item.apellidos,36) + '<strong class="podium-name">' + _statsRachaTexto(item.nombre + ' ' + item.apellidos) + (item.esYo ? '<span class="ranking-you">Tú</span>' : '') + '</strong><span class="ranking-val">' + _pctTexto(item.asistenciaPct) + '</span>' + _statsMiniRacha(item.rachaActual) + '<div class="podium-logros">' + item.logros.map(_htmlLogro).join('') + '</div></div>';
         }).join('');
         var rankingHtml = (podium ? '<div class="ranking-podium">' + podium + '</div>' : '') + eq.ranking.slice(3).map(function(item) {
-          return '<div class="ranking-row' + (item.esYo ? ' ranking-yo' : '') + '"><span class="ranking-pos">' + item.posicion + '</span><div class="ranking-person"><div class="ranking-name">' + _statsRachaTexto(item.apellidos + ', ' + item.nombre) + (item.esYo ? ' <span class="ranking-you">Tú</span>' : '') + '</div><div class="ranking-bar-wrap"><div class="ranking-bar-fill" style="width:' + item.asistenciaPct + '%"></div></div><div>' + _statsMiniRacha(item.rachaActual) + item.logros.map(_htmlLogro).join('') + '</div></div><span class="ranking-val">' + _pctTexto(item.asistenciaPct) + '</span></div>';
+          return '<div class="ranking-row' + (item.esYo ? ' ranking-yo' : '') + '"><span class="ranking-pos">' + item.posicion + '</span>' + App.avatarHtml(item.foto,item.nombre + ' ' + item.apellidos,36) + '<div class="ranking-person"><div class="ranking-name">' + _statsRachaTexto(item.apellidos + ', ' + item.nombre) + (item.esYo ? ' <span class="ranking-you">Tú</span>' : '') + '</div><div class="ranking-bar-wrap"><div class="ranking-bar-fill" style="width:' + item.asistenciaPct + '%"></div></div><div>' + _statsMiniRacha(item.rachaActual) + item.logros.map(_htmlLogro).join('') + '</div></div><span class="ranking-val">' + _pctTexto(item.asistenciaPct) + '</span></div>';
         }).join('');
         el.innerHTML = _htmlFiltroStats() + _statsBloque(eq.nombre, _statsHero(eq) + '<p class="stats-position"><span aria-hidden="true">✦</span> Tu posición: <strong>' + _datoTexto(eq.posicion) + '</strong> de ' + eq.total + '</p><p class="stats-periodo">' + eq.sesiones + ' entrenamientos con lista</p>') +
           _statsBloque('Ranking de asistencia',rankingHtml || '<p>Sin datos registrados aún</p>') +
-          _statsBloque('Con pocas sesiones aún',eq.pocasSesiones.map(function(p) { return '<p>' + _esc(p.apellidos + ', ' + p.nombre) + (p.esYo ? ' (yo)' : '') + '</p>'; }).join('') || '<p>Ningún jugador</p>') +
+          _statsBloque('Con pocas sesiones aún',eq.pocasSesiones.map(function(p) { return '<p class="person-inline">' + App.avatarHtml(p.foto,p.nombre + ' ' + p.apellidos,36) + '<span>' + _esc(p.apellidos + ', ' + p.nombre) + (p.esYo ? ' (yo)' : '') + '</span></p>'; }).join('') || '<p>Ningún jugador</p>') +
           _statsBloque('Horario semanal','<div id="mi-equipo-horario"></div>');
         var horarioEl = document.getElementById('mi-equipo-horario');
         var dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -3838,12 +3521,30 @@ const App = {
 
     'perfil-usuario': {
       render: function() {
-        var jugador = App.state.rol === 'jugador', persona = jugador ? App.state.jugador : App.state.usuario;
+        var jugador = App.account.isPlayer(), persona = App.account.persona();
         var host = document.getElementById('perfil-usuario-contenido');
+        if (!App.account.allowed()) { host.innerHTML = '<div class="account-card">Sin permiso</div>'; return; }
+        if (!persona || !persona.ID) { host.innerHTML = '<div class="account-card"><h2>Tu perfil</h2><p>Tu cuenta de administración no tiene ficha de entrenador.</p></div>'; return; }
+        var row = function(label,value) { return '<div class="account-summary-row"><dt>' + _statsTexto(label) + '</dt><dd translate="no">' + _statsTexto(value || '—') + '</dd></div>'; };
+        var html = '<div class="account-profile-hero"><div id="perfil-avatar">' + App.avatarHtml(persona.FotoURL,persona.Nombre+' '+persona.Apellidos,88) + '</div><h2 translate="no">' + _statsTexto(persona.Nombre+' '+persona.Apellidos) + '</h2><div class="account-hero-actions"><button class="btn btn-primary" onclick="App.navigate(\'perfil-editar\')">Editar perfil</button>' + (!App.account.isStaff() ? '<button class="btn btn-secondary" onclick="App.views[\'perfil-usuario\'].elegirFoto()">Cambiar foto</button>' : '') + '</div></div><div class="account-card"><h2>Datos personales</h2><dl class="account-summary">' + row('Nombre',persona.Nombre) + row('Apellidos',persona.Apellidos) + (jugador ? row('Fecha de nacimiento',persona.FechaNac) + row('Dorsal',persona.Dorsal) : '') + '</dl></div><div class="account-card"><h2>Contacto</h2><dl class="account-summary">' + row('Teléfono',persona.Telefono) + row('Email',persona.Email) + '</dl></div>';
+        if (jugador) [1,2].forEach(function(n) { html += '<div class="account-card"><h2>' + (n === 1 ? 'Familiar 1' : 'Familiar 2') + '</h2><dl class="account-summary">' + row('Nombre',[persona['NombrePadre'+n],persona['ApellidosPadre'+n]].filter(Boolean).join(' ')) + row('Teléfono',persona['TelefonoPadre'+n]) + row('Email',persona['EmailPadre'+n]) + '</dl><p>' + (persona['NotificarAusenciasPadre'+n] === false || persona['NotificarAusenciasPadre'+n] === 'FALSE' ? 'Avisos por email desactivados' : 'Avisos por email activados') + '</p></div>'; });
+        host.innerHTML = html;
+        App.state._formIsDirty = false;
+      },
+      editar: function() {
+        var jugador = App.account.isPlayer(), persona = App.account.persona();
+        var host = document.getElementById('perfil-editar-contenido');
+        if (!App.account.allowed() || !persona) { host.innerHTML = '<div class="account-card">Sin permiso</div>'; return; }
+        if (App.account.isStaff()) {
+          host.innerHTML = '<form id="perfil-form" class="account-card">' + App.account.perfilStaffHtml(persona) + '<button class="btn btn-primary btn-full" type="submit">Guardar cambios</button></form>';
+          document.getElementById('perfil-form').oninput = function() { App.state._formIsDirty = true; };
+          document.getElementById('perfil-form').onsubmit = function(e) { e.preventDefault(); App.views['perfil-usuario'].guardar(); };
+          return;
+        }
         if (!persona || !persona.ID) { host.innerHTML = '<div class="account-card"><h2>Tu perfil</h2><p>Tu cuenta de administración no tiene ficha de entrenador.</p></div>'; return; }
         this._campos = jugador ? [['FechaNac','Fecha de nacimiento','date'],['Telefono','Teléfono','tel'],['Email','Email','email']] : [['Nombre','Nombre','text'],['Apellidos','Apellidos','text'],['Telefono','Teléfono','tel']];
         var campo = function(c) { return '<div class="form-group"><label for="perfil-' + c[0] + '">' + c[1] + '</label><input id="perfil-' + c[0] + '" data-perfil="' + c[0] + '" type="' + c[2] + '" value="' + _statsTexto(persona[c[0]] || '') + '"></div>'; };
-        var html = '<div class="account-profile-hero"><div id="perfil-avatar">' + App.avatarHtml(persona.FotoURL, persona.Nombre, 88) + '</div><h2 translate="no">' + _statsTexto([persona.Nombre,persona.Apellidos].filter(Boolean).join(' ')) + '</h2><p>' + (jugador ? 'Tu espacio en el club' : App.state.esAdmin ? 'Administración del club' : 'Equipo técnico') + '</p><button class="btn btn-secondary" type="button" onclick="App.views[\'perfil-usuario\'].elegirFoto()">Cambiar foto</button></div><form id="perfil-form" class="account-card"><h2>Datos personales</h2>' + this._campos.map(campo).join('');
+        var html = '<form id="perfil-form" class="account-card"><h2>Datos personales</h2>' + this._campos.map(campo).join('');
         if (!jugador) html += '<div class="form-group"><label for="perfil-email-lectura">Email de acceso</label><input id="perfil-email-lectura" type="email" readonly value="' + _statsTexto(persona.Email || App.state.auth.email || '') + '"><small>El email identifica tu cuenta y no se puede cambiar aquí.</small></div>';
         if (jugador) {
           html += '<h2>Contacto familiar</h2><p>Estos datos ayudan al club a contactar contigo y con tu familia.</p>';
@@ -3860,8 +3561,9 @@ const App = {
         document.getElementById('perfil-form').onsubmit = function(e) { e.preventDefault(); App.views['perfil-usuario'].guardar(); };
       },
       guardar: function() {
-        var jugador = App.state.rol === 'jugador', datos = {}, codigo = jugador ? document.getElementById('perfil-codigo').value.trim().toUpperCase() : '';
+        var jugador = App.account.isPlayer(), datos = {}, codigo = jugador && !App.account.isStaff() ? document.getElementById('perfil-codigo').value.trim().toUpperCase() : '';
         document.querySelectorAll('[data-perfil]').forEach(function(el) { datos[el.dataset.perfil] = el.type === 'checkbox' ? el.checked : el.value.trim(); });
+        if (App.account.isStaff()) { App.account.guardarStaffPerfil(datos); return; }
         if (jugador && !/^[A-Z0-9]{6}$/.test(codigo)) { showToast('Introduce el código de seguridad de 6 caracteres', 'error'); return; }
         if (datos.FechaNac && datos.FechaNac > _hoy()) { showToast('La fecha de nacimiento no puede ser futura', 'error'); return; }
         for (var key in datos) {
@@ -3871,7 +3573,8 @@ const App = {
         App.operation.run('my-profile', 'actualizarMiPerfil', [datos,codigo], function() {
           App.views['perfil-usuario']._actualizar(datos);
           App.state._formIsDirty = false;
-          if (jugador) document.getElementById('perfil-codigo').value = '';
+          if (App.state.viewHistory[App.state.viewHistory.length-1] === 'perfil-usuario') App.state.viewHistory.pop();
+          App.navigate('perfil-usuario',{},false);
           showToast('Perfil actualizado', 'success');
         }).catch(function() { /* App.operation presenta el error y conserva el formulario. */ });
       },
@@ -3882,12 +3585,14 @@ const App = {
         _updateUserBadge([persona.Nombre,persona.Apellidos].filter(Boolean).join(' '), jugador ? 'Jugador' : App.state.esAdmin ? 'Admin' : 'Entrenador');
       },
       elegirFoto: function() {
+        if (App.account.isStaff()) return;
         var persona = App.state.rol === 'jugador' ? App.state.jugador : App.state.usuario;
         App.openModal('Tu imagen de equipo', '<div class="avatar-picker"><p>Elige un avatar del club o sube tu foto.</p><div class="avatar-grid">' + Object.keys(App.avatars).map(function(id) {
           return '<button type="button" class="avatar-choice" aria-label="' + App.avatars[id][0] + '" aria-pressed="' + (persona.FotoURL === 'avatar:'+id) + '" onclick="App.views[\'perfil-usuario\'].guardarFoto(\'avatar:' + id + '\')">' + App.avatarHtml('avatar:'+id,'',56) + '<span>' + App.avatars[id][0] + '</span></button>';
         }).join('') + '</div><label class="btn btn-primary btn-full avatar-upload" for="perfil-foto-file">Subir mi foto</label><input id="perfil-foto-file" class="sr-only" type="file" accept="image/*" onchange="App.views[\'perfil-usuario\'].subirFoto(this)"><p>Se recortará al centro. La foto solo se usa como imagen de perfil.</p><button type="button" class="btn btn-secondary btn-full" onclick="App.views[\'perfil-usuario\'].guardarFoto(\'\')">Quitar foto</button></div>');
       },
       guardarFoto: function(foto) {
+        if (App.account.isStaff()) return;
         App.operation.run('my-avatar', 'actualizarFotoPerfil', [foto], function(res) {
           App.views['perfil-usuario']._actualizar({ FotoURL: res.fotoURL });
           var persona = App.state.rol === 'jugador' ? App.state.jugador : App.state.usuario;
@@ -3898,6 +3603,7 @@ const App = {
         }).catch(function() { /* App.operation presenta el error y conserva el selector. */ });
       },
       subirFoto: function(input) {
+        if (App.account.isStaff()) return;
         var file = input.files && input.files[0];
         if (!file) return;
         if (!file.type.startsWith('image/')) { showToast('Selecciona un archivo de imagen', 'error'); return; }
@@ -3922,16 +3628,13 @@ const App = {
 
     'seguridad': {
       render: function() {
-        var jugador = App.state.rol === 'jugador';
-        var pin = function(id,label,required) { var actual = id === 'seg-pin-actual'; return '<div class="form-group"><label for="' + id + '">' + label + '</label><input type="password" inputmode="numeric" ' + (actual ? 'maxlength="32"' : 'pattern="[0-9]{4,6}" maxlength="6"') + ' autocomplete="' + (actual ? 'current-password' : 'new-password') + '" id="' + id + '" ' + (required ? 'required' : '') + '></div>'; };
-        document.getElementById('seguridad-contenido').innerHTML = '<div class="account-intro"><span class="account-eyebrow">TU CUENTA, PROTEGIDA</span><h2>Seguridad</h2><p>Controla cómo accedes y cómo recuperar tus credenciales.</p></div><form id="seg-credenciales" class="account-card"><h2>Cambiar PIN</h2>' + (jugador ? '<div class="form-group"><label for="seg-usuario">Cambiar usuario</label><input id="seg-usuario" autocomplete="username" maxlength="12" value="' + _statsTexto(App.state.auth.usuario || '') + '"><small>Letras, números y puntos. Máximo 12 caracteres.</small></div>' : '') + pin('seg-pin-actual','PIN actual',true) + '<div class="form-row">' + pin('seg-pin-nuevo','Nuevo PIN',false) + pin('seg-pin-repetir','Repetir nuevo PIN',false) + '</div><p>' + (jugador ? 'Usa de 4 a 6 dígitos. Deja el nuevo PIN vacío si solo cambias tu usuario.' : 'Usa de 4 a 6 dígitos.') + '</p><button class="btn btn-primary btn-full" type="submit">Guardar credenciales</button></form>' +
-          (jugador ? '<form id="seg-codigo-form" class="account-card"><h2>Cambiar código de seguridad</h2><p>Este código protege los datos familiares y las justificaciones.</p><div class="form-group"><label for="seg-codigo-actual">Código actual</label><input id="seg-codigo-actual" type="password" maxlength="6" required autocomplete="off"></div><div class="form-group"><label for="seg-codigo-nuevo">Nuevo código (6 letras o números)</label><input id="seg-codigo-nuevo" type="password" maxlength="6" required autocomplete="off"></div><button class="btn btn-secondary btn-full" type="submit">Cambiar código de seguridad</button></form>' : '') +
-          '<div class="account-card"><h2>¿Olvidaste tu PIN o código?</h2><p>Enviaremos tus credenciales a los correos registrados en tu ficha. Los códigos de seguridad solo se envían a los contactos familiares.</p><div id="seg-recordatorio-aviso" role="status" aria-live="polite"></div><button id="seg-recordatorio" class="btn btn-secondary btn-full" type="button" onclick="App.views.seguridad.recordatorio()">Enviar recordatorio por email</button></div><div class="account-card"><h2>Privacidad</h2><button class="account-link" onclick="App.navigate(\'politicas\',{seccion:\'privacidad\'})">Política de privacidad <span aria-hidden="true">›</span></button><button class="account-link" onclick="App.navigate(\'politicas\',{seccion:\'cookies\'})">Política de cookies <span aria-hidden="true">›</span></button></div>';
+        var jugador = App.account.isPlayer(), staff = App.account.isStaff();
+        if (!App.account.allowed()) return;
+        var entries = [{icon:'seguridad',titulo:jugador ? 'Cambiar PIN y usuario' : 'Cambiar PIN',descripcion:'Actualiza tus credenciales de acceso',action:"App.navigate('seguridad-opcion',{opcion:'pin'})"}];
+        if (jugador && (!staff || App.state.esAdmin)) entries.push({icon:'privacidad',titulo:'Cambiar código de seguridad',descripcion:'Protege tus datos y justificaciones',action:"App.navigate('seguridad-opcion',{opcion:'codigo'})"});
+        if (!staff) entries.push({icon:'correo',titulo:'¿Olvidaste tu PIN o código?',descripcion:'Recupera el acceso con un código por email',view:'recuperar-acceso'},{icon:'privacidad',titulo:'Política de privacidad',descripcion:'Cómo protegemos los datos del club',view:'politica-privacidad'},{icon:'cookies',titulo:'Política de cookies',descripcion:'Qué guarda la aplicación en tu dispositivo',view:'politica-cookies'});
+        document.getElementById('seguridad-contenido').innerHTML = '<div class="account-intro"><span class="account-eyebrow">TU CUENTA, PROTEGIDA</span><h2>Seguridad</h2><p>Controla cómo accedes y cómo recuperar tus credenciales.</p></div>' + App.accountList(entries);
         App.state._formIsDirty = false;
-        document.getElementById('seg-credenciales').onsubmit = function(e) { e.preventDefault(); App.views.seguridad.credenciales(); };
-        var codigo = document.getElementById('seg-codigo-form');
-        if (codigo) codigo.onsubmit = function(e) { e.preventDefault(); App.views.seguridad.codigo(); };
-        document.querySelectorAll('#seguridad-contenido form').forEach(function(form) { form.oninput = function() { App.state._formIsDirty = true; }; });
       },
       credenciales: function() {
         var nuevo = document.getElementById('seg-pin-nuevo').value, repetir = document.getElementById('seg-pin-repetir').value;
@@ -3958,23 +3661,114 @@ const App = {
           document.getElementById('seg-codigo-form').reset(); App.state._formIsDirty = false; showToast('Código de seguridad actualizado', 'success');
         }).catch(function() { /* App.operation presenta el error y conserva el formulario. */ });
       },
-      recordatorio: function() {
-        var button = document.getElementById('seg-recordatorio');
-        if (button.disabled) return;
-        button.disabled = true;
-        server('enviarRecordatorioCredenciales').then(function(res) {
-          var aviso = document.getElementById('seg-recordatorio-aviso');
-          if (res.sinCorreo) { aviso.className = 'account-notice'; aviso.textContent = 'No tienes ningún correo registrado. Contacta con tu entrenador para recuperarlo.'; }
-          else if (!res.success) throw new Error(res.error || 'No se pudo enviar el recordatorio');
-          else { aviso.className = 'account-notice'; aviso.textContent = 'Recordatorio enviado. Revisa tu bandeja de entrada y la carpeta de spam.'; }
-        }).catch(function(error) { showToast(error.message || 'Error de conexión','error'); }).finally(function() { button.disabled = false; });
-      },
     },
 
-    'politicas': {
+    'perfil-editar': { render: function() { App.views['perfil-usuario'].editar(); } },
+    'seguridad-opcion': {
       render: function(params) {
-        document.getElementById('politicas-contenido').innerHTML = '<div class="account-intro"><span class="account-eyebrow">TRANSPARENCIA Y CONFIANZA</span><h2>Tu privacidad importa</h2><p>Cómo cuidamos tus datos en CB Baeza.</p></div><nav class="policy-nav" aria-label="Políticas"><a href="#politica-privacidad">Privacidad</a><a href="#politica-cookies">Cookies y almacenamiento</a></nav><article id="politica-privacidad" class="account-card policy-text"><h2>Política de privacidad</h2><h3>Responsable del tratamiento</h3><p>El Club de Baloncesto Baeza es el responsable de los datos utilizados en esta aplicación. Puedes contactar con el club a través de sus entrenadores o de su directiva para cualquier consulta sobre privacidad.</p><h3>Qué datos tratamos</h3><p>Datos de identificación, credenciales de acceso, información de contacto, contactos familiares, asignación a equipos, asistencia a entrenamientos, justificaciones de ausencias o retrasos y, si decides añadirla, tu fotografía de perfil. Las justificaciones pueden contener información sensible: incluye únicamente lo necesario para comunicar la incidencia.</p><h3>Para qué los utilizamos</h3><p>Gestionamos la actividad deportiva y la asistencia del club, facilitamos el trabajo de los entrenadores y enviamos avisos relacionados con la asistencia a las familias que los tengan activados. No utilizamos los datos para publicidad.</p><h3>Base jurídica y menores</h3><p>El tratamiento se apoya en el consentimiento para las funciones que lo requieren y en el interés legítimo del club en organizar su actividad deportiva, respetando los derechos de las personas. Los datos de menores se facilitan y gestionan mediante sus madres, padres o tutores legales. Puedes retirar tu consentimiento cuando corresponda, sin afectar a los tratamientos anteriores a su retirada.</p><h3>Destinatarios e infraestructura</h3><p>No cedemos tus datos a terceros para sus propios fines. El personal autorizado del club accede solo a la información necesaria para sus funciones. Google (Apps Script y Gmail) y Supabase actúan como proveedores de infraestructura y encargados del tratamiento. Sus servicios pueden implicar tratamiento fuera del Espacio Económico Europeo, sujeto a las garantías de protección de datos aplicables.</p><h3>Conservación</h3><p>Conservamos los datos durante la relación deportiva y el tiempo necesario para gestionar las temporadas, atender solicitudes y cumplir las obligaciones legales aplicables. Después se eliminan o anonimizan cuando dejan de ser necesarios. El club revisa la necesidad de conservar el historial y los contactos familiares.</p><h3>Tus derechos</h3><p>Puedes solicitar acceso, rectificación, supresión, oposición, limitación del tratamiento y portabilidad de tus datos, en los casos previstos por la normativa, contactando con la directiva o los entrenadores del club. Para proteger tu información puede ser necesario acreditar tu identidad o representación legal. También puedes presentar una reclamación ante la Agencia Española de Protección de Datos (AEPD), en <a href="https://www.aepd.es" target="_blank" rel="noopener noreferrer">www.aepd.es</a>.</p><h3>Seguridad</h3><p>Aplicamos controles de acceso por perfil y medidas técnicas y organizativas para proteger la información. No compartas tu PIN ni tu código de seguridad y cierra la sesión en dispositivos compartidos. Comunica al club cualquier acceso no autorizado que detectes.</p></article><article id="politica-cookies" class="account-card policy-text"><h2>Política de cookies y almacenamiento</h2><h3>Sin publicidad ni analítica</h3><p>Esta aplicación no utiliza cookies de publicidad ni de analítica. Guarda información técnica en el almacenamiento local de tu navegador (localStorage) para que puedas utilizarla.</p><h3>Qué se guarda en tu dispositivo</h3><ul><li><code>cb_baeza_auth</code>: mantiene tu sesión y tus credenciales de acceso hasta que cierres sesión o borres el almacenamiento.</li><li><code>cb_baeza_prefs</code>: recuerda el idioma y el tema visual elegidos.</li><li>Borradores locales: permiten recuperar cambios pendientes en formularios de la aplicación.</li></ul><p>El almacenamiento local no se envía automáticamente como una cookie. La aplicación utiliza la sesión guardada para autenticar las peticiones al servidor. Quien tenga acceso a tu dispositivo puede acceder a la sesión: evita guardar el acceso en equipos compartidos.</p><h3>Cookies técnicas de Google</h3><p>Google puede establecer cookies técnicas necesarias para servir la aplicación mediante Apps Script y para la seguridad o funcionamiento de su plataforma, según tu navegador y tu sesión de Google.</p><h3>Cómo borrar estos datos</h3><p>Puedes cerrar sesión desde el menú de usuario. Para borrar preferencias, borradores y cookies, abre la configuración de privacidad de tu navegador, busca los datos de sitios de Google Apps Script y elimina sus cookies y almacenamiento. También puedes borrar todos los datos de navegación. Perderás la sesión, las preferencias y los borradores guardados. Bloquear el almacenamiento o las cookies técnicas puede impedir algunas funciones.</p></article>';
-        if (params && params.seccion) requestAnimationFrame(function() { document.getElementById('politica-' + (params.seccion === 'cookies' ? 'cookies' : 'privacidad')).scrollIntoView({ block: 'start' }); });
+        this._opcion = params && params.opcion || this._opcion || 'pin';
+        var host = document.getElementById('seguridad-opcion-contenido'), jugador = App.account.isPlayer();
+        if (!App.account.allowed()) { host.innerHTML = '<div class="account-card">Sin permiso</div>'; return; }
+        if (App.account.isStaff()) {
+          host.innerHTML = App.account.seguridadStaffHtml(App.account.persona());
+          var staffForm = host.querySelector('form');
+          if (staffForm) staffForm.oninput = function() { App.state._formIsDirty = true; };
+          App.state._formIsDirty = false;
+          return;
+        }
+        if (this._opcion === 'codigo' && !jugador) { App.navigate('seguridad',{},false); return; }
+        var field = function(id,label,extra) { return '<div class="form-group"><label for="'+id+'">'+label+'</label><input id="'+id+'" type="password" '+extra+'></div>'; };
+        host.innerHTML = this._opcion === 'codigo' ? '<form id="seg-codigo-form" class="account-card"><h2>Cambiar código de seguridad</h2><p>Este código protege los datos familiares y las justificaciones.</p>' + field('seg-codigo-actual','Código actual','maxlength="6" required autocomplete="off"') + field('seg-codigo-nuevo','Nuevo código (6 letras o números)','maxlength="6" required autocomplete="off"') + '<button type="submit" class="btn btn-primary btn-full">Cambiar código de seguridad</button></form>' : '<form id="seg-credenciales" class="account-card"><h2>' + (jugador ? 'Cambiar PIN y usuario' : 'Cambiar PIN') + '</h2>' + (jugador ? '<div class="form-group"><label for="seg-usuario">Cambiar usuario</label><input id="seg-usuario" autocomplete="username" maxlength="12" value="'+_statsTexto(App.state.auth.usuario||'')+'"><small>Letras, números y puntos. Máximo 12 caracteres.</small></div>' : '') + field('seg-pin-actual','PIN actual','required maxlength="32" autocomplete="current-password"') + field('seg-pin-nuevo','Nuevo PIN','inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" autocomplete="new-password"') + field('seg-pin-repetir','Repetir nuevo PIN','inputmode="numeric" maxlength="6" autocomplete="new-password"') + '<p>' + (jugador ? 'Usa de 4 a 6 dígitos. Deja el nuevo PIN vacío si solo cambias tu usuario.' : 'Usa de 4 a 6 dígitos.') + '</p><button type="submit" class="btn btn-primary btn-full">Guardar credenciales</button></form>';
+        var form = host.querySelector('form');
+        form.oninput = function() { App.state._formIsDirty = true; };
+        form.onsubmit = function(e) { e.preventDefault(); App.views.seguridad[App.views['seguridad-opcion']._opcion === 'codigo' ? 'codigo' : 'credenciales'](); };
+        App.state._formIsDirty = false;
+      },
+    },
+    'recuperar-acceso': {
+      _version: 0, _timer: null, _destinos: [], _destino: null, _secretos: null, _paso: 1, _busy: false, _reenviarDesde: 0,
+      limpiar: function() {
+        this._version++; clearInterval(this._timer); this._timer = null;
+        this._destinos = []; this._destino = null; this._secretos = null; this._paso = 1; this._busy = false;
+        var host = document.getElementById('recuperar-acceso-contenido'); if (host) host.innerHTML = '';
+      },
+      render: function() {
+        if (App.account.isStaff()) return;
+        this.limpiar();
+        this._pintar('<p role="status">Cargando opciones de recuperación…</p>');
+        var self = this, version = this._version;
+        server('opcionesRecuperacion').then(function(res) {
+          if (version !== self._version) return;
+          if (res.sinCorreo) { self._pintar('<p class="account-notice">No tienes ningún correo registrado. Contacta con tu entrenador para recuperarlo.</p>'); return; }
+          if (!res.success) throw new Error(res.error || 'No se pudieron cargar las opciones de recuperación');
+          self._destinos = res.destinos || []; self._paso = 1; self._pintar();
+        }).catch(function(error) { if (version === self._version) self._pintar('<p class="account-notice">'+_statsTexto(error.message)+'</p><button class="btn btn-secondary btn-full" onclick="App.views[\'recuperar-acceso\'].render()">Reintentar</button>'); });
+      },
+      _pintar: function(body) {
+        var self = this;
+        if (!body && this._paso === 1) body = '<h2>Elige dónde recibir el código</h2><p>Solo mostramos los correos registrados en tu ficha.</p><fieldset class="recovery-destinations"><legend class="sr-only">Correo de recuperación</legend>' + this._destinos.map(function(d,n) { return '<label class="recovery-destination"><input type="radio" name="recovery-destino" value="'+_statsTexto(d.id)+'" '+(n === 0 ? 'checked' : '')+'><span><strong>'+_statsTexto(d.etiqueta)+'</strong><span translate="no">'+_statsTexto(d.email)+'</span></span></label>'; }).join('') + '</fieldset><button class="btn btn-primary btn-full" onclick="App.views[\'recuperar-acceso\'].enviar(false)">Enviar código</button>';
+        if (!body && this._paso === 2) body = '<h2>Introduce el código</h2><p>Hemos enviado un código de 6 dígitos. Caduca en 10 minutos.</p><p translate="no">'+_statsTexto(this._destino.email)+'</p><form id="recovery-code-form"><div class="form-group"><label for="recovery-code">Código de recuperación</label><input id="recovery-code" class="recovery-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></div><button class="btn btn-primary btn-full" type="submit">Verificar código</button></form><button id="recovery-resend" class="btn btn-secondary btn-full mt-8" onclick="App.views[\'recuperar-acceso\'].enviar(true)">Reenviar código</button>';
+        if (!body && this._paso === 3) body = '<h2>Credenciales recuperadas</h2><p>Consérvalas en un lugar seguro y no las compartas.</p><div class="form-group"><label for="recovery-pin">PIN</label><input id="recovery-pin" class="recovery-secret" type="password" readonly autocomplete="off" value="'+_statsTexto(this._secretos.pin)+'"></div>' + (this._secretos.codigoSeguridad ? '<div class="form-group"><label for="recovery-security">Código de seguridad</label><input id="recovery-security" class="recovery-secret" type="password" readonly autocomplete="off" value="'+_statsTexto(this._secretos.codigoSeguridad)+'"></div>' : '') + '<button id="recovery-reveal" type="button" class="btn btn-secondary btn-full" aria-pressed="false" onclick="App.views[\'recuperar-acceso\'].revelar(this)">Mostrar credenciales</button><button type="button" class="btn btn-primary btn-full mt-8" onclick="App.navigate(\'seguridad-opcion\',{opcion:\'pin\'})">Cambiar PIN</button>';
+        document.getElementById('recuperar-acceso-contenido').innerHTML = '<div class="account-intro"><span class="account-eyebrow">RECUPERA TU ACCESO</span><h2>¿Olvidaste tu PIN o código?</h2></div><div class="account-card">'+body+'<p id="recovery-error" class="recovery-error" role="alert"></p></div>';
+        var form = document.getElementById('recovery-code-form');
+        if (form) form.onsubmit = function(e) { e.preventDefault(); self.verificar(); };
+        if (this._paso === 2) this._cuentaAtras();
+      },
+      _error: function(error) { var el = document.getElementById('recovery-error'); if (el) el.textContent = error.message || 'Error de conexión'; },
+      _bloquear: function(busy) { this._busy = busy; document.querySelectorAll('#recuperar-acceso-contenido button').forEach(function(button) { button.disabled = busy; }); if (!busy && this._paso === 2) this._cuentaAtras(); },
+      enviar: function(reenviar) {
+        if (this._busy || (reenviar && Date.now() < this._reenviarDesde)) return Promise.resolve();
+        if (!reenviar) {
+          var selected = document.querySelector('input[name="recovery-destino"]:checked');
+          this._destino = selected && this._destinos.find(function(d) { return d.id === selected.value; });
+        }
+        if (!this._destino) return Promise.resolve();
+        var self = this, version = this._version;
+        this._bloquear(true);
+        return server('solicitarCodigoRecuperacion',this._destino.id).then(function(res) {
+          if (version !== self._version) return;
+          if (!res.success) throw new Error(res.error || 'No se pudo enviar el código');
+          self._reenviarDesde = Date.now()+60000; self._paso = 2; self._pintar();
+        }).catch(function(error) { if (version === self._version) self._error(error); }).finally(function() { if (version === self._version) self._bloquear(false); });
+      },
+      _cuentaAtras: function() {
+        clearInterval(this._timer);
+        var self = this;
+        var tick = function() {
+          var button = document.getElementById('recovery-resend');
+          if (!button) { clearInterval(self._timer); return; }
+          var seconds = Math.max(0,Math.ceil((self._reenviarDesde-Date.now())/1000));
+          button.disabled = self._busy || seconds > 0;
+          button.textContent = seconds ? App.i18n.texto('Reenviar código')+' ('+seconds+' s)' : App.i18n.texto('Reenviar código');
+          if (!seconds) clearInterval(self._timer);
+        };
+        tick(); if (Date.now() < this._reenviarDesde) this._timer = setInterval(tick,1000);
+      },
+      verificar: function() {
+        if (this._busy) return Promise.resolve();
+        var code = document.getElementById('recovery-code').value.trim(), self = this, version = this._version;
+        if (!/^\d{6}$/.test(code)) { this._error(new Error('Introduce los 6 dígitos del código')); return Promise.resolve(); }
+        this._bloquear(true);
+        return server('verificarCodigoRecuperacion',code).then(function(res) {
+          if (version !== self._version) return;
+          if (!res.success) throw new Error(res.error || 'Código incorrecto.');
+          clearInterval(self._timer); self._secretos = {pin:res.pin,codigoSeguridad:res.codigoSeguridad}; self._paso = 3; self._pintar();
+        }).catch(function(error) { if (version === self._version) self._error(error); }).finally(function() { if (version === self._version) self._bloquear(false); });
+      },
+      revelar: function(button) {
+        var reveal = button.getAttribute('aria-pressed') !== 'true';
+        document.querySelectorAll('.recovery-secret').forEach(function(input) { input.type = reveal ? 'text' : 'password'; });
+        button.setAttribute('aria-pressed',String(reveal)); button.textContent = App.i18n.texto(reveal ? 'Ocultar credenciales' : 'Mostrar credenciales');
+      },
+    },
+    'politica-privacidad': {
+      render: function() {
+        document.getElementById('politica-privacidad-contenido').innerHTML = '<article class="account-card policy-text"><h2>Política de privacidad</h2><h3>Responsable del tratamiento</h3><p>El Club de Baloncesto Baeza es el responsable de los datos utilizados en esta aplicación. Puedes contactar con el club a través de sus entrenadores o de su directiva para cualquier consulta sobre privacidad.</p><h3>Qué datos tratamos</h3><p>Datos de identificación, credenciales de acceso, información de contacto, contactos familiares, asignación a equipos, asistencia a entrenamientos, justificaciones de ausencias o retrasos y, si decides añadirla, tu fotografía de perfil. Las justificaciones pueden contener información sensible: incluye únicamente lo necesario para comunicar la incidencia.</p><h3>Para qué los utilizamos</h3><p>Gestionamos la actividad deportiva y la asistencia del club, facilitamos el trabajo de los entrenadores y enviamos avisos relacionados con la asistencia a las familias que los tengan activados. No utilizamos los datos para publicidad.</p><h3>Base jurídica y menores</h3><p>El tratamiento se apoya en el consentimiento para las funciones que lo requieren y en el interés legítimo del club en organizar su actividad deportiva, respetando los derechos de las personas. Los datos de menores se facilitan y gestionan mediante sus madres, padres o tutores legales. Puedes retirar tu consentimiento cuando corresponda, sin afectar a los tratamientos anteriores a su retirada.</p><h3>Destinatarios e infraestructura</h3><p>No cedemos tus datos a terceros para sus propios fines. El personal autorizado del club accede solo a la información necesaria para sus funciones. Google (Apps Script y Gmail) y Supabase actúan como proveedores de infraestructura y encargados del tratamiento. Sus servicios pueden implicar tratamiento fuera del Espacio Económico Europeo, sujeto a las garantías de protección de datos aplicables.</p><h3>Conservación</h3><p>Conservamos los datos durante la relación deportiva y el tiempo necesario para gestionar las temporadas, atender solicitudes y cumplir las obligaciones legales aplicables. Después se eliminan o anonimizan cuando dejan de ser necesarios. El club revisa la necesidad de conservar el historial y los contactos familiares.</p><h3>Tus derechos</h3><p>Puedes solicitar acceso, rectificación, supresión, oposición, limitación del tratamiento y portabilidad de tus datos, en los casos previstos por la normativa, contactando con la directiva o los entrenadores del club. Para proteger tu información puede ser necesario acreditar tu identidad o representación legal. También puedes presentar una reclamación ante la Agencia Española de Protección de Datos (AEPD), en <a href="https://www.aepd.es" target="_blank" rel="noopener noreferrer">www.aepd.es</a>.</p><h3>Seguridad</h3><p>Aplicamos controles de acceso por perfil y medidas técnicas y organizativas para proteger la información. No compartas tu PIN ni tu código de seguridad y cierra la sesión en dispositivos compartidos. Comunica al club cualquier acceso no autorizado que detectes.</p></article>';
+      },
+    },
+    'politica-cookies': {
+      render: function() {
+        document.getElementById('politica-cookies-contenido').innerHTML = '<article class="account-card policy-text"><h2>Política de cookies y almacenamiento</h2><h3>Sin publicidad ni analítica</h3><p>Esta aplicación no utiliza cookies de publicidad ni de analítica. Guarda información técnica en el almacenamiento local de tu navegador (localStorage) para que puedas utilizarla.</p><h3>Qué se guarda en tu dispositivo</h3><ul><li><code>cb_baeza_auth</code>: mantiene tu sesión y tus credenciales de acceso hasta que cierres sesión o borres el almacenamiento.</li><li><code>cb_baeza_prefs</code>: recuerda el idioma y el tema visual elegidos.</li><li>Borradores locales: permiten recuperar cambios pendientes en formularios de la aplicación.</li></ul><p>El almacenamiento local no se envía automáticamente como una cookie. La aplicación utiliza la sesión guardada para autenticar las peticiones al servidor. Quien tenga acceso a tu dispositivo puede acceder a la sesión: evita guardar el acceso en equipos compartidos.</p><h3>Cookies técnicas de Google</h3><p>Google puede establecer cookies técnicas necesarias para servir la aplicación mediante Apps Script y para la seguridad o funcionamiento de su plataforma, según tu navegador y tu sesión de Google.</p><h3>Cómo borrar estos datos</h3><p>Puedes cerrar sesión desde el menú de usuario. Para borrar preferencias, borradores y cookies, abre la configuración de privacidad de tu navegador, busca los datos de sitios de Google Apps Script y elimina sus cookies y almacenamiento. También puedes borrar todos los datos de navegación. Perderás la sesión, las preferencias y los borradores guardados. Bloquear el almacenamiento o las cookies técnicas puede impedir algunas funciones.</p></article>';
       },
     },
 
@@ -4939,6 +4733,28 @@ function _esc(s) {
   return (s == null ? '' : String(s)).replace(/'/g, "\\'");
 }
 
+App.account = {
+  target: null,
+  open: function(tipo,id,view) {
+    var own = tipo === 'jugador' ? App.state.jugador : App.state.usuario;
+    var target = own && own.ID === id ? null : {tipo:tipo,id:id};
+    if (target && (App.state.rol === 'jugador' || (tipo === 'entrenador' && !App.state.esAdmin))) return;
+    this.target = target;
+    App.navigate(view || 'perfil-usuario');
+  },
+  persona: function() { return this.target ? this.target.tipo === 'jugador' ? App.cache.getJugadorById(this.target.id) : App.cache.getEntrenadorById(this.target.id) : App.state.rol === 'jugador' ? App.state.jugador : App.state.usuario; },
+  isPlayer: function() { return this.target ? this.target.tipo === 'jugador' : App.state.rol === 'jugador'; },
+  isStaff: function() { return !!this.target; },
+  allowed: function() { return !this.target || (App.state.rol !== 'jugador' && (this.target.tipo === 'jugador' || App.state.esAdmin)); },
+  icon: function(id) {
+    var paths = {perfil:'<circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>',seguridad:'<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',ajustes:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',idioma:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/>',apariencia:'<path d="M20 14A9 9 0 0 1 10 4a9 9 0 1 0 10 10Z"/>',correo:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/>',privacidad:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',cookies:'<path d="M12 3a9 9 0 1 0 9 9 3 3 0 0 1-4-3 3 3 0 0 1-3-3 3 3 0 0 1-2-3Z"/><path d="M8.5 11.5h.01M12 16h.01M15.5 13.5h.01M8 15.5h.01"/>',salir:'<path d="M10 4H4v16h6m4-12 4 4-4 4m-6-4h13"/>'};
+    return '<svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true">' + (paths[id] || paths.ajustes) + '</svg>';
+  },
+};
+App.accountList = function(entries) {
+  return '<div class="account-settings-list">' + entries.map(function(e) { return '<button type="button" class="account-settings-row" onclick="' + _statsTexto(e.action || 'App.navigate('+JSON.stringify(e.view)+')') + '"><span class="account-settings-icon">' + App.account.icon(e.icon) + '</span><span class="account-settings-copy"><strong>' + _statsTexto(e.titulo) + '</strong><span>' + _statsTexto(e.descripcion || '') + '</span></span><span class="account-settings-chevron" aria-hidden="true">›</span></button>'; }).join('') + '</div>';
+};
+
 App.avatars = {
   balon: ['Balón','<circle cx="32" cy="32" r="18" fill="#d9ad54"/><path d="M14 32h36M32 14v36M19 19c18 4 22 17 26 26M45 19c-18 4-22 17-26 26"/>'],
   canasta: ['Canasta','<rect x="13" y="12" width="38" height="25" rx="4"/><path d="M25 25h14v10M19 37h26l-5 15H24zM25 38l7 14 7-14"/>'],
@@ -4956,8 +4772,9 @@ App.avatars = {
 App.avatarHtml = function(fotoURL,nombre,size) {
   size = Number(size) || 40;
   var foto = String(fotoURL || ''), preset = foto.indexOf('avatar:') === 0 && App.avatars[foto.slice(7)];
-  var inside = preset ? '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="#f7edff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">' + preset[1] + '</g></svg>' : /^(https:\/\/|data:image\/[a-z0-9.+-]+;base64,)/i.test(foto) ? '<img src="' + _statsTexto(foto) + '" alt="" referrerpolicy="no-referrer">' : '<span>' + _statsTexto(String(nombre || '?').trim().split(/\s+/).slice(0,2).map(function(w) { return w.charAt(0).toUpperCase(); }).join('')) + '</span>';
-  return '<span class="club-avatar" style="width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size*.34) + 'px" aria-hidden="true">' + inside + '</span>';
+  var image = /^(https:\/\/|data:image\/[a-z0-9.+-]+;base64,)/i.test(foto);
+  var inside = preset ? '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="#f7edff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">' + preset[1] + '</g></svg>' : image ? '<img src="' + _statsTexto(foto) + '" alt="' + _statsTexto(nombre || 'Foto de perfil') + '" loading="lazy" referrerpolicy="no-referrer">' : '<span>' + _statsTexto(String(nombre || '?').trim().split(/\s+/).slice(0,2).map(function(w) { return w.charAt(0).toUpperCase(); }).join('')) + '</span>';
+  return '<span class="club-avatar" style="width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size*.34) + 'px"' + (image && !preset ? '' : ' aria-hidden="true"') + '>' + inside + '</span>';
 };
 
 function _updateUserBadge(nombre, rol) {
@@ -5075,7 +4892,7 @@ function _htmlLogro(code) {
 }
 function _htmlAlerta(code) { return '<span class="alerta-chip">' + _esc(({seguidas:'3 ausencias seguidas',caida:'Caída de asistencia',injustificadas:'Faltas sin justificar'})[code] || code) + '</span>'; }
 function _statsArgumento(valor) { return JSON.stringify(valor == null ? null : valor).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function _statsJugadorBoton(id,nombre) { return '<button class="btn btn-secondary btn-sm" onclick="App.views[\'jugador-detalle\'].cargar(' + _statsArgumento(id) + ')">' + _esc(nombre) + '</button>'; }
+function _statsJugadorBoton(id,nombre) { var persona = App.cache.getJugadorById(id); return '<button class="btn btn-secondary btn-sm person-inline" onclick="App.views[\'jugador-detalle\'].cargar(' + _statsArgumento(id) + ')">' + App.avatarHtml(persona && persona.FotoURL,persona ? persona.Nombre + ' ' + persona.Apellidos : nombre,36) + '<span>' + _esc(nombre) + '</span></button>'; }
 function _statsEquipoBoton(id,nombre) { return '<button class="btn btn-secondary btn-sm" onclick="App.views[\'equipo-detalle\'].cargar(' + _statsArgumento(id) + ')">' + _esc(nombre) + '</button>'; }
 function _statsOrdenar(filas,campo) { return filas.slice().sort(function(a,b) { var va = a[campo], vb = b[campo]; if (va == null || vb == null) return va == null ? (vb == null ? 0 : 1) : -1; return vb - va || String(a.apellidos || a.nombre || '').localeCompare(String(b.apellidos || b.nombre || ''),'es'); }); }
 function _statsOrdenSelect(entidad,campo) {
@@ -5411,7 +5228,7 @@ function _statsContacto(tipo,id) {
   var nombre = [persona.Nombre,persona.Apellidos].filter(Boolean).join(' ');
   var contactos = [{titulo:jugador ? 'Jugador' : 'Entrenador',nombre:nombre,tel:persona.Telefono,email:persona.Email}];
   if (jugador) [1,2].forEach(function(n) { var familiar = {titulo:'Familiar ' + n,nombre:[persona['NombrePadre'+n],persona['ApellidosPadre'+n]].filter(Boolean).join(' '),tel:persona['TelefonoPadre'+n],email:persona['EmailPadre'+n]}; if (familiar.nombre || familiar.tel || familiar.email) contactos.push(familiar); });
-  App.openModal('Contactar · ' + nombre,'<div class="stats-contact-sheet">' + contactos.map(function(c) {
+  App.openModal('Contactar · ' + nombre,'<div class="stats-contact-sheet"><div class="person-inline">' + App.avatarHtml(persona.FotoURL,nombre,72) + '<strong>' + _statsTexto(nombre) + '</strong></div>' + contactos.map(function(c) {
     var tel = _statsTelefono(c.tel), email = String(c.email || '').trim();
     var emailValido = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email);
     if (!tel && !emailValido) return '<p class="stats-contact-muted">' + _statsTexto(c.titulo) + ': sin teléfono ni email disponible.</p>';
@@ -5419,6 +5236,160 @@ function _statsContacto(tipo,id) {
   }).join('') + '</div>');
 }
 
+
+Object.assign(App.account, {
+  accionesDetalleHtml: function(tipo, id) {
+    return ['perfil','seguridad'].map(function(accion) {
+      var titulo = accion === 'perfil' ? 'Perfil' : 'Seguridad';
+      return '<button class="detalle-settings" type="button" aria-label="' + titulo + '" title="' + titulo + '" onclick="App.account.open(\'' + tipo + '\',\'' + _esc(id) + '\',\'' + (accion === 'perfil' ? 'perfil-usuario' : 'seguridad') + '\')">' + App.account.icon(accion) + '</button>';
+    }).join('');
+  },
+  perfilStaffHtml: function(persona) {
+    if (!this.isStaff() || !this.allowed()) return '';
+    var jugador = this.isPlayer();
+    function campo(key, label, type) {
+      return '<label class="form-group">' + label + '<input data-perfil="' + key + '" type="' + (type || 'text') + '" value="' + _statsTexto(persona[key] == null ? '' : persona[key]) + '"' + (key === 'Dorsal' ? ' min="0" max="99"' : '') + '></label>';
+    }
+    var html = '<h3>Datos personales</h3><div class="form-row">' + campo('Nombre','Nombre *') + campo('Apellidos','Apellidos *') + '</div>';
+    if (jugador) html += '<div class="form-row">' + campo('Dorsal','Dorsal','number') + campo('FechaNac','Fecha de nacimiento','date') + '</div>';
+    html += campo('Telefono','Teléfono','tel') + campo('Email',jugador ? 'Email' : 'Email Google *','email');
+    if (jugador) {
+      html += '<h3>Contacto familiar</h3>';
+      [1,2].forEach(function(n) {
+        var activo = persona['NotificarAusenciasPadre' + n] !== false && persona['NotificarAusenciasPadre' + n] !== 'FALSE';
+        html += '<fieldset class="account-staff-family"><legend>Familiar ' + n + '</legend><div class="form-row">' + campo('NombrePadre'+n,'Nombre') + campo('ApellidosPadre'+n,'Apellidos') + '</div>' + campo('TelefonoPadre'+n,'Teléfono','tel') + campo('EmailPadre'+n,'Email','email') + '<label class="parent-email-notify"><input type="checkbox" data-perfil="NotificarAusenciasPadre' + n + '"' + (activo ? ' checked' : '') + '><span>Enviar avisos de ausencia</span></label></fieldset>';
+      });
+    } else {
+      html += '<p class="account-hint">Cámbialo solo si el entrenador cambió de cuenta de Google. El cambio afectará a su próximo inicio de sesión.</p><label class="parent-email-notify"><input type="checkbox" data-perfil="EsAdmin"' + (persona.EsAdmin === true || persona.EsAdmin === 'TRUE' ? ' checked' : '') + '><span>Conceder permisos de administrador</span></label>';
+      if (persona.EsAdmin !== true && persona.EsAdmin !== 'TRUE') html += '<label class="form-group">PIN para conceder permisos<input data-perfil="PIN" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label><p class="account-hint">Solo es necesario al conceder permisos de administrador.</p>';
+    }
+    var relaciones = jugador ? App.cache.jugadoresEquipos : App.cache.entrenadoresEquipos;
+    var clave = jugador ? 'ID_Jugador' : 'ID_Entrenador';
+    html += '<h3>Equipos</h3><p class="account-hint">Gestiona las asignaciones y su tipo desde el formulario del equipo.</p>';
+    App.cache.equipos.forEach(function(equipo) {
+      var relacion = relaciones.find(function(r) { return r[clave] === persona.ID && r.ID_Equipo === equipo.ID && r.Activo !== false && r.Activo !== 'FALSE'; });
+      var editable = App.state.esAdmin || (jugador && App.state.equipos.some(function(e) { return e.ID === equipo.ID; }));
+      if (!relacion && !editable) return;
+      var rol = !jugador && relacion && editable ? '<label>Rol en el equipo<select aria-label="Rol en el equipo" onchange="App.account.guardarStaffRolEquipo(\'' + _esc(equipo.ID) + '\',this.value)"><option value="Entrenador"' + (relacion.TipoRol !== 'Visor' ? ' selected' : '') + '>Entrenador</option><option value="Visor"' + (relacion.TipoRol === 'Visor' ? ' selected' : '') + '>Visor</option></select></label>' : '';
+      html += '<div class="account-staff-team"><span>' + _statsTexto(equipo.Nombre || '') + (relacion ? ' · ' + _statsTexto(relacion.Tipo || relacion.TipoRol || '') : '') + '</span>' + rol + (editable ? '<button class="btn btn-secondary btn-sm" type="button" onclick="App.views[\'equipo-form\'].cargar(\'' + _esc(equipo.ID) + '\')">Gestionar equipo</button>' : '') + '</div>';
+    });
+    return html + '<button class="btn btn-danger btn-full" type="button" onclick="App.account.eliminarStaff()">' + (jugador ? 'Eliminar jugador' : 'Eliminar entrenador') + '</button>';
+  },
+  guardarStaffPerfil: function(datos, force, emailWarningConfirmed, emailChangeConfirmed) {
+    if (!this.isStaff() || !this.allowed()) return;
+    var persona = this.persona(), jugador = this.isPlayer();
+    if (!persona) return;
+    if (!datos.Nombre || !datos.Apellidos) { showToast('Nombre y apellidos son obligatorios','error'); return; }
+    if (!jugador && !datos.Email) { showToast('El email es obligatorio para nuevos entrenadores','error'); return; }
+    if (datos.Email && !_validarEmail(datos.Email)) { showToast('El email no tiene un formato válido','error'); return; }
+    if (datos.Telefono && !_validarTel(datos.Telefono)) { showToast('El teléfono no tiene un formato válido (mín. 9 dígitos)','error'); return; }
+    if (jugador) {
+      if (datos.FechaNac && datos.FechaNac > _hoy()) { showToast('La fecha de nacimiento no puede ser futura','error'); return; }
+      for (var n = 1; n <= 2; n++) {
+        if (datos['EmailPadre'+n] && !_validarEmail(datos['EmailPadre'+n])) { showToast('El email del familiar ' + n + ' no es válido','error'); return; }
+        if (datos['TelefonoPadre'+n] && !_validarTel(datos['TelefonoPadre'+n])) { showToast('El teléfono del familiar ' + n + ' no es válido','error'); return; }
+      }
+    } else {
+      if (App.cache.entrenadores.some(function(e) { return e.ID !== persona.ID && String(e.Email || '').toLowerCase() === datos.Email.toLowerCase(); })) { showToast('Ya existe un entrenador con ese email','error'); return; }
+      if (!datos.EsAdmin || persona.EsAdmin === true || persona.EsAdmin === 'TRUE') delete datos.PIN;
+      else if (!/^[0-9]{4,6}$/.test(datos.PIN || '')) { showToast('Indica un PIN explícito para habilitar este administrador.','error'); return; }
+    }
+    var duplicado = (jugador ? App.cache.jugadores : App.cache.entrenadores).some(function(p) { return p.ID !== persona.ID && String(p.Nombre || '').toLowerCase() === datos.Nombre.toLowerCase() && String(p.Apellidos || '').toLowerCase() === datos.Apellidos.toLowerCase(); });
+    var self = this;
+    if (!force && duplicado) {
+      confirmarYGuardar(jugador ? 'Jugador duplicado' : 'Entrenador duplicado','Ya existe una persona llamada <strong>' + _statsTexto(datos.Nombre + ' ' + datos.Apellidos) + '</strong>. ¿Deseas guardarlo igualmente?',function() { self.guardarStaffPerfil(datos,true,emailWarningConfirmed,emailChangeConfirmed); });
+      return;
+    }
+    if (jugador && !emailWarningConfirmed && !(datos.EmailPadre1 && datos.NotificarAusenciasPadre1) && !(datos.EmailPadre2 && datos.NotificarAusenciasPadre2)) {
+      confirmarYGuardar('Aviso de notificaciones','No se enviarán avisos de ausencia por email. No hay ningún email familiar informado y activado para recibirlos. Puedes guardar igualmente y configurar los contactos más adelante.',function() { self.guardarStaffPerfil(datos,force,true,emailChangeConfirmed); });
+      return;
+    }
+    if (!jugador && !emailChangeConfirmed && String(persona.Email || '').toLowerCase() !== datos.Email.toLowerCase()) {
+      confirmarYGuardar('Cambio de email','Cámbialo solo si el entrenador cambió de cuenta de Google. El cambio afectará a su próximo inicio de sesión.',function() { self.guardarStaffPerfil(datos,force,emailWarningConfirmed,true); });
+      return;
+    }
+    var id = persona.ID, tabla = jugador ? 'jugadores' : 'entrenadores';
+    return App.operation.run('staff-profile:' + id,jugador ? 'actualizarJugador' : 'actualizarEntrenador',[id,datos],function() {
+      var cambios = Object.assign({},datos); delete cambios.PIN;
+      App.cache.upsert(tabla,Object.assign({},persona,cambios));
+      App.state._todosJugadores = App.cache.jugadores; App.state._todosEntrenadores = App.cache.entrenadores;
+      App.state._formIsDirty = false;
+      if (App.state.viewHistory[App.state.viewHistory.length - 1] === 'perfil-usuario') App.state.viewHistory.pop();
+      App.navigate('perfil-usuario',{},false);
+      showToast('Perfil actualizado','success');
+    }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
+  },
+  guardarStaffRolEquipo: function(equipoId, tipoRol) {
+    if (!this.isStaff() || !this.allowed() || this.isPlayer() || !App.state.esAdmin) return;
+    var persona = this.persona();
+    var relacion = App.cache.entrenadoresEquipos.find(function(r) { return r.ID_Entrenador === persona.ID && r.ID_Equipo === equipoId && r.Activo !== false && r.Activo !== 'FALSE'; });
+    if (!relacion || ['Entrenador','Visor'].indexOf(tipoRol) < 0) return;
+    return App.operation.run('staff-team-role:' + persona.ID + ':' + equipoId,'asignarEntrenadorAEquipo',[persona.ID,equipoId,tipoRol],function(result) {
+      App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.map(function(r) { return r.ID === relacion.ID ? result.relacion : r; });
+      showToast('Rol actualizado','success');
+    }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
+  },
+  seguridadStaffHtml: function(persona) {
+    if (!this.isStaff() || !this.allowed()) return '';
+    var codigo = App.views['seguridad-opcion']._opcion === 'codigo';
+    if (codigo) {
+      if (!this.isPlayer() || !App.state.esAdmin) return '';
+      return '<form class="account-card" onsubmit="event.preventDefault();App.account.guardarStaffCodigo()"><h3>Código familias</h3><p>Compártelo con la familia y cámbialo solo si fue comprometido.</p><label class="form-group">Nuevo código familias<input id="staff-codigo" autocomplete="off" value="' + _statsTexto(persona.CodigoPadres || '') + '"></label><button class="btn btn-primary btn-full" type="submit">Guardar cambios</button></form>';
+    }
+    return '<form class="account-card" onsubmit="event.preventDefault();App.account.guardarStaffCredenciales()"><h3>Credenciales de acceso</h3><p>Comunica las nuevas credenciales a la persona. No necesitas su PIN actual.</p>' + (this.isPlayer() ? '<label class="form-group">Usuario<input id="staff-usuario" autocomplete="off" value="' + _statsTexto(persona.Usuario || '') + '"></label>' : '') + '<label class="form-group">Nuevo PIN<input id="staff-pin" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label><label class="form-group">Confirmar PIN<input id="staff-pin-confirm" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label><p>Deja el PIN en blanco para mantener el actual.</p><button class="btn btn-primary btn-full" type="submit">Guardar cambios</button></form>';
+  },
+  guardarStaffCredenciales: function() {
+    if (!this.isStaff() || !this.allowed()) return;
+    var persona = this.persona(), jugador = this.isPlayer();
+    var pinField = document.getElementById('staff-pin'), confirmField = document.getElementById('staff-pin-confirm');
+    var pin = pinField.value.trim(), repetir = confirmField.value.trim();
+    if (pin !== repetir) { showToast('Los dos PINs no coinciden','error'); return; }
+    if (pin && !/^[0-9]{4,6}$/.test(pin)) { showToast('El PIN debe tener entre 4 y 6 dígitos numéricos','error'); return; }
+    var usuario = jugador ? document.getElementById('staff-usuario').value.trim().toLowerCase() : null;
+    if (jugador && usuario.length < 3) { showToast('El usuario debe tener al menos 3 caracteres.','error'); return; }
+    if (jugador && App.cache.jugadores.some(function(j) { return j.ID !== persona.ID && String(j.Usuario || '').toLowerCase() === usuario; })) { showToast('El usuario ya está en uso','error'); return; }
+    if (!pin && (!jugador || usuario === String(persona.Usuario || '').toLowerCase())) { showToast('No hay cambios que guardar','info'); return; }
+    var id = persona.ID;
+    confirmarYGuardar('Modificar credenciales','Se cambiarán las credenciales de acceso de <strong>' + _statsTexto(persona.Nombre + ' ' + persona.Apellidos) + '</strong>. Asegúrate de comunicarle los nuevos datos.',function() {
+      App.operation.run('staff-security:' + id,jugador ? 'actualizarCredencialesJugador' : 'actualizarEntrenador',jugador ? [id,usuario,pin || null,null] : [id,{PIN:pin}],function() {
+        if (jugador) App.cache.upsert('jugadores',Object.assign({},persona,{Usuario:usuario}));
+        pinField.value = ''; confirmField.value = '';
+        App.state._formIsDirty = false;
+        showToast('Credenciales actualizadas','success');
+      }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
+    });
+  },
+  guardarStaffCodigo: function() {
+    if (!this.isStaff() || !this.allowed() || !this.isPlayer() || !App.state.esAdmin) return;
+    var persona = this.persona(), codigo = document.getElementById('staff-codigo').value.trim().toUpperCase();
+    if (codigo.length < 4) { showToast('El código de familias debe tener al menos 4 caracteres.','error'); return; }
+    var id = persona.ID;
+    confirmarYGuardar('Modificar código familias','Compártelo con la familia y cámbialo solo si fue comprometido.',function() {
+      App.operation.run('staff-code:' + id,'actualizarCredencialesJugador',[id,null,null,codigo],function() {
+        App.cache.upsert('jugadores',Object.assign({},persona,{CodigoPadres:codigo}));
+        App.state._formIsDirty = false;
+        showToast('Código de seguridad actualizado','success');
+      }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
+    });
+  },
+  eliminarStaff: function() {
+    if (!this.isStaff() || !this.allowed()) return;
+    var persona = this.persona(), jugador = this.isPlayer(), id = persona.ID;
+    confirmarYGuardar(jugador ? 'Eliminar jugador' : 'Eliminar entrenador','¿Seguro que quieres eliminar a <strong>' + _statsTexto(persona.Nombre + ' ' + persona.Apellidos) + '</strong>? Se eliminarán sus asistencias y asignaciones a equipos.',function() {
+      App.operation.run('staff-delete:' + id,jugador ? 'eliminarJugador' : 'eliminarEntrenador',[id],function() {
+        App.cache.remove(jugador ? 'jugadores' : 'entrenadores',id);
+        var relaciones = jugador ? 'jugadoresEquipos' : 'entrenadoresEquipos', clave = jugador ? 'ID_Jugador' : 'ID_Entrenador';
+        App.cache[relaciones] = App.cache[relaciones].filter(function(r) { return r[clave] !== id; });
+        App.cache.asistencias = {};
+        App.state._todosJugadores = App.cache.jugadores; App.state._todosEntrenadores = App.cache.entrenadores;
+        App.state._formIsDirty = false;
+        App.account.target = null;
+        App.state.viewHistory = App.state.viewHistory.filter(function(v) { return ['perfil-usuario','seguridad','seguridad-opcion',jugador ? 'jugador-detalle' : 'entrenador-detalle'].indexOf(v) < 0; });
+        App.navigate(jugador ? 'jugadores-admin' : 'entrenadores-admin',{},false);
+      }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
+    });
+  }
+});
 
 App.preferences = {
   temas: [
@@ -5443,12 +5414,26 @@ App.preferences = {
     if (meta) meta.content = tema.barra;
     try { localStorage.setItem('cb_baeza_prefs', JSON.stringify({idioma:this.idioma,tema:this.tema})); } catch (e) { showToast('No se pudieron guardar los ajustes en este dispositivo','error'); }
     App.i18n.aplicar(document.body);
-    if (App.state.currentView === 'ajustes') App.views.ajustes.render();
+    if (['ajustes','ajustes-idioma','ajustes-apariencia'].includes(App.state.currentView)) App.views[App.state.currentView].render();
   }
 };
 App.views.ajustes = {
   render: function() {
-    document.getElementById('ajustes-contenido').innerHTML = '<div class="preferences-page"><h2>Ajustes</h2><p class="preferences-intro">Personaliza la aplicación en este dispositivo.</p><section class="preferences-panel"><h3>Idioma</h3><label for="preferencia-idioma">Idioma de la aplicación</label><select id="preferencia-idioma" onchange="App.preferences.guardar({idioma:this.value})"><option value="es" translate="no"' + (App.preferences.idioma === 'es' ? ' selected' : '') + '>Español</option><option value="en" translate="no"' + (App.preferences.idioma === 'en' ? ' selected' : '') + '>English</option></select></section><section class="preferences-panel"><h3>Apariencia</h3><p>Elige un tema</p><div class="theme-options">' + App.preferences.temas.map(function(t) { return '<button type="button" class="theme-option" aria-pressed="' + (t.id === App.preferences.tema) + '" onclick="App.preferences.guardar({tema:\'' + t.id + '\'})"><span class="theme-preview" aria-hidden="true" style="background:' + t.colores[1] + '"><i style="background:' + t.colores[0] + '"></i><b style="background:' + t.colores[2] + '"></b><em style="background:' + t.colores[0] + '"></em></span><strong>' + t.nombre + '</strong><span class="theme-selected">' + (t.id === App.preferences.tema ? 'Seleccionado' : 'Seleccionar') + '</span></button>'; }).join('') + '</div></section><p class="preferences-note">Los cambios se guardan solo en este dispositivo.</p></div>';
+    var tema = App.preferences.temas.find(function(t) { return t.id === App.preferences.tema; });
+    document.getElementById('ajustes-contenido').innerHTML = '<div class="preferences-page"><h2>Ajustes</h2><p class="preferences-intro">Personaliza la aplicación en este dispositivo.</p>' + App.accountList([
+      {icon:'idioma',titulo:'Idioma',descripcion:App.preferences.idioma === 'en' ? 'English' : 'Español',view:'ajustes-idioma'},
+      {icon:'apariencia',titulo:'Apariencia',descripcion:tema.nombre,view:'ajustes-apariencia'}
+    ]) + '<p class="preferences-note">Los cambios se guardan solo en este dispositivo.</p></div>';
+  }
+};
+App.views['ajustes-idioma'] = {
+  render: function() {
+    document.getElementById('ajustes-idioma-contenido').innerHTML = '<div class="preferences-page"><h2>Idioma</h2><section class="preferences-panel"><label for="preferencia-idioma">Idioma de la aplicación</label><select id="preferencia-idioma" onchange="App.preferences.guardar({idioma:this.value})"><option value="es" translate="no"' + (App.preferences.idioma === 'es' ? ' selected' : '') + '>Español</option><option value="en" translate="no"' + (App.preferences.idioma === 'en' ? ' selected' : '') + '>English</option></select></section><p class="preferences-note">Los cambios se guardan solo en este dispositivo.</p></div>';
+  }
+};
+App.views['ajustes-apariencia'] = {
+  render: function() {
+    document.getElementById('ajustes-apariencia-contenido').innerHTML = '<div class="preferences-page"><h2>Apariencia</h2><section class="preferences-panel"><p>Elige un tema</p><div class="theme-options">' + App.preferences.temas.map(function(t) { return '<button type="button" class="theme-option" aria-pressed="' + (t.id === App.preferences.tema) + '" onclick="App.preferences.guardar({tema:\'' + t.id + '\'})"><span class="theme-preview" aria-hidden="true" style="background:' + t.colores[1] + '"><i style="background:' + t.colores[0] + '"></i><b style="background:' + t.colores[2] + '"></b><em style="background:' + t.colores[0] + '"></em></span><strong>' + t.nombre + '</strong><span class="theme-selected">' + (t.id === App.preferences.tema ? 'Seleccionado' : 'Seleccionar') + '</span></button>'; }).join('') + '</div></section><p class="preferences-note">Los cambios se guardan solo en este dispositivo.</p></div>';
   }
 };
 App.i18n = {
@@ -6479,7 +6464,8 @@ App.i18n = {
     [/^WhatsApp de (.+)$/, 'WhatsApp for $1'],
     [/^(.+): sin teléfono ni email disponible\.$/, '$1: no phone number or email available.'],
     [/^Nuevo código \(6 letras o números\)$/, 'New code (6 letters or numbers)'],
-    [/^Recordatorio enviado a (\d+) correos?\.?$/, 'Reminder sent to $1 email addresses.'],
+    [/^Tutor (\d)( · .+)?$/, 'Guardian $1$2'],
+    [/^Cuenta$/, 'Account'],
     [/^([a-z]+) (\d{4})$/, function(all,month,year) { var months = {enero:'January',febrero:'February',marzo:'March',abril:'April',mayo:'May',junio:'June',julio:'July',agosto:'August',septiembre:'September',octubre:'October',noviembre:'November',diciembre:'December'}; return months[month] ? months[month] + ' ' + year : all; }],
     [/^(\d+) sesiones seguidas$/, '$1 consecutive sessions'],
     [/^(\d+) seguidas$/, '$1 in a row'],
@@ -6550,6 +6536,71 @@ App.i18n = {
   },
   observar: function() { this.observador.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title','alt']}); }
 };
+Object.assign(App.i18n.diccionario, {
+  'Gestiona las asignaciones y su tipo desde el formulario del equipo.':'Manage assignments and their type from the team form.',
+  'Gestionar equipo':'Manage team',
+  'PIN para conceder permisos':'PIN to grant permissions',
+  'Solo es necesario al conceder permisos de administrador.':'Only required when granting administrator permissions.',
+  'Cámbialo solo si el entrenador cambió de cuenta de Google. El cambio afectará a su próximo inicio de sesión.':'Change it only if the coach changed Google accounts. This will affect their next sign-in.',
+  'Compártelo con la familia y cámbialo solo si fue comprometido.':'Share it with the family and change it only if compromised.',
+  'Nuevo código familias':'New family code',
+  'Comunica las nuevas credenciales a la persona. No necesitas su PIN actual.':'Share the new credentials with the person. Their current PIN is not required.',
+  'No hay cambios que guardar':'There are no changes to save',
+  'El usuario ya está en uso':'The username is already in use',
+  'Credenciales actualizadas':'Credentials updated',
+  'Indica un PIN explícito para habilitar este administrador.':'Enter an explicit PIN to enable this administrator.',
+  'El usuario debe tener al menos 3 caracteres.':'The username must contain at least 3 characters.',
+  'El código de familias debe tener al menos 4 caracteres.':'The family code must contain at least 4 characters.',
+  'Datos personales':'Personal details',
+  'Cambio de email':'Email change',
+  'Rol en el equipo':'Team role',
+  'Visor':'Viewer',
+  'Rol actualizado':'Role updated',
+  'Modificar credenciales':'Change credentials',
+  'Modificar código familias':'Change family code',
+  'Ya existe una persona llamada':'A person already exists named',
+  '. ¿Deseas guardarlo igualmente?':'. Do you want to save anyway?',
+  'Se cambiarán las credenciales de acceso de':'Sign-in credentials will change for',
+  '. Asegúrate de comunicarle los nuevos datos.':'. Make sure you share the new credentials.',
+  '¿Seguro que quieres eliminar a':'Are you sure you want to delete',
+  '? Se eliminarán sus asistencias y asignaciones a equipos.':'? Their attendance records and team assignments will be deleted.',
+  'No se enviarán avisos de ausencia por email. No hay ningún email familiar informado y activado para recibirlos. Puedes guardar igualmente y configurar los contactos más adelante.':'Absence notifications will not be sent by email. No family email has notifications enabled. You can save anyway and set up contacts later.'
+});
+Object.assign(App.i18n.diccionario, {
+  'Editar perfil':'Edit profile',
+  'Recuperar acceso':'Recover access',
+  'Sin permiso':'Access denied',
+  'Avisos por email desactivados':'Email notifications disabled',
+  'Avisos por email activados':'Email notifications enabled',
+  'Cambiar PIN y usuario':'Change PIN and username',
+  'Actualiza tus credenciales de acceso':'Update your sign-in credentials',
+  'Protege tus datos y justificaciones':'Protect your details and attendance notices',
+  'Recupera el acceso con un código por email':'Recover access with an email code',
+  'Cómo protegemos los datos del club':'How we protect club data',
+  'Qué guarda la aplicación en tu dispositivo':'What the app stores on your device',
+  'RECUPERA TU ACCESO':'RECOVER YOUR ACCESS',
+  'Cargando opciones de recuperación…':'Loading recovery options…',
+  'No se pudieron cargar las opciones de recuperación':'Unable to load recovery options',
+  'Elige dónde recibir el código':'Choose where to receive your code',
+  'Solo mostramos los correos registrados en tu ficha.':'Only email addresses registered in your profile are shown.',
+  'Correo de recuperación':'Recovery email',
+  'Enviar código':'Send code',
+  'Introduce el código':'Enter the code',
+  'Hemos enviado un código de 6 dígitos. Caduca en 10 minutos.':'We sent a 6-digit code. It expires in 10 minutes.',
+  'Código de recuperación':'Recovery code',
+  'Verificar código':'Verify code',
+  'Reenviar código':'Resend code',
+  'Credenciales recuperadas':'Credentials recovered',
+  'Consérvalas en un lugar seguro y no las compartas.':'Keep them somewhere safe and do not share them.',
+  'Mostrar credenciales':'Show credentials',
+  'Ocultar credenciales':'Hide credentials',
+  'Introduce los 6 dígitos del código':'Enter the 6-digit code',
+  'No se pudo enviar el código':'Unable to send the code',
+  'Código incorrecto.':'Incorrect code.',
+  'Demasiados intentos. Solicita un código nuevo.':'Too many attempts. Request a new code.',
+  'El código ha caducado o no existe. Solicita uno nuevo.':'The code has expired or does not exist. Request a new one.',
+  'Espera un minuto antes de pedir otro código.':'Wait one minute before requesting another code.',
+});
 document.addEventListener('DOMContentLoaded',function() { App.i18n.iniciar(); });
 
 </script>

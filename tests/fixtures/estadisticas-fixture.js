@@ -96,3 +96,10 @@ Object.assign(datos.jugadores.find(j => j.ID === 'jugador-bruno'), { Email: 'bru
 Object.assign(datos.jugadores.find(j => j.ID === 'jugador-david'), { TelefonoPadre1: '600333444' });
 Object.assign(datos.jugadores.find(j => j.ID === 'jugador-elena'), { Telefono: '600444555' });
 Object.assign(datos.jugadores.find(j => j.ID === 'jugador-fatima'), { Email: 'fatima@example.test' });
+
+Object.assign(datos.jugadores.find(j => j.ID === 'jugador-ana'), { FotoURL: 'avatar:canasta' });
+Object.assign(datos.jugadores.find(j => j.ID === 'jugador-bruno'), { FotoURL: 'avatar:balon' });
+Object.assign(datos.jugadores.find(j => j.ID === 'jugador-celia'), { FotoURL: 'avatar:camiseta' });
+Object.assign(datos.jugadores.find(j => j.ID === 'jugador-hugo'), { FotoURL: 'avatar:balon' });
+Object.assign(datos.entrenadores[0], { FotoURL: 'avatar:canasta' });
+Object.assign(datos.entrenadores[1], { FotoURL: 'avatar:camiseta' });

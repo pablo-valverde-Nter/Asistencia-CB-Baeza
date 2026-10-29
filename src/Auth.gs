@@ -95,6 +95,33 @@ const Auth = {
     return { rol, jugador, entrenador, administrador };
   },
 
+  destinosRecuperacion_(cuenta) {
+    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
+    const destinos = cuenta.jugador ? [
+      { id: 'jugador', etiqueta: 'Jugador', email: registro.Email },
+      { id: 'tutor1', etiqueta: 'Tutor 1' + (registro.NombrePadre1 ? ' · ' + registro.NombrePadre1 : ''), email: registro.EmailPadre1 },
+      { id: 'tutor2', etiqueta: 'Tutor 2' + (registro.NombrePadre2 ? ' · ' + registro.NombrePadre2 : ''), email: registro.EmailPadre2 },
+    ] : [{ id: 'cuenta', etiqueta: 'Cuenta', email: registro.Email }];
+    return destinos.map(destino => Object.assign({}, destino, { email: String(destino.email || '').trim().toLowerCase() }))
+      .filter(destino => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destino.email));
+  },
+
+  enmascararEmail_(email) {
+    const [usuario, dominio] = email.split('@');
+    const punto = dominio.lastIndexOf('.');
+    return usuario.slice(0, 2) + '***@' + dominio.slice(0, Math.min(2, punto)) + '***' + dominio.slice(punto);
+  },
+
+  claveRecuperacion_(cuenta) {
+    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
+    return 'recuperacion:' + cuenta.rol + ':' + registro.ID;
+  },
+
+  hashRecuperacion_(codigo, clave) {
+    return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+      codigo + ':' + clave, Utilities.Charset.UTF_8));
+  },
+
   /** Devuelve el registro de Entrenadores del usuario o null si es jugador. */
   getEntrenadorActual(auth) {
     const tipo = String(auth && auth.tipo || 'entrenador').toLowerCase();

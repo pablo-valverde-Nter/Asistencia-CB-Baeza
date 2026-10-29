@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const crypto = require('node:crypto');
 
 function servidor() {
   const rows = {
@@ -13,11 +14,23 @@ function servidor() {
     Administradores: [{ ID: 'a1', Email: 'admin@example.com', PIN: '3456', Activo: true }],
   };
   const writes = [], mails = [], cache = new Map(), logs = [];
+  let ahora = Date.now();
+  class Reloj extends Date { static now() { return ahora; } }
   const context = vm.createContext({
     Logger: { log: value => logs.push(value) },
-    Utilities: { formatDate: () => '2026-10-29' },
+    Date: Reloj,
+    Utilities: {
+      formatDate: () => '2026-10-29', getUuid: () => crypto.randomUUID(),
+      DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
+      computeDigest: (algorithm, value) => crypto.createHash(algorithm).update(value).digest(),
+      base64Encode: value => Buffer.from(value).toString('base64'),
+    },
     Session: { getScriptTimeZone: () => 'Europe/Madrid' },
-    CacheService: { getScriptCache: () => ({ get: key => cache.get(key), put: (key, value, ttl) => cache.set(key, { value, ttl }) }) },
+    CacheService: { getScriptCache: () => ({
+      get(key) { const item = cache.get(key); return item && item.expira > ahora ? item.value : null; },
+      put: (key, value, ttl) => cache.set(key, { value, ttl, expira: ahora + ttl * 1000 }),
+      remove: key => cache.delete(key),
+    }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, hasLock: () => true, releaseLock() {} }) },
     MailApp: { sendEmail: mail => mails.push(mail) },
     getSheetData: table => rows[table] || [],
@@ -38,6 +51,7 @@ function servidor() {
   const entrenador = { tipo: 'entrenador', email: 'coach@example.com', pin: '2345' };
   const admin = { tipo: 'entrenador', email: 'admin@example.com', pin: '3456' };
   return { rows, writes, mails, cache, logs, jugador, entrenador, admin,
+    avanzar: ms => { ahora += ms; },
     call(name, ...args) { return context[name](...args); } };
 }
 
@@ -115,41 +129,96 @@ test('perfil jugador conserva autorización familiar; perfil entrenador solo act
   assert.equal(s.writes.some(w => w.table === 'Administradores'), false);
 });
 
-test('recordatorio separa correo familiar con código y correo del jugador sin código; limita diez minutos', () => {
+test('opciones de recuperación enmascaradas por rol y sinCorreo', () => {
   const s = servidor();
-  const result = s.call('enviarRecordatorioCredenciales', s.jugador);
-  assert.equal(result.success, true);
-  assert.equal(result.destinatarios, 3);
-  for (const mail of s.mails) {
-    assert.match(mail.body, /CB Baeza/);
-    assert.match(mail.body, /Usuario: ana/);
-    assert.match(mail.body, /PIN: 1234/);
-    assert.match(mail.body, /No compartas/);
-    assert.match(mail.htmlBody, /Ana &lt;Club&gt;/);
-    if (mail.to === 'ana@example.com') {
-      assert.doesNotMatch(mail.body + mail.htmlBody, /ABC123/);
-    } else assert.match(mail.body, /Código de seguridad: ABC123/);
+  s.rows.Jugadores[0].NombrePadre1 = 'María';
+  const destinos = s.call('opcionesRecuperacion', s.jugador).destinos;
+  assert.deepEqual(Array.from(destinos, d => d.id), ['jugador', 'tutor1', 'tutor2']);
+  assert.equal(destinos[1].etiqueta, 'Tutor 1 · María');
+  assert.equal(destinos[2].etiqueta, 'Tutor 2');
+  assert.equal(destinos[0].email, 'an***@ex***.com');
+  assert.ok(destinos.every(d => !['ana@example.com', 'familia@example.com', 'familia2@example.com'].includes(d.email)));
+  for (const rol of ['entrenador', 'admin']) {
+    const opciones = s.call('opcionesRecuperacion', s[rol]);
+    assert.equal(opciones.destinos.length, 1);
+    assert.equal(opciones.destinos[0].id, 'cuenta');
+    assert.notEqual(opciones.destinos[0].email, s[rol].email);
   }
-  assert.equal(s.call('enviarRecordatorioCredenciales', s.jugador).error, 'Ya se ha enviado un correo hace poco. Inténtalo más tarde.');
-  assert.equal(s.mails.length, 3);
-  assert.equal([...s.cache.values()][0].ttl, 600);
+  Object.assign(s.rows.Jugadores[0], { Email: '', EmailPadre1: '', EmailPadre2: '' });
+  const result = s.call('opcionesRecuperacion', s.jugador);
+  assert.equal(result.sinCorreo, true);
+  assert.equal(result.error, 'No tienes ningún correo registrado. Contacta con tu entrenador.');
+});
+
+function codigoCorreo(s) {
+  return s.mails.at(-1).body.match(/Código de verificación: (\d{6})/)[1];
+}
+
+test('recuperación envía solo al destino elegido, no devuelve código ni credenciales y limita solicitudes', () => {
+  const s = servidor();
+  assert.equal(s.call('solicitarCodigoRecuperacion', s.jugador, 'invalido').success, false);
+  assert.equal(s.mails.length, 0);
+  const result = s.call('solicitarCodigoRecuperacion', s.jugador, 'tutor2');
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { success: true, expiraEnMin: 10 });
+  assert.equal(s.mails.length, 1);
+  assert.equal(s.mails[0].to, 'familia2@example.com');
+  assert.match(s.mails[0].body, /10 minutos/);
+  assert.doesNotMatch(s.mails[0].body, /PIN: 1234|ABC123/);
+  const codigo = codigoCorreo(s);
+  const desafio = s.cache.get('recuperacion:jugador:j1');
+  assert.equal(desafio.ttl, 600);
+  assert.equal(JSON.parse(desafio.value).hash, crypto.createHash('sha256').update(codigo + ':recuperacion:jugador:j1').digest('base64'));
+  assert.doesNotMatch(desafio.value, new RegExp('"codigo":"' + codigo + '"'));
+  assert.equal(s.call('solicitarCodigoRecuperacion', s.jugador, 'jugador').error, 'Espera un minuto antes de pedir otro código.');
   assert.equal(s.logs.length, 0);
 });
 
-test('sinCorreo no envía y recordatorios del personal usan su PIN de acceso real', () => {
+test('código correcto es de un uso y solo destinos de tutor recuperan código familiar', () => {
+  for (const destino of ['jugador', 'tutor1', 'tutor2']) {
+    const s = servidor();
+    s.call('solicitarCodigoRecuperacion', s.jugador, destino);
+    const codigo = codigoCorreo(s);
+    const result = s.call('verificarCodigoRecuperacion', s.jugador, codigo);
+    assert.equal(result.success, true);
+    assert.equal(result.pin, '1234');
+    assert.equal(result.codigoSeguridad, destino === 'jugador' ? undefined : 'ABC123');
+    assert.equal(s.call('verificarCodigoRecuperacion', s.jugador, codigo).error, 'El código ha caducado o no existe. Solicita uno nuevo.');
+  }
+  for (const rol of ['admin', 'entrenador']) {
+    const s = servidor();
+    s.call('solicitarCodigoRecuperacion', s[rol], 'cuenta');
+    assert.equal(s.mails[0].to, s[rol].email);
+    const result = s.call('verificarCodigoRecuperacion', s[rol], codigoCorreo(s));
+    assert.equal(result.pin, s[rol].pin);
+    assert.equal(result.codigoSeguridad, undefined);
+  }
+});
+
+test('cinco fallos eliminan el desafío y fallos anteriores conservan la caducidad', () => {
   const s = servidor();
-  Object.assign(s.rows.Jugadores[0], { Email: '', EmailPadre1: '', EmailPadre2: '' });
-  const result = s.call('enviarRecordatorioCredenciales', s.jugador);
-  assert.equal(result.success, false);
-  assert.equal(result.sinCorreo, true);
-  assert.equal(result.error, 'No hay ningún correo registrado. Contacta con tu entrenador.');
-  assert.equal(s.mails.length, 0);
-  assert.equal(s.cache.size, 0);
-  assert.equal(s.call('enviarRecordatorioCredenciales', s.admin).success, true);
-  assert.match(s.mails[0].body, /PIN: 3456/);
-  assert.doesNotMatch(s.mails[0].body, /PIN: 1111|Código de seguridad:/);
-  assert.equal(s.call('enviarRecordatorioCredenciales', s.entrenador).success, true);
-  assert.match(s.mails[1].body, /PIN: 2345/);
+  s.call('solicitarCodigoRecuperacion', s.jugador, 'tutor1');
+  const codigo = codigoCorreo(s);
+  const incorrecto = codigo === '999999' ? '888888' : '999999';
+  s.avanzar(300000);
+  for (let intento = 1; intento <= 5; intento++) {
+    const result = s.call('verificarCodigoRecuperacion', s.jugador, incorrecto);
+    assert.equal(result.error, intento === 5 ? 'Demasiados intentos. Solicita un código nuevo.' : 'Código incorrecto.');
+    if (intento < 5) assert.equal(s.cache.get('recuperacion:jugador:j1').ttl, 300);
+  }
+  assert.equal(s.call('verificarCodigoRecuperacion', s.jugador, codigo).success, false);
+});
+
+test('caduca a diez minutos y una solicitud nueva reemplaza la anterior después de un minuto', () => {
+  const s = servidor();
+  s.call('solicitarCodigoRecuperacion', s.jugador, 'jugador');
+  const previo = codigoCorreo(s);
+  s.avanzar(60000);
+  assert.equal(s.call('solicitarCodigoRecuperacion', s.jugador, 'tutor1').success, true);
+  assert.equal(JSON.parse(s.cache.get('recuperacion:jugador:j1').value).destinoId, 'tutor1');
+  const nuevo = codigoCorreo(s);
+  if (nuevo !== previo) assert.equal(s.call('verificarCodigoRecuperacion', s.jugador, previo).error, 'Código incorrecto.');
+  s.avanzar(600000);
+  assert.equal(s.call('verificarCodigoRecuperacion', s.jugador, nuevo).error, 'El código ha caducado o no existe. Solicita uno nuevo.');
 });
 
 test('actualizarEntrenador rechaza PIN falso, escalada y cambios de Email/PIN propios sin escribir', () => {
@@ -171,7 +240,8 @@ test('todos los endpoints de cuenta rechazan credenciales falsas antes de escrib
   for (const [name, args] of [
     ['actualizarFotoPerfil', ['']], ['actualizarMiPerfil', [{ Telefono: '1' }, 'ABC123']],
     ['cambiarCredenciales', [{ pinActual: '1234', pinNuevo: '9876' }]],
-    ['cambiarCodigoSeguridad', ['ABC123', 'NEW123']], ['enviarRecordatorioCredenciales', []],
+    ['cambiarCodigoSeguridad', ['ABC123', 'NEW123']], ['opcionesRecuperacion', []],
+    ['solicitarCodigoRecuperacion', ['jugador']], ['verificarCodigoRecuperacion', ['123456']],
   ]) assert.equal(s.call(name, auth, ...args).success, false);
   assert.equal(s.writes.length, 0);
   assert.equal(s.mails.length, 0);

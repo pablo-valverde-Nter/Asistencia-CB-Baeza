@@ -96,12 +96,14 @@ function installRunner(backend) {
           setTimeout(() => {
             try {
               if (name === 'logCliente') { if (success) success(undefined, user); return; }
-              const accountAllowed = ['actualizarFotoPerfil','actualizarMiPerfil','cambiarCredenciales','cambiarCodigoSeguridad','enviarRecordatorioCredenciales'];
+              const accountAllowed = ['actualizarFotoPerfil','actualizarMiPerfil','cambiarCredenciales','cambiarCodigoSeguridad','opcionesRecuperacion','solicitarCodigoRecuperacion','verificarCodigoRecuperacion'];
               if (accountAllowed.includes(String(name)) && new URLSearchParams(location.search).get('state')?.startsWith('cuenta-')) {
                 (window.__accountCalls ||= []).push(String(name));
                 const result = name === 'actualizarFotoPerfil' ? { success:true, fotoURL:args[1] }
                   : name === 'cambiarCredenciales' ? { success:true, auth:{ ...args[0], ...(args[1].usuarioNuevo ? {usuario:args[1].usuarioNuevo} : {}), ...(args[1].pinNuevo ? {pin:args[1].pinNuevo} : {}) } }
-                  : name === 'actualizarMiPerfil' ? {success:true, actualizado:true} : {success:true, destinatarios:1};
+                  : name === 'opcionesRecuperacion' ? {success:true,destinos:[{id:'jugador',etiqueta:'Jugador',email:'b***@ex***.test'},{id:'tutor1',etiqueta:'Tutor 1 · Marta',email:'m***@ex***.test'}]}
+                  : name === 'solicitarCodigoRecuperacion' ? {success:true,expiraEnMin:10}
+                  : name === 'verificarCodigoRecuperacion' ? {success:true,pin:'1234',codigoSeguridad:'ABC123'} : {success:true,actualizado:true};
                 if (success) success(result,user);
                 return;
               }
@@ -181,12 +183,14 @@ function driveViews() {
           if (!element.innerText.trim()) throw new Error('Vista vacía: ' + view);
           result.info[view] = element.querySelectorAll('.stats-info-button').length;
           result.rachas[view] = Boolean(element.querySelector('.stats-streak .stats-streak-count'));
+          if (['equipos','jugadores-admin','entrenadores-admin','jugador-detalle','entrenador-detalle','perfil-jugador','mi-equipo'].includes(view) && !element.querySelector('.club-avatar svg')) throw new Error('Vista sin avatar de la fixture: ' + view);
           if (view === 'equipos') {
             const badge = element.querySelector('.btn-eq-asist .eq-pending-badge');
             if (!badge || badge.textContent !== '!' || !/1 entreno sin registrar|1 unrecorded training session/.test(badge.getAttribute('aria-label'))) throw new Error('Inicio sin indicador compacto de entrenamientos pendientes');
             if (/Último entreno|sin registrar/.test(element.innerText)) throw new Error('Inicio muestra detalles antiguos o pendientes fuera del botón');
             if (!element.querySelector('.eq-home-bar') || !/en plantilla|Próximo entreno|in the squad|Next training/.test(element.innerText)) throw new Error('Inicio sin nuevas métricas de equipo');
-            if (element.querySelector('.eq-notifications, .eq-notifications-count')) throw new Error('Inicio duplica las notificaciones de pendientes fuera del botón de asistencia');
+            const inbox = element.querySelector('.eq-notifications');
+            if (!inbox || !/App.notifications.openInbox/.test(inbox.getAttribute('onclick')) || !element.querySelector('.eq-notifications-count')) throw new Error('Inicio sin buzón de notificaciones y contador');
           }
           if (['perfil-jugador','mis-stats','jugador-detalle'].includes(view)) {
             const streak = element.querySelector('.stats-streak');
@@ -237,12 +241,27 @@ function driveViews() {
       }
       const state = new URLSearchParams(location.search).get('state');
       const preferenceView = new URLSearchParams(location.search).get('prefsView');
-      if (['ajustes','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'].includes(preferenceView)) {
+      if (['ajustes','ajustes-idioma','ajustes-apariencia','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'].includes(preferenceView)) {
         App.state.equipoSesionesId = 'equipo-cadete';
         App.state._equipoNombre = App.cache.getEquipoById('equipo-cadete').Nombre;
         App.state.sesionId = App.cache.sesiones.find(s => s.ID_Equipo === 'equipo-cadete' && !s.Cancelada).ID;
         App.navigate(preferenceView,{},false);
         await settle();
+        if (preferenceView === 'ajustes') {
+          const settings = document.getElementById('ajustes-contenido');
+          if (settings.querySelector('select,.theme-option')) throw new Error('Ajustes muestra controles en vez del listado');
+          for (const target of ['ajustes-idioma','ajustes-apariencia']) {
+            const row = [...settings.querySelectorAll('button')].find(button => (button.getAttribute('onclick') || '').includes(target));
+            if (!row) throw new Error('Falta opción de ajustes: ' + target);
+            row.click(); await settle();
+            if (App.state.currentView !== target || !document.getElementById('btn-back').classList.contains('visible')) throw new Error('La opción no abre una subpantalla con vuelta: ' + target);
+            if (target === 'ajustes-idioma' && !document.getElementById('preferencia-idioma')) throw new Error('Falta selector de idioma');
+            if (target === 'ajustes-apariencia' && document.querySelectorAll('#ajustes-apariencia-contenido .theme-option').length !== 5) throw new Error('Faltan temas en apariencia');
+            App.goBack(); await settle();
+            if (App.state.currentView !== 'ajustes') throw new Error('No vuelve al listado de ajustes');
+          }
+          result.interacciones.ajustesLista = true;
+        }
       }
       const active = document.querySelector('.view.active');
       if (state === 'info') {
@@ -280,6 +299,20 @@ function driveViews() {
         if (!chart) throw new Error('No existe bloque de contactabilidad');
         chart.closest('.stats-block').scrollIntoView({ block:'start' });
       }
+      if (state === 'avatars-sesion' || state === 'avatars-guardada') {
+        App.state.sesionId = state === 'avatars-sesion' ? 'futura' : 's6';
+        App.navigate(state === 'avatars-sesion' ? 'sesion' : 'sesion-guardada',{},false);
+        const view = document.querySelector('.view.active');
+        if (view.querySelectorAll('.club-avatar').length < 3 || !view.querySelector('.club-avatar svg')) throw new Error('Sesión sin avatares de jugadores y técnicos');
+        if (state === 'avatars-sesion') {
+          const card = view.querySelector('.jug-card[data-id="jugador-bruno"]');
+          const before = card.dataset.estado;
+          card.querySelector('.club-avatar').click();
+          if (card.dataset.estado === before) throw new Error('El avatar bloquea el toque de asistencia');
+          App.state._formIsDirty = false;
+          App.views.sesion._stopAutoSave();
+        }
+      }
       if (state?.startsWith('cuenta-')) {
         const accountState = state.slice(7);
         if (accountState === 'menu') {
@@ -291,18 +324,39 @@ function driveViews() {
           if (document.activeElement !== document.getElementById('user-badge')) throw new Error('Escape no devuelve el foco');
           App.toggleUserMenu();
         } else {
-          const view = accountState === 'avatar' ? 'perfil-usuario' : accountState;
-          App.navigate(view,{},false);
-          if (!document.getElementById('view-'+view)?.classList.contains('active')) throw new Error('Vista de cuenta no disponible: '+view);
-          if (accountState === 'avatar') {
-            await App.views['perfil-usuario'].guardarFoto('avatar:balon');
-            await settle();
-            App.views['perfil-usuario'].elegirFoto();
-            if (document.querySelectorAll('.avatar-choice').length < 12) throw new Error('Faltan avatares de club');
+          if (accountState.startsWith('staff-')) {
+            const coach = accountState.includes('coach'), tipo = coach ? 'entrenador' : 'jugador';
+            const id = coach ? 'entrenador-maria' : 'jugador-bruno';
+            App.account.open(tipo,id,accountState.endsWith('seguridad') ? 'seguridad' : 'perfil-usuario');
+            if (accountState.endsWith('editar')) App.navigate('perfil-editar',{},false);
+            if (document.querySelector('.view.active .avatar-upload')) throw new Error('Foto editable en modo staff');
+          } else if (accountState === 'coach-sin-permiso') {
+            App.state.esAdmin = false; App.state.rol = 'entrenador';
+            App.views['entrenador-detalle'].cargar('entrenador-maria'); await settle();
+            if (document.querySelectorAll('#entrenador-detalle-contenido .detalle-settings').length !== 1) throw new Error('Entrenador puede editar a otro entrenador');
+          } else if (accountState.startsWith('recovery-')) {
+            App.navigate('recuperar-acceso',{},false); await settle();
+            if (accountState !== 'recovery-destinos') await App.views['recuperar-acceso'].enviar(false);
+            if (accountState === 'recovery-result') {
+              document.getElementById('recovery-code').value = '123456';
+              await App.views['recuperar-acceso'].verificar();
+              if (!document.getElementById('recovery-pin')) throw new Error('No muestra credenciales recuperadas');
+              document.getElementById('recovery-reveal').click();
+            }
+          } else {
+            const view = accountState === 'avatar' ? 'perfil-usuario' : accountState === 'pin' || accountState === 'codigo' ? 'seguridad-opcion' : accountState;
+            App.navigate(view,{opcion:accountState},false);
+            if (!document.getElementById('view-'+view)?.classList.contains('active')) throw new Error('Vista de cuenta no disponible: '+view);
+            if (accountState === 'avatar') {
+              App.views['perfil-usuario'].guardarFoto('avatar:balon'); await settle();
+              App.views['perfil-usuario'].elegirFoto();
+              if (document.querySelectorAll('.avatar-choice').length < 12) throw new Error('Faltan avatares de club');
+            }
+            if (accountState === 'perfil-usuario' && document.querySelectorAll('#perfil-usuario-contenido input').length) throw new Error('Perfil no es solo lectura');
+            if (accountState === 'perfil-editar' && window.__role === 'jugador' && document.querySelectorAll('.account-check input').length !== 2) throw new Error('Faltan preferencias familiares');
+            if (accountState === 'seguridad' && document.querySelectorAll('#seguridad-contenido .account-settings-row').length < 4) throw new Error('Seguridad no muestra listado');
+            if (accountState === 'pin' && !document.getElementById('seg-pin-actual')) throw new Error('Falta el PIN actual');
           }
-          if (accountState === 'perfil-usuario' && window.__role === 'jugador' && document.querySelectorAll('.account-check input').length !== 2) throw new Error('Faltan preferencias familiares');
-          if (accountState === 'seguridad' && !document.getElementById('seg-pin-actual')) throw new Error('Falta el PIN actual');
-          if (accountState === 'politicas' && !document.getElementById('politica-cookies')) throw new Error('Falta política de cookies');
         }
         result.cuenta = {estado:accountState,llamadas:window.__accountCalls || []};
         window.scrollTo(0,0);
@@ -483,7 +537,10 @@ async function main() {
       const states = [['info', role === 'admin' ? 'informes' : 'mis-stats'], ['temporadas', role === 'admin' ? 'informes' : 'mis-stats'], ['tooltip', role === 'admin' ? 'equipo-detalle' : 'mis-stats'], ['mensual', role === 'admin' ? 'equipo-detalle' : 'mis-stats']];
       if (role === 'admin') states.push(['contacto','jugador-detalle'],['cobertura','equipo-detalle'],['pendientes','equipo-detalle']);
       if (role === 'admin') states.push(['contactabilidad','informes']);
-      for (const state of ['menu','perfil-usuario','avatar','seguridad','politicas']) states.push(['cuenta-'+state,role === 'admin' ? 'equipos' : 'perfil-jugador']);
+      if (role === 'admin') states.push(['avatars-sesion','equipos'],['avatars-guardada','equipos']);
+      for (const state of ['menu','perfil-usuario','perfil-editar','avatar','seguridad','pin','recovery-destinos','recovery-code','recovery-result','politica-privacidad','politica-cookies']) states.push(['cuenta-'+state,role === 'admin' ? 'equipos' : 'perfil-jugador']);
+      if (role === 'jugador') states.push(['cuenta-codigo','perfil-jugador']);
+      if (role === 'admin') for (const state of ['staff-player-perfil','staff-player-editar','staff-player-seguridad','staff-coach-perfil','staff-coach-editar','staff-coach-seguridad','coach-sin-permiso']) states.push(['cuenta-'+state,'equipos']);
       for (const [state, view] of states) {
         url.searchParams.set('final', view);
         url.searchParams.set('state', state);
@@ -494,17 +551,17 @@ async function main() {
       }
       url.searchParams.delete('state');
       for (const theme of ['noche','medianoche']) {
-        for (const view of role === 'admin' ? ['equipos','equipos-admin','jugadores-admin','entrenadores-admin','equipo-detalle','jugador-detalle','entrenador-detalle','informes','ajustes','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'] : ['perfil-jugador','mis-stats','mi-equipo','ajustes']) {
+        for (const view of role === 'admin' ? ['equipos','equipos-admin','jugadores-admin','entrenadores-admin','equipo-detalle','jugador-detalle','entrenador-detalle','informes','ajustes','ajustes-idioma','ajustes-apariencia','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'] : ['perfil-jugador','mis-stats','mi-equipo','ajustes','ajustes-idioma','ajustes-apariencia']) {
           const preferenceUrl = new URL(url.href);
           preferenceUrl.searchParams.set('theme',theme);
           preferenceUrl.searchParams.set('lang','en');
           preferenceUrl.searchParams.set('final',view);
-          if (['ajustes','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'].includes(view)) preferenceUrl.searchParams.set('prefsView',view);
+          if (['ajustes','ajustes-idioma','ajustes-apariencia','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'].includes(view)) preferenceUrl.searchParams.set('prefsView',view);
           const name = role + '-' + theme + '-en-' + view;
           await captureMobile(browser,preferenceUrl.href,output,name,join(output,name + '-412x915.png'));
           check(name + ': captura de tema e idioma',true);
         }
-        for (const state of ['cuenta-menu','cuenta-perfil-usuario','cuenta-avatar','cuenta-seguridad','cuenta-politicas','info','temporadas','contactabilidad']) {
+        for (const state of ['cuenta-menu','cuenta-perfil-usuario','cuenta-perfil-editar','cuenta-avatar','cuenta-seguridad','cuenta-pin','cuenta-recovery-destinos','cuenta-recovery-code','cuenta-recovery-result','cuenta-politica-privacidad','cuenta-politica-cookies','info','temporadas','contactabilidad']) {
           if (state === 'contactabilidad' && role !== 'admin') continue;
           const preferenceUrl = new URL(url.href);
           preferenceUrl.searchParams.set('theme',theme);

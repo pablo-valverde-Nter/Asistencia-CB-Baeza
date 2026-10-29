@@ -592,14 +592,14 @@ const Estadisticas = {
       for (const j of e.jugadores) {
         if (!plantilla.has(j.id)) continue;
         if (j.base >= CONFIG.ESTADISTICAS.MIN_BASE_RANKING) { candidatos.push(j); mejor = Math.max(mejor, j.rachaActual); }
-        else pocasSesiones.push({ nombre: j.nombre, apellidos: j.apellidos, esYo: j.id === id });
+        else pocasSesiones.push({ nombre: j.nombre, apellidos: j.apellidos, foto: (x.jugadores.get(j.id) || {}).FotoURL || '', esYo: j.id === id });
       }
       candidatos.sort((a, b) => this.compararPorcentaje_(a.asistenciaPct, b.asistenciaPct) || b.base - a.base || a.apellidos.localeCompare(b.apellidos));
       pocasSesiones.sort((a, b) => a.apellidos.localeCompare(b.apellidos));
       let posicion = null;
       const ranking = candidatos.map((j, i) => {
         if (j.id === id) posicion = i + 1;
-        return { nombre: j.nombre, apellidos: j.apellidos, asistenciaPct: j.asistenciaPct, rachaActual: j.rachaActual,
+        return { nombre: j.nombre, apellidos: j.apellidos, foto: (x.jugadores.get(j.id) || {}).FotoURL || '', asistenciaPct: j.asistenciaPct, rachaActual: j.rachaActual,
           logros: this.logros_(j, mejor), esYo: j.id === id, posicion: i + 1 };
       });
       equipo = { id: principal, nombre: (x.equipos.get(principal) || {}).Nombre || '', asistenciaPct: e.asistenciaPct,

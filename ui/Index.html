@@ -68,9 +68,9 @@
         <span class="user-badge-chevron" aria-hidden="true"></span>
       </button>
       <div id="user-menu" class="user-menu hidden" role="menu" aria-label="Opciones de usuario">
-        <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('perfil-usuario')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg>Perfil</button>
+        <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.account.target=null;App.navigate('perfil-usuario')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg>Perfil</button>
         <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('ajustes')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.7 2.4-2.2 1L3.8 6l-2 3.5 1.8 1.8v2.4L1.8 15.5l2 3.5 2.3-.4 2.2 1L9 22h4l.7-2.4 2.2-1 2.3.4 2-3.5-1.8-1.8v-2.4l1.8-1.8-2-3.5-2.3.4-2.2-1L13 3Z" transform="translate(1 -1) scale(.95)"/><circle cx="12" cy="12" r="3"/></svg>Ajustes</button>
-        <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('seguridad')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Seguridad</button>
+        <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.account.target=null;App.navigate('seguridad')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Seguridad</button>
         <div class="user-menu-divider"></div>
         <button class="user-menu-item user-menu-logout" type="button" role="menuitem" onclick="event.stopPropagation();App.closeUserMenu();App.confirmarCerrarSesion()">
           <svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4v16h6m4-12 4 4-4 4m-6-4h13"/></svg>Cerrar sesión
@@ -230,6 +230,12 @@
     <section id="view-ajustes" class="view">
       <div id="ajustes-contenido"></div>
     </section>
+    <section id="view-ajustes-idioma" class="view">
+      <div id="ajustes-idioma-contenido"></div>
+    </section>
+    <section id="view-ajustes-apariencia" class="view">
+      <div id="ajustes-apariencia-contenido"></div>
+    </section>
 
     <!-- EQUIPOS ADMIN -->
     <section id="view-equipos-admin" class="view">
@@ -358,50 +364,8 @@
           </div>
         </div>
       </div>
-      <div class="form-section" id="jug-credenciales-zona" style="display:none">
-        <div class="form-section-title">Credenciales de acceso</div>
-
-        <!-- Aviso admin (4a-5) -->
-        <div id="jug-cred-aviso" class="cred-aviso-box" style="display:none">
-          <div class="cred-aviso-icon">&#x26A0;&#xFE0F;</div>
-          <div>
-            <strong>Cambio de credenciales</strong>
-            <p><strong>Usuario</strong>: con qu&eacute; nombre de usuario accede el jugador a la app.</p>
-            <p><strong>PIN</strong>: contrase&ntilde;a de acceso (4-6 d&iacute;gitos num&eacute;ricos). Deja en blanco para no cambiar.</p>
-            <p><strong>C&oacute;digo familias</strong>: c&oacute;digo que usan los padres / tutores para justificar ausencias. C&oacute;mpartelo con ellos y c&aacute;mbialo solo si fue comprometido.</p>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label>Usuario</label>
-            <input type="text" id="jug-usuario" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label>C&oacute;digo familias</label>
-            <input type="text" id="jug-codigo-padres" autocomplete="off" style="letter-spacing:3px">
-          </div>
-        </div>
-        <!-- Campos PIN solo visibles en modo admin -->
-        <div id="jug-pin-zona" style="display:none">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Nuevo PIN</label>
-              <input type="password" id="jug-pin" placeholder="4-6 d&iacute;gitos" maxlength="6" autocomplete="new-password" style="letter-spacing:4px">
-            </div>
-            <div class="form-group">
-              <label>Confirmar PIN</label>
-              <input type="password" id="jug-pin-confirm" placeholder="Repetir PIN" maxlength="6" autocomplete="new-password" style="letter-spacing:4px">
-            </div>
-          </div>
-          <small style="color:var(--texto-sec);font-size:.72rem">Deja el PIN en blanco para mantener el actual.</small>
-        </div>
-      </div>
       <div class="p-16" style="padding-bottom:32px">
         <button class="btn btn-primary btn-full" onclick="App.views['jugador-form'].guardar()">Guardar jugador</button>
-        <div id="jugador-delete-zone" style="display:none;margin-top:8px">
-          <button class="btn btn-danger btn-full" onclick="App.views['jugador-form'].eliminar()">Eliminar jugador</button>
-        </div>
       </div>
     </section>
 
@@ -424,42 +388,10 @@
         <div class="form-group">
           <label>Email Google *</label>
           <input type="email" id="ent-email" placeholder="entrenador@gmail.com">
-          <small id="ent-email-aviso" class="hidden" style="color:var(--texto-sec);font-size:.72rem;display:block;margin-top:4px">
-            El email no se puede modificar (clave de acceso)
-          </small>
-          <small id="ent-email-aviso-admin" class="hidden" style="color:var(--ambar);font-size:.72rem;display:block;margin-top:4px">
-            &#x26A0;&#xFE0F; C&aacute;mbialo solo si el entrenador cambi&oacute; de cuenta de Google.
-          </small>
-          <small id="ent-email-aviso-propio" class="hidden" style="color:var(--rojo);font-weight:bold;font-size:.72rem;display:block;margin-top:4px">
-            &#x26A0;&#xFE0F; AVISO: Si modificas tu email de Google o PIN, afectar&aacute; a tu pr&oacute;ximo inicio de sesi&oacute;n.
-          </small>
         </div>
         <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ent-tel" placeholder="+34 600 000 000"></div>
       </div>
 
-      <!-- Sección credenciales — admin editando o dueño editando propio -->
-      <div class="form-section" id="ent-credenciales-zona" style="display:none">
-        <div class="form-section-title">Credenciales de acceso</div>
-        <div class="cred-aviso-box">
-          <div class="cred-aviso-icon">&#x26A0;&#xFE0F;</div>
-          <div>
-            <strong>Cambio de credenciales</strong>
-            <p><strong>Email</strong>: cuenta de Google requerida para acceder.</p>
-            <p><strong>PIN</strong>: contrase&ntilde;a de acceso (4-6 d&iacute;gitos num&eacute;ricos). Deja en blanco para no cambiar.</p>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Nuevo PIN</label>
-            <input type="password" id="ent-pin" placeholder="4-6 d&iacute;gitos" maxlength="6" autocomplete="new-password" style="letter-spacing:4px">
-          </div>
-          <div class="form-group">
-            <label>Confirmar PIN</label>
-            <input type="password" id="ent-pin-confirm" placeholder="Repetir PIN" maxlength="6" autocomplete="new-password" style="letter-spacing:4px">
-          </div>
-        </div>
-        <small style="color:var(--texto-sec);font-size:.72rem">Deja el PIN en blanco para mantener el actual.</small>
-      </div>
 
       <!-- PIN field para nuevos entrenadores -->
       <div class="form-section" id="ent-pin-zona-nuevo" style="display:none">
@@ -484,9 +416,6 @@
       </div>
       <div class="p-16" style="padding-bottom:32px">
         <button class="btn btn-primary btn-full" onclick="App.views['entrenador-form'].guardar()">Guardar entrenador</button>
-        <div id="entrenador-delete-zone" style="display:none;margin-top:8px">
-          <button class="btn btn-danger btn-full" onclick="App.views['entrenador-form'].eliminar()">Eliminar entrenador</button>
-        </div>
       </div>
     </section>
 
@@ -569,8 +498,12 @@
 
     <!-- Cuenta personal: disponible para todos los roles -->
     <section id="view-perfil-usuario" class="view"><div id="perfil-usuario-contenido" class="account-page"></div></section>
+    <section id="view-perfil-editar" class="view"><div id="perfil-editar-contenido" class="account-page"></div></section>
     <section id="view-seguridad" class="view"><div id="seguridad-contenido" class="account-page"></div></section>
-    <section id="view-politicas" class="view"><div id="politicas-contenido" class="account-page"></div></section>
+    <section id="view-seguridad-opcion" class="view"><div id="seguridad-opcion-contenido" class="account-page"></div></section>
+    <section id="view-recuperar-acceso" class="view"><div id="recuperar-acceso-contenido" class="account-page"></div></section>
+    <section id="view-politica-privacidad" class="view"><div id="politica-privacidad-contenido" class="account-page"></div></section>
+    <section id="view-politica-cookies" class="view"><div id="politica-cookies-contenido" class="account-page"></div></section>
 
   </main>
 

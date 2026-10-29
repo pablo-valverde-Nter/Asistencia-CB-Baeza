@@ -538,22 +538,71 @@ function cambiarCodigoSeguridad(auth, codigoActual, codigoNuevo) {
   } catch (e) { return { success: false, error: e.message }; }
 }
 
-function enviarRecordatorioCredenciales(auth) {
+function opcionesRecuperacion(auth) {
+  try {
+    const cuenta = Auth.getCuentaActual_(auth);
+    const destinos = Auth.destinosRecuperacion_(cuenta);
+    if (!destinos.length) return { success: false, sinCorreo: true, error: 'No tienes ningún correo registrado. Contacta con tu entrenador.' };
+    return { success: true, destinos: destinos.map(destino => ({
+      id: destino.id, etiqueta: destino.etiqueta, email: Auth.enmascararEmail_(destino.email),
+    })) };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+function solicitarCodigoRecuperacion(auth, destinoId) {
   let lock;
   try {
     const cuenta = Auth.getCuentaActual_(auth);
-    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
-    const destinatarios = Notificaciones.destinatariosRecordatorio_(cuenta);
-    if (!destinatarios.length) return { success: false, sinCorreo: true, error: 'No hay ningún correo registrado. Contacta con tu entrenador.' };
+    const destino = Auth.destinosRecuperacion_(cuenta).find(item => item.id === destinoId);
+    if (!destino) throw new Error('Destino de recuperación no válido.');
     lock = LockService.getScriptLock();
     lock.waitLock(10000);
     const cache = CacheService.getScriptCache();
-    const clave = 'recordatorio:' + cuenta.rol + ':' + registro.ID;
-    if (cache.get(clave)) throw new Error('Ya se ha enviado un correo hace poco. Inténtalo más tarde.');
-    // Reservar antes del envío impide duplicados incluso si un envío parcial falla.
-    cache.put(clave, '1', 600);
-    Notificaciones.enviarRecordatorioCuenta_(cuenta, destinatarios);
-    return { success: true, destinatarios: destinatarios.length };
+    const clave = Auth.claveRecuperacion_(cuenta);
+    if (cache.get(clave + ':limite')) throw new Error('Espera un minuto antes de pedir otro código.');
+    const codigo = String(100000 + parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 12), 16) % 900000);
+    const desafio = { hash: Auth.hashRecuperacion_(codigo, clave), destinoId, intentos: 0, expira: Date.now() + 600000 };
+    cache.put(clave + ':limite', '1', 60);
+    // Invalidar el código previo incluso si el proveedor de correo falla.
+    cache.remove(clave);
+    Notificaciones.enviarCodigoRecuperacion_(destino.email, codigo);
+    cache.put(clave, JSON.stringify(desafio), 600);
+    return { success: true, expiraEnMin: 10 };
+  } catch (e) { return { success: false, error: e.message }; }
+  finally { if (lock && lock.hasLock()) lock.releaseLock(); }
+}
+
+function verificarCodigoRecuperacion(auth, codigo) {
+  let lock;
+  try {
+    const cuenta = Auth.getCuentaActual_(auth);
+    lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    const cache = CacheService.getScriptCache();
+    const clave = Auth.claveRecuperacion_(cuenta);
+    const guardado = cache.get(clave);
+    const desafio = guardado ? JSON.parse(guardado) : null;
+    if (!desafio || desafio.expira <= Date.now()) {
+      cache.remove(clave);
+      throw new Error('El código ha caducado o no existe. Solicita uno nuevo.');
+    }
+    const valor = String(codigo || '').trim();
+    if (!/^\d{6}$/.test(valor) || Auth.hashRecuperacion_(valor, clave) !== desafio.hash) {
+      desafio.intentos++;
+      if (desafio.intentos >= 5) {
+        cache.remove(clave);
+        throw new Error('Demasiados intentos. Solicita un código nuevo.');
+      }
+      cache.put(clave, JSON.stringify(desafio), Math.max(1, Math.ceil((desafio.expira - Date.now()) / 1000)));
+      throw new Error('Código incorrecto.');
+    }
+    cache.remove(clave);
+    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
+    const resultado = { success: true, pin: String(registro.PIN || '').trim() };
+    if (cuenta.jugador && (desafio.destinoId === 'tutor1' || desafio.destinoId === 'tutor2')) {
+      resultado.codigoSeguridad = registro.CodigoPadres;
+    }
+    return resultado;
   } catch (e) { return { success: false, error: e.message }; }
   finally { if (lock && lock.hasLock()) lock.releaseLock(); }
 }

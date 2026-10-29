@@ -7,7 +7,7 @@ const vm = require('node:vm');
 function client(fields = {}, globals = {}) {
   const stored = {};
   const document = { addEventListener() {}, getElementById: id => fields[id] || null, querySelectorAll: () => [] };
-  const context = vm.createContext({ document, window: { addEventListener() {} }, localStorage: { setItem(k,v) { stored[k] = v; }, getItem: () => null }, ...globals });
+  const context = vm.createContext({ document, window: { addEventListener() {} }, clearInterval() {}, setInterval() {}, localStorage: { setItem(k,v) { stored[k] = v; }, getItem: () => null }, ...globals });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../ui/app.html'), 'utf8').replace(/^<script[^>]*>|<\/script>\s*$/g, ''), context);
   return { app: vm.runInContext('App',context), context, stored };
 }
@@ -22,12 +22,14 @@ test('avatares del club: doce SVG y fuentes no ejecutables', () => {
 });
 
 test('perfil conserva contacto familiar y ambos interruptores de avisos', () => {
-  const fields = { 'perfil-usuario-contenido': {}, 'perfil-form': {} };
+  const fields = { 'perfil-usuario-contenido': {}, 'perfil-editar-contenido': {}, 'perfil-form': {} };
   const {app} = client(fields);
   app.state.rol = 'jugador';
   app.state.jugador = {ID:'j', Nombre:'Ana', Apellidos:'Baeza', EmailPadre1:'familia@example.test', NotificarAusenciasPadre1:false};
   app.views['perfil-usuario'].render();
-  const html = fields['perfil-usuario-contenido'].innerHTML;
+  assert.doesNotMatch(fields['perfil-usuario-contenido'].innerHTML,/<input|<form/);
+  app.views['perfil-usuario'].editar();
+  const html = fields['perfil-editar-contenido'].innerHTML;
   for (const name of ['FechaNac','Telefono','Email','NombrePadre1','ApellidosPadre1','TelefonoPadre1','EmailPadre1','NombrePadre2','ApellidosPadre2','TelefonoPadre2','EmailPadre2','NotificarAusenciasPadre1','NotificarAusenciasPadre2']) assert.ok(html.includes('data-perfil="'+name+'"'),name);
   assert.match(html,/id="perfil-codigo"/);
   assert.doesNotMatch(html,/data-perfil="(?:PIN|CodigoPadres|Usuario)"/);
@@ -68,12 +70,46 @@ test('cambio de credenciales guarda el auth devuelto sin cerrar sesión', async 
   assert.deepEqual(JSON.parse(stored.cb_baeza_auth),newAuth);
 });
 
-test('recordatorio sin correo ofrece recuperación mediante el entrenador', async () => {
-  const fields = {'seg-recordatorio':{disabled:false},'seg-recordatorio-aviso':{}};
+test('recuperación sin correo ofrece ayuda del entrenador', async () => {
+  const fields = {'recuperar-acceso-contenido':{}};
   const {app,context} = client(fields);
   context.server = () => Promise.resolve({success:false,sinCorreo:true});
-  app.views.seguridad.recordatorio();
+  app.views['recuperar-acceso'].render();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(fields['seg-recordatorio-aviso'].textContent,'No tienes ningún correo registrado. Contacta con tu entrenador para recuperarlo.');
-  assert.equal(fields['seg-recordatorio'].disabled,false);
+  assert.match(fields['recuperar-acceso-contenido'].innerHTML,/No tienes ningún correo registrado. Contacta con tu entrenador para recuperarlo/);
+});
+
+test('recuperación limita reenvío, verifica código y elimina secretos al salir', async () => {
+  const fields = {'recuperar-acceso-contenido':{},'recovery-code':{value:'123456'},'recovery-error':{}};
+  const {app,context} = client(fields);
+  context.document.querySelector = () => ({value:'tutor1'});
+  const calls = [];
+  context.server = (fn,...args) => { calls.push({fn,args}); return Promise.resolve(fn === 'verificarCodigoRecuperacion' ? {success:true,pin:'9876',codigoSeguridad:'ABC123'} : {success:true,expiraEnMin:10}); };
+  const recovery = app.views['recuperar-acceso'];
+  recovery._destinos = [{id:'tutor1',email:'m***@example.test'}];
+  recovery._pintar = () => {};
+  await recovery.enviar(false);
+  assert.equal(recovery._paso,2);
+  await recovery.enviar(true);
+  assert.equal(calls.length,1);
+  await recovery.verificar();
+  assert.equal(recovery._paso,3);
+  assert.equal(recovery._secretos.pin,'9876');
+  assert.equal(calls[1].fn,'verificarCodigoRecuperacion');
+  assert.equal(calls[1].args[0],'123456');
+  recovery.limpiar();
+  assert.equal(recovery._secretos,null);
+  assert.equal(fields['recuperar-acceso-contenido'].innerHTML,'');
+});
+
+test('respuesta de recuperación tardía no repone secretos después de salir', async () => {
+  const {app,context} = client({'recovery-code':{value:'123456'},'recuperar-acceso-contenido':{}});
+  let resolve;
+  context.server = () => new Promise(done => {resolve=done;});
+  const recovery=app.views['recuperar-acceso'];
+  const pending=recovery.verificar();
+  recovery.limpiar();
+  resolve({success:true,pin:'1234'});
+  await pending;
+  assert.equal(recovery._secretos,null);
 });

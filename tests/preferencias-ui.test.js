@@ -7,7 +7,7 @@ const vm = require('node:vm');
 
 function cliente() {
   const stored = {};
-  const elements = { 'ajustes-contenido': { innerHTML: '' } };
+  const elements = { 'ajustes-contenido': { innerHTML: '' }, 'ajustes-idioma-contenido': { innerHTML: '' }, 'ajustes-apariencia-contenido': { innerHTML: '' } };
   const document = {
     documentElement: { lang: 'es', dataset: { theme: 'clasico' }, style: {} },
     body: {}, addEventListener() {},
@@ -47,15 +47,41 @@ test('translator handles static, decorated and interpolated phrases and restores
   assert.equal(app.i18n.texto('Asistencia'),'Asistencia');
 });
 
-test('settings view provides five swatch cards and both supported languages', () => {
+test('settings list shows current choices and opens dedicated controls', () => {
   const { app, elements } = cliente();
+  app.preferences.idioma = 'en';
+  app.preferences.tema = 'medianoche';
   app.views.ajustes.render();
-  const html = elements['ajustes-contenido'].innerHTML;
-  assert.equal((html.match(/class="theme-option"/g) || []).length,5);
-  assert.match(html,/value="es"/);
-  assert.match(html,/value="en"/);
-  assert.match(html,/aria-pressed="true"/);
-  assert.match(html,/App.preferences.guardar/);
+  const list = elements['ajustes-contenido'].innerHTML;
+  assert.match(list,/account-settings-list/);
+  assert.match(list,/English/);
+  assert.match(list,/Medianoche/);
+  assert.match(list,/ajustes-idioma/);
+  assert.match(list,/ajustes-apariencia/);
+  assert.doesNotMatch(list,/<select|theme-option/);
+  app.views['ajustes-idioma'].render();
+  const idioma = elements['ajustes-idioma-contenido'].innerHTML;
+  assert.match(idioma,/value="es"/);
+  assert.match(idioma,/value="en" translate="no" selected/);
+  assert.doesNotMatch(idioma,/theme-option/);
+  app.views['ajustes-apariencia'].render();
+  const temas = elements['ajustes-apariencia-contenido'].innerHTML;
+  assert.equal((temas.match(/class="theme-option"/g) || []).length,5);
+  assert.match(temas,/aria-pressed="true"/);
+  assert.doesNotMatch(temas,/<select/);
+});
+
+test('changing a preference keeps its drilldown active and refreshes the selected control', () => {
+  const { app, elements } = cliente();
+  app.i18n.aplicar = () => {};
+  app.state.currentView = 'ajustes-apariencia';
+  app.preferences.guardar({tema:'noche'});
+  assert.equal(app.state.currentView,'ajustes-apariencia');
+  assert.match(elements['ajustes-apariencia-contenido'].innerHTML,/aria-pressed="true" onclick="App.preferences.guardar\(\{tema:'noche'\}\)/);
+  app.state.currentView = 'ajustes-idioma';
+  app.preferences.guardar({idioma:'en'});
+  assert.equal(app.state.currentView,'ajustes-idioma');
+  assert.match(elements['ajustes-idioma-contenido'].innerHTML,/value="en" translate="no" selected/);
 });
 
 test('prepaint boot restores saved dark theme and English before styles load', () => {

@@ -7,42 +7,16 @@
 
 const Notificaciones = {
 
-  destinatariosRecordatorio_(cuenta) {
-    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
-    const emailPropio = String(registro.Email || '').trim().toLowerCase();
-    const destinatarios = new Map();
-    if (cuenta.jugador) {
-      [registro.EmailPadre1, registro.EmailPadre2].forEach(email => {
-        email = String(email || '').trim().toLowerCase();
-        if (email && email.includes('@')) destinatarios.set(email, { email, familiar: true });
-      });
-    }
-    // Si comparte correo con la familia, prevalece la versión sin código familiar.
-    if (emailPropio && emailPropio.includes('@')) destinatarios.set(emailPropio, { email: emailPropio, familiar: false });
-    return Array.from(destinatarios.values());
-  },
-
-  enviarRecordatorioCuenta_(cuenta, destinatarios) {
-    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
-    const persona = cuenta.jugador || cuenta.entrenador || registro;
-    const nombre = [persona.Nombre, persona.Apellidos].filter(Boolean).join(' ') || registro.Email;
-    const escapar = texto => String(texto).replace(/[&<>"']/g, caracter => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    })[caracter]);
-    destinatarios.forEach(destinatario => {
-      const lineas = ['CB Baeza — Gestión de Asistencia', '',
-        `Recordatorio de credenciales para ${nombre}.`, ''];
-      if (cuenta.jugador) lineas.push('Usuario: ' + registro.Usuario);
-      else lineas.push('Email de acceso: ' + registro.Email);
-      lineas.push('PIN: ' + registro.PIN);
-      if (destinatario.familiar) lineas.push('Código de seguridad: ' + registro.CodigoPadres);
-      lineas.push('', 'No compartas estas credenciales. El código de seguridad es solo para la familia.');
-      MailApp.sendEmail({
-        to: destinatario.email,
-        subject: 'CB Baeza — Recordatorio de credenciales',
-        body: lineas.join('\n'),
-        htmlBody: lineas.map(linea => linea ? '<p>' + escapar(linea) + '</p>' : '').join(''),
-      });
+  enviarCodigoRecuperacion_(email, codigo) {
+    const cuerpo = 'CB Baeza — Gestión de Asistencia\n\n' +
+      'Has solicitado recuperar tus credenciales.\n\nCódigo de verificación: ' + codigo +
+      '\n\nEs válido durante 10 minutos. Escribe este número en la aplicación para recuperar tu PIN o código de seguridad.' +
+      '\n\nNo compartas este número. Si no has solicitado la recuperación, ignora este correo.';
+    MailApp.sendEmail({
+      to: email,
+      subject: 'CB Baeza — Código de recuperación',
+      body: cuerpo,
+      htmlBody: cuerpo.split('\n\n').map(parrafo => '<p>' + parrafo.replace(/\n/g, '<br>') + '</p>').join(''),
     });
   },
 
