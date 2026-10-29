@@ -458,6 +458,106 @@ function actualizarPerfilJugador(auth, jugadorId, datos, codigoSeguridad) {
   } catch (e) { return { success: false, error: e.message }; }
 }
 
+// ── Cuenta propia ─────────────────────────────────────────────────────────────
+
+function actualizarFotoPerfil(auth, foto) {
+  try {
+    const cuenta = Auth.getCuentaActual_(auth);
+    if (typeof foto !== 'string' || foto.length > 16000 ||
+        (foto !== '' && !/^avatar:[a-z0-9-]{1,32}$/.test(foto) &&
+         !/^data:image\/jpeg;base64,(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(foto)) ||
+        foto === 'data:image/jpeg;base64,') {
+      throw new Error('Foto de perfil no válida.');
+    }
+    const registro = cuenta.jugador || cuenta.entrenador;
+    if (!registro) throw new Error('Tu cuenta de administración no tiene ficha de entrenador.');
+    const tabla = cuenta.jugador ? CONFIG.SHEETS.JUGADORES : CONFIG.SHEETS.ENTRENADORES;
+    if (!updateRow(tabla, registro.ID, { FotoURL: foto })) throw new Error('No se pudo actualizar la foto.');
+    return { success: true, fotoURL: foto };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+function actualizarMiPerfil(auth, datos, codigoSeguridad) {
+  try {
+    const cuenta = Auth.getCuentaActual_(auth);
+    if (cuenta.jugador) return actualizarPerfilJugador(auth, cuenta.jugador.ID, datos || {}, codigoSeguridad);
+    if (!cuenta.entrenador) throw new Error('Tu cuenta de administración no tiene ficha de entrenador.');
+    const campos = {};
+    ['Nombre', 'Apellidos', 'Telefono'].forEach(k => { if (datos && datos[k] !== undefined) campos[k] = datos[k]; });
+    // No sincronizar credenciales administrativas al editar datos personales.
+    const actualizado = updateRow(CONFIG.SHEETS.ENTRENADORES, cuenta.entrenador.ID, campos);
+    if (!actualizado) throw new Error('No se pudo actualizar el perfil.');
+    return { success: true, actualizado };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+function cambiarCredenciales(auth, cambios) {
+  try {
+    const cuenta = Auth.getCuentaActual_(auth);
+    cambios = cambios || {};
+    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
+    if (String(cambios.pinActual || '').trim() !== String(registro.PIN || '').trim()) {
+      throw new Error('El PIN actual es incorrecto.');
+    }
+    const nuevoAuth = cuenta.jugador
+      ? { tipo: 'jugador', usuario: String(registro.Usuario).trim().toLowerCase(), pin: String(registro.PIN).trim() }
+      : { tipo: 'entrenador', email: String(registro.Email).trim().toLowerCase(), pin: String(registro.PIN).trim() };
+    const tieneUsuario = cambios.usuarioNuevo !== undefined;
+    const tienePin = cambios.pinNuevo !== undefined;
+    if (!tieneUsuario && !tienePin) throw new Error('Indica un usuario o PIN nuevo.');
+    const pin = tienePin ? String(cambios.pinNuevo).trim() : null;
+    if (tienePin && !/^[0-9]{4,6}$/.test(pin)) throw new Error('El PIN debe tener entre 4 y 6 dígitos numéricos.');
+    let actualizado;
+    if (cuenta.jugador) {
+      const usuario = tieneUsuario ? String(cambios.usuarioNuevo).trim().toLowerCase() : null;
+      if (tieneUsuario && usuario.length < 3) throw new Error('El usuario debe tener al menos 3 caracteres.');
+      actualizado = Equipos.actualizarCredencialesJugador(registro.ID, usuario, pin);
+      if (tieneUsuario) nuevoAuth.usuario = usuario;
+    } else {
+      if (tieneUsuario) throw new Error('Solo los jugadores pueden cambiar su usuario.');
+      const tabla = cuenta.administrador ? CONFIG.SHEETS.ADMINISTRADORES : CONFIG.SHEETS.ENTRENADORES;
+      actualizado = updateRow(tabla, registro.ID, { PIN: pin });
+    }
+    if (!actualizado) throw new Error('No se modificaron las credenciales.');
+    if (tienePin) nuevoAuth.pin = pin;
+    return { success: true, auth: nuevoAuth };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+function cambiarCodigoSeguridad(auth, codigoActual, codigoNuevo) {
+  try {
+    const cuenta = Auth.getCuentaActual_(auth);
+    if (!cuenta.jugador) throw new Error('Solo los jugadores pueden cambiar el código de seguridad.');
+    if (!Auth.verificarCodigoPadres(cuenta.jugador.ID, codigoActual)) throw new Error('Código de seguridad incorrecto.');
+    const codigo = String(codigoNuevo || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{6}$/.test(codigo)) throw new Error('El código de seguridad debe tener 6 letras o números.');
+    if (!updateRow(CONFIG.SHEETS.JUGADORES, cuenta.jugador.ID, { CodigoPadres: codigo })) {
+      throw new Error('No se pudo cambiar el código de seguridad.');
+    }
+    return { success: true };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+function enviarRecordatorioCredenciales(auth) {
+  let lock;
+  try {
+    const cuenta = Auth.getCuentaActual_(auth);
+    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
+    const destinatarios = Notificaciones.destinatariosRecordatorio_(cuenta);
+    if (!destinatarios.length) return { success: false, sinCorreo: true, error: 'No hay ningún correo registrado. Contacta con tu entrenador.' };
+    lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    const cache = CacheService.getScriptCache();
+    const clave = 'recordatorio:' + cuenta.rol + ':' + registro.ID;
+    if (cache.get(clave)) throw new Error('Ya se ha enviado un correo hace poco. Inténtalo más tarde.');
+    // Reservar antes del envío impide duplicados incluso si un envío parcial falla.
+    cache.put(clave, '1', 600);
+    Notificaciones.enviarRecordatorioCuenta_(cuenta, destinatarios);
+    return { success: true, destinatarios: destinatarios.length };
+  } catch (e) { return { success: false, error: e.message }; }
+  finally { if (lock && lock.hasLock()) lock.releaseLock(); }
+}
+
 // ── Entrenadores ──────────────────────────────────────────────────────────────
 
 function crearEntrenador(auth, datos) {
@@ -471,8 +571,10 @@ function crearEntrenador(auth, datos) {
 
 function actualizarEntrenador(auth, entrenadorId, datos) {
   try {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
     let permiteEdicion = false;
-    let isAdmin = Auth.isAdmin(auth);
+    const isAdmin = Auth.isAdmin(auth);
     if (isAdmin) {
       permiteEdicion = true;
     } else {
@@ -486,7 +588,13 @@ function actualizarEntrenador(auth, entrenadorId, datos) {
       throw new Error('No tienes permisos para editar este entrenador.');
     }
 
-    const actualizado = Equipos.actualizarEntrenador(entrenadorId, datos, true);
+    if (!isAdmin) {
+      const permitidos = ['Nombre', 'Apellidos', 'Telefono'];
+      if (Object.keys(datos).some(k => !permitidos.includes(k))) {
+        throw new Error('Solo puedes editar tu nombre, apellidos y teléfono.');
+      }
+    }
+    const actualizado = Equipos.actualizarEntrenador(entrenadorId, datos, isAdmin);
     if (!actualizado) throw new Error('No se encontró el entrenador o no se pudo actualizar.');
     return { success: true, actualizado: actualizado };
   } catch (e) {

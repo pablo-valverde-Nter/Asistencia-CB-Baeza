@@ -53,7 +53,7 @@ test('selector de temporada, segmentos y fechas humanas mantienen las opciones p
   let html = run('_htmlFiltroStats()');
   assert.match(html, /stats-season-pill/); assert.match(html, /_statsTemporadas\(\)/);
   assert.equal((html.match(/aria-pressed=/g) || []).length, 3);
-  assert.match(html, /1 sep 2026 — 29 oct 2026/);
+  assert.match(html, /1 sept? 2026 — 29 oct 2026/);
   assert.doesNotMatch(html, /<select/);
   run('_statsTemporadas()'); html = modals.at(-1).html;
   assert.match(html, /stats-season-active">Activa/); assert.match(html, /stats-season-option is-selected/);

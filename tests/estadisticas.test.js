@@ -182,7 +182,13 @@ test('club y resumen mantienen contratos, contactabilidad y privacidad por rol',
   assert.equal(club.serieMensual.reduce((n, m) => n + m.base, 0), club.serieSemanal.reduce((n, s) => n + s.base, 0));
   assert.ok(club.serieMensual.every(m => m.P + m.A + m.R === m.base));
   assert.equal(club.equipos.length, 2);
-  assert.deepEqual(club.contactabilidad, { jugadoresActivos: 8, conEmailFamiliar: 3, conAvisosActivos: 2 });
+  const contacto = club.contactabilidad;
+  assert.deepEqual([contacto.jugadoresActivos, contacto.conEmailFamiliar, contacto.conAvisosActivos], [8, 3, 2]);
+  assert.equal(contacto.sinContactoLista.length, contacto.sinContacto);
+  assert.ok(contacto.porEquipo.every(e => e.activos >= e.conEmailFamiliar && e.activos >= e.sinContacto));
+  for (const r of [contacto, ...contacto.porEquipo]) {
+    assert.equal(r.conEmailFamiliar + r.soloTelefono + r.soloEmailPersonal + r.sinContacto, r.activos ?? r.jugadoresActivos);
+  }
   assert.ok(!('alertas' in club) && !('jugadoresConAlerta' in club));
   assert.equal(club.porCategoria.length, 2);
   const resumen = consultar('resumen').datos;

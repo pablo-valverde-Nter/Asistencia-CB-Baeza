@@ -106,12 +106,12 @@ test('rachas: seis niveles, brasa vacía y mejor racha accesible', () => {
     assert.match(hero, new RegExp('stats-streak-tier-' + nivel));
     assert.match(mini, new RegExp('stats-streak-tier-' + nivel));
     assert.match(hero, new RegExp('stats-streak-count">' + n + '<span>sesiones seguidas'));
-    assert.match(hero, /Mejor racha: <strong>31<\/strong>/);
-    assert.match(hero, /<details[^>]*>[\s\S]*Racha actual[\s\S]*Mejor racha/);
+    assert.match(hero, /Récord: <strong>31<\/strong>/);
+    assert.doesNotMatch(hero, /<details|stats-streak-message/);
     assert.match(hero, /role="img" aria-label="/);
     assert.match(mini, new RegExp('aria-label="Racha actual: ' + n + ' sesiones seguidas"'));
     assert.equal(hero.includes('stats-streak-sparks'), nivel === 5);
-    assert.equal(hero.includes('Empieza tu racha'), n === 0);
+    assert.equal(hero.includes('Brasa de racha por encender'), n === 0);
     assert.doesNotMatch(hero, /\bbase\b/i);
   }
 });
@@ -135,4 +135,23 @@ test('rachas: el motor real alimenta el héroe y el ranking privado', () => {
   assert.equal('motivos' in yo, false);
   context.nombre = '<img src=x onerror="alert(1)">&\'';
   assert.equal(vm.runInContext('_statsRachaTexto(nombre)', context), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;&amp;&#39;');
+});
+
+test('contactabilidad: segmentos excluyentes, ayudas, equipo y ficha accionable', () => {
+  const { context } = cliente();
+  context.contacto = { jugadoresActivos: 5, conEmailFamiliar: 2, conAvisosActivos: 1, conTelefono: 3,
+    soloTelefono: 1, soloEmailPersonal: 1, sinContacto: 1,
+    porEquipo: [{ equipoId: 'e1', nombre: 'Cadete <B>', activos: 5, conEmailFamiliar: 2, soloTelefono: 1, soloEmailPersonal: 1, sinContacto: 1 }],
+    sinContactoLista: [{ jugadorId: 'j1', nombre: 'Ana', apellidos: 'Sin contacto', equipoNombre: 'Cadete <B>' }] };
+  const html = vm.runInContext('_statsContactabilidad(contacto)', context);
+  assert.match(html, /80%/);
+  assert.match(html, /Solo email personal/);
+  assert.match(html, /Cadete &lt;B&gt;/);
+  assert.match(html, /Jugadores sin ningún contacto/);
+  assert.match(html, /jugador-detalle/);
+  assert.match(html, /data-stats-tip="Solo teléfono: 1 de 5 jugadores"/);
+  assert.match(html, /Información sobre Avisos activos/);
+  assert.equal(vm.runInContext('_statsContactoSegmentos(contacto).reduce((n,s) => n+s.n,0)', context), 5);
+  context.contacto = { jugadoresActivos: 0, conEmailFamiliar: 0, conAvisosActivos: 0, conTelefono: 0, soloTelefono: 0, soloEmailPersonal: 0, sinContacto: 0, porEquipo: [], sinContactoLista: [] };
+  assert.doesNotMatch(vm.runInContext('_statsContactabilidad(contacto)', context), /NaN|Infinity|undefined/);
 });

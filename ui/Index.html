@@ -12,6 +12,18 @@
   <meta property="og:description" content="Gestión de asistencia del Club de Baloncesto Baeza.">
   <meta name="twitter:card" content="summary">
   <title>CB Baeza &mdash; Asistencia</title>
+  <script>
+  (function() {
+    var prefs = {};
+    try { prefs = JSON.parse(localStorage.getItem('cb_baeza_prefs') || '{}') || {}; } catch (e) {}
+    var colors = { clasico:'#4A148C', lavanda:'#65408C', noche:'#21142F', medianoche:'#08060D', oro:'#412253' };
+    var theme = Object.prototype.hasOwnProperty.call(colors, prefs.tema) ? prefs.tema : 'clasico';
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.lang = prefs.idioma === 'en' ? 'en' : 'es';
+    document.documentElement.style.colorScheme = /^(noche|medianoche)$/.test(theme) ? 'dark' : 'light';
+    document.querySelector('meta[name="theme-color"]').content = colors[theme];
+  })();
+  </script>
   <?!= include('ui/styles') ?>
 </head>
 <body>
@@ -56,25 +68,14 @@
         <span class="user-badge-chevron" aria-hidden="true"></span>
       </button>
       <div id="user-menu" class="user-menu hidden" role="menu" aria-label="Opciones de usuario">
-        <button class="user-menu-item user-menu-player hidden" type="button" role="menuitem" onclick="event.stopPropagation();App.closeUserMenu();App.navigate('ajustes-cuenta')">
-          <span aria-hidden="true">&#x2699;</span>Ajustes
-        </button>
-        <button class="user-menu-item user-menu-coach hidden" type="button" role="menuitem" onclick="event.stopPropagation();App.irAlPerfilEntrenador()">
-          <span aria-hidden="true">&#x1F464;</span>Perfil
-        </button>
+        <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('perfil-usuario')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg>Perfil</button>
+        <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('ajustes')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.7 2.4-2.2 1L3.8 6l-2 3.5 1.8 1.8v2.4L1.8 15.5l2 3.5 2.3-.4 2.2 1L9 22h4l.7-2.4 2.2-1 2.3.4 2-3.5-1.8-1.8v-2.4l1.8-1.8-2-3.5-2.3.4-2.2-1L13 3Z" transform="translate(1 -1) scale(.95)"/><circle cx="12" cy="12" r="3"/></svg>Ajustes</button>
+        <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('seguridad')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Seguridad</button>
         <div class="user-menu-divider"></div>
         <button class="user-menu-item user-menu-logout" type="button" role="menuitem" onclick="event.stopPropagation();App.closeUserMenu();App.confirmarCerrarSesion()">
-          <span aria-hidden="true">&#x21AA;</span>Cerrar sesión
+          <svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4v16h6m4-12 4 4-4 4m-6-4h13"/></svg>Cerrar sesión
         </button>
       </div>
-    </div>
-    <div id="user-menu" class="hidden">
-      <button class="user-menu-item" onclick="App.closeUserMenu();App.irAjustes()">
-        <span>&#x2699;&#xFE0F;</span><span>Ajustes</span>
-      </button>
-      <button class="user-menu-item user-menu-item-danger" onclick="App.closeUserMenu();App.confirmarCerrarSesion()">
-        <span>&#x1F6AA;</span><span>Cerrar Sesi&oacute;n</span>
-      </button>
     </div>
   </header>
 
@@ -99,22 +100,22 @@
 
         <!-- Campo: email (entrenador) -->
         <div class="form-group login-field" id="login-field-email" style="margin-top:20px;text-align:left">
-          <label style="color:rgba(255,255,255,0.75)">Email registrado</label>
+          <label style="color:var(--on-accent-muted)">Email registrado</label>
           <input type="email" id="login-email" placeholder="entrenador@ejemplo.com" autocomplete="email"
-            style="background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.2);color:#fff">
+            style="background:var(--on-accent-wash);border:1.5px solid var(--on-accent-border);color:var(--on-accent)">
         </div>
 
         <!-- Campo: usuario (jugador) -->
         <div class="form-group login-field hidden" id="login-field-usuario" style="margin-top:20px;text-align:left">
-          <label style="color:rgba(255,255,255,0.75)">Usuario</label>
+          <label style="color:var(--on-accent-muted)">Usuario</label>
           <input type="text" id="login-usuario" placeholder="nombre.apellido" autocomplete="username"
-            style="background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.2);color:#fff;text-transform:lowercase">
+            style="background:var(--on-accent-wash);border:1.5px solid var(--on-accent-border);color:var(--on-accent);text-transform:lowercase">
         </div>
 
         <div class="form-group" style="text-align:left">
-          <label style="color:rgba(255,255,255,0.75)">PIN de acceso</label>
+          <label style="color:var(--on-accent-muted)">PIN de acceso</label>
           <input type="password" id="login-pin" placeholder="&bull;&bull;&bull;&bull;" maxlength="6"
-            style="text-align:center;letter-spacing:6px;font-size:1.2rem;background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.2);color:#fff"
+            style="text-align:center;letter-spacing:6px;font-size:1.2rem;background:var(--on-accent-wash);border:1.5px solid var(--on-accent-border);color:var(--on-accent)"
             autocomplete="current-password" onkeydown="if(event.key==='Enter')App.iniciarSesion()">
         </div>
 
@@ -224,6 +225,10 @@
 
     <section id="view-informes" class="view">
       <div id="informes-contenido" class="p-16"></div>
+    </section>
+
+    <section id="view-ajustes" class="view">
+      <div id="ajustes-contenido"></div>
     </section>
 
     <!-- EQUIPOS ADMIN -->
@@ -422,10 +427,10 @@
           <small id="ent-email-aviso" class="hidden" style="color:var(--texto-sec);font-size:.72rem;display:block;margin-top:4px">
             El email no se puede modificar (clave de acceso)
           </small>
-          <small id="ent-email-aviso-admin" class="hidden" style="color:#5D4037;font-size:.72rem;display:block;margin-top:4px">
+          <small id="ent-email-aviso-admin" class="hidden" style="color:var(--ambar);font-size:.72rem;display:block;margin-top:4px">
             &#x26A0;&#xFE0F; C&aacute;mbialo solo si el entrenador cambi&oacute; de cuenta de Google.
           </small>
-          <small id="ent-email-aviso-propio" class="hidden" style="color:#D32F2F;font-weight:bold;font-size:.72rem;display:block;margin-top:4px">
+          <small id="ent-email-aviso-propio" class="hidden" style="color:var(--rojo);font-weight:bold;font-size:.72rem;display:block;margin-top:4px">
             &#x26A0;&#xFE0F; AVISO: Si modificas tu email de Google o PIN, afectar&aacute; a tu pr&oacute;ximo inicio de sesi&oacute;n.
           </small>
         </div>
@@ -562,73 +567,10 @@
       <div id="mi-equipo-contenido" class="p-16"></div>
     </section>
 
-    <!-- VISTA: AJUSTES CUENTA (jugador) -->
-    <section id="view-ajustes-cuenta" class="view">
-      <div class="form-section">
-        <div class="form-section-title">Datos personales</div>
-        <div class="form-group"><label>Fecha de nacimiento</label><input type="date" id="ajustes-fecha-nac"></div>
-        <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ajustes-tel" placeholder="+34 600 000 000"></div>
-        <div class="form-group"><label>Email</label><input type="email" id="ajustes-email" placeholder="email@ejemplo.com"></div>
-      </div>
-      <div class="form-section">
-        <div class="form-section-title">Contacto familiar</div>
-        <p style="font-size:.75rem;color:var(--texto-sec);margin:0 0 10px">Familiar 1</p>
-        <div class="form-row">
-          <div class="form-group"><label>Nombre</label><input type="text" id="ajustes-padre1-nombre" placeholder="Nombre"></div>
-          <div class="form-group"><label>Apellidos</label><input type="text" id="ajustes-padre1-apellidos" placeholder="Apellidos"></div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ajustes-padre1-tel" placeholder="+34 600 000 000"></div>
-          <div class="form-group"><label>Email</label><input type="email" id="ajustes-padre1-email" placeholder="padre@ejemplo.com"></div>
-        </div>
-        <p style="font-size:.75rem;color:var(--texto-sec);margin:12px 0 10px">Familiar 2</p>
-        <div class="form-row">
-          <div class="form-group"><label>Nombre</label><input type="text" id="ajustes-padre2-nombre" placeholder="Nombre"></div>
-          <div class="form-group"><label>Apellidos</label><input type="text" id="ajustes-padre2-apellidos" placeholder="Apellidos"></div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="ajustes-padre2-tel" placeholder="+34 600 000 000"></div>
-          <div class="form-group"><label>Email</label><input type="email" id="ajustes-padre2-email" placeholder="madre@ejemplo.com"></div>
-        </div>
-      </div>
-      <div class="form-section">
-        <div class="form-section-title">Credenciales de acceso</div>
-        <div class="form-group">
-          <label>Usuario</label>
-          <input type="text" id="ajustes-usuario" placeholder="nombre.apellido" autocomplete="username"
-            style="text-transform:lowercase" oninput="this.value=this.value.toLowerCase().replace(/\s/g,'')">
-          <small style="color:var(--texto-sec);font-size:.72rem">Solo letras, n&uacute;meros y puntos. M&aacute;x. 12 caracteres.</small>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Nuevo PIN (4 d&iacute;gitos)</label>
-            <input type="password" id="ajustes-pin" placeholder="&bull;&bull;&bull;&bull;" maxlength="4"
-              style="text-align:center;letter-spacing:6px;font-size:1.2rem">
-          </div>
-          <div class="form-group">
-            <label>Confirmar PIN</label>
-            <input type="password" id="ajustes-pin-confirm" placeholder="&bull;&bull;&bull;&bull;" maxlength="4"
-              style="text-align:center;letter-spacing:6px;font-size:1.2rem">
-          </div>
-        </div>
-        <small style="color:var(--texto-sec);font-size:.72rem">Deja el PIN en blanco para mantener el actual.</small>
-      </div>
-      <div class="form-section">
-        <div class="form-section-title">C&oacute;digo de seguridad</div>
-        <div class="form-group">
-          <label>C&oacute;digo de autorizaci&oacute;n</label>
-          <input type="password" id="ajustes-codigo-seg" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;" maxlength="10"
-            style="text-align:center;letter-spacing:6px;font-size:1.1rem;text-transform:uppercase"
-            oninput="this.value=this.value.toUpperCase().replace(/\s/g,'')">
-          <small style="color:var(--texto-sec);font-size:.72rem">El mismo c&oacute;digo que usas para justificar ausencias.</small>
-        </div>
-      </div>
-      <div class="p-16" style="padding-bottom:32px">
-        <button class="btn btn-primary btn-full" onclick="App.views['ajustes-cuenta'].guardar()">
-          Guardar cambios
-        </button>
-      </div>
-    </section>
+    <!-- Cuenta personal: disponible para todos los roles -->
+    <section id="view-perfil-usuario" class="view"><div id="perfil-usuario-contenido" class="account-page"></div></section>
+    <section id="view-seguridad" class="view"><div id="seguridad-contenido" class="account-page"></div></section>
+    <section id="view-politicas" class="view"><div id="politicas-contenido" class="account-page"></div></section>
 
   </main>
 

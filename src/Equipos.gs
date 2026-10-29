@@ -192,7 +192,7 @@ const Equipos = {
       if (nuevoUsuario.length < 3) throw new Error('El usuario debe tener al menos 3 caracteres.');
       // Verificar unicidad
       const jugadores = getSheetData(CONFIG.SHEETS.JUGADORES);
-      const duplicado = jugadores.find(j => j.ID !== jugadorId && String(j.Usuario || '').toLowerCase() === nuevoUsuario);
+      const duplicado = jugadores.find(j => j.ID !== jugadorId && String(j.Usuario || '').toLowerCase().trim() === nuevoUsuario);
       if (duplicado) throw new Error(`El usuario "${nuevoUsuario}" ya está en uso.`);
       campos.Usuario = nuevoUsuario;
     }
@@ -292,6 +292,7 @@ const Equipos = {
       Apellidos: datos.Apellidos,
       Email:     datos.Email,
       Telefono:  datos.Telefono || '',
+      FotoURL:   datos.FotoURL || '',
       PIN:       pin,
       EsAdmin:   esAdmin,
     });
@@ -350,7 +351,7 @@ const Equipos = {
       throw new Error('Indica un PIN explícito para habilitar este administrador.');
     }
     const emailFinal = campos.Email || actual.Email;
-    const pinFinal = campos.PIN || actual.PIN;
+    const pinFinal = campos.PIN || (administradorActual && administradorActual.PIN) || actual.PIN;
 
     if (esAdminFinal) {
       if (emailFinal !== actual.Email) Equipos._syncAdministrador_(actual.Email, actual.PIN, false);

@@ -90,3 +90,9 @@ for (const id of ['s3', 's4']) datos.asistEntrenadores.push({ ID: 'ae-pablo-' + 
 datos.asistEntrenadores.push({ ID: 'ae-maria', ID_Entrenador: 'entrenador-maria', ID_Sesion: 'junior-1', Asistio: true });
 
 module.exports = { datos, AHORA };
+
+Object.assign(datos.jugadores.find(j => j.ID === 'jugador-ana'), { TelefonoPadre1: '600111222' });
+Object.assign(datos.jugadores.find(j => j.ID === 'jugador-bruno'), { Email: 'bruno@example.test', Telefono: '600222333' });
+Object.assign(datos.jugadores.find(j => j.ID === 'jugador-david'), { TelefonoPadre1: '600333444' });
+Object.assign(datos.jugadores.find(j => j.ID === 'jugador-elena'), { Telefono: '600444555' });
+Object.assign(datos.jugadores.find(j => j.ID === 'jugador-fatima'), { Email: 'fatima@example.test' });

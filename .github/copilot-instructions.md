@@ -141,6 +141,10 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 | `equipos` | `/equipos` | CRUD de equipos (admin) |
 | `historico` | `/historico` | Listado y edición del histórico de sesiones |
 | `informes` | `/informes` | Estadísticas y exportaciones |
+| `perfil-usuario` | `/perfil` | Datos personales/contacto y foto (`avatar:<slug>` predefinido o JPEG 128×128 en `FotoURL`) |
+| `ajustes` | `/ajustes` | Idioma (es/en, traductor en cliente) y tema; preferencias en `localStorage.cb_baeza_prefs` |
+| `seguridad` | `/seguridad` | Cambio de PIN/usuario/código con el valor actual, recordatorio por correo y enlace a políticas |
+| `politicas` | `/politicas` | Políticas de privacidad y de cookies |
 
 ---
 

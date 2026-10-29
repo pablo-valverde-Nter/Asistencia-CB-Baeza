@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS public."Entrenadores" (
   "Apellidos" text,
   "Email" text,
   "Telefono" text,
+  "FotoURL" text,
   "PIN" text,
   "EsAdmin" boolean
 );

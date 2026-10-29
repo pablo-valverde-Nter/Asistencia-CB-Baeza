@@ -38,7 +38,6 @@ const App = {
     _equipoFormDirty:        false,
     _jugadorDraftRestore:    false,
     _entrenadorDraftRestore: false,
-    _ajustesDraftRestore:    false,
     _sesionAutoSaveTimer:    null,
     _sesionAutoSaving:       false,
     _sesionManualSaving:     false,
@@ -172,8 +171,8 @@ const App = {
           ? String(a.HoraInicio || '').localeCompare(String(b.HoraInicio || ''))
           : a.Fecha.localeCompare(b.Fecha);
       });
-      var rangoSemana = inicioSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) +
-        ' - ' + finSemana.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+      var rangoSemana = inicioSemana.toLocaleDateString(App.preferences.locale(), { day: 'numeric', month: 'short' }) +
+        ' - ' + finSemana.toLocaleDateString(App.preferences.locale(), { day: 'numeric', month: 'short' });
       var state = App.state.calendar[scope];
       if (!state) {
         var mesActual = new Date();
@@ -207,11 +206,11 @@ const App = {
         });
       });
 
-      var tituloMes = primero.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-      var diasSemana = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+      var tituloMes = primero.toLocaleDateString(App.preferences.locale(), { month: 'long', year: 'numeric' });
+      var diasSemana = App.preferences.idioma === 'en' ? ['M','T','W','T','F','S','S'] : ['L','M','X','J','V','S','D'];
       var sesionesSemanaHtml = sesionesSemana.map(function(s) {
         var fechaSesion = new Date(s.Fecha + 'T12:00:00');
-        var diaSesion = fechaSesion.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' });
+        var diaSesion = fechaSesion.toLocaleDateString(App.preferences.locale(), { weekday: 'short', day: 'numeric' });
         var tituloSesion = 'Entrenamiento';
         var estadoSesion = '';
         var claseEstado = 'scheduled';
@@ -315,7 +314,7 @@ const App = {
         });
         var indicadores = (eventos.length > 1 ? '<span class="calendar-count">' + eventos.length + '</span>' : '') +
           (tieneNoJustificada ? '<span class="calendar-alert" title="Ausencia o retraso sin justificar">!</span>' : '');
-        var etiquetaFecha = new Date(state.year, state.month, numero).toLocaleDateString('es-ES', {
+        var etiquetaFecha = new Date(state.year, state.month, numero).toLocaleDateString(App.preferences.locale(), {
           weekday: 'long', day: 'numeric', month: 'long'
         });
         html += '<button class="' + clases.join(' ') + '" aria-label="' + etiquetaFecha + (eventos.length ? ', ' + eventos.length + ' entrenamientos' : '') + (tieneNoJustificada ? ', ausencia o retraso sin justificar' : '') + '" aria-pressed="' + (fecha === state.selected) + '" onclick="App.calendar.select(\'' + scope + '\',\'' + fecha + '\')">' +
@@ -326,7 +325,7 @@ const App = {
       }
 
       var selectedDate = new Date(state.selected + 'T12:00:00');
-      var agendaLabel = selectedDate.toLocaleDateString('es-ES', {
+      var agendaLabel = selectedDate.toLocaleDateString(App.preferences.locale(), {
         weekday: 'long', day: 'numeric', month: 'long'
       });
       var seleccionados = porFecha[state.selected] || [];
@@ -576,7 +575,7 @@ const App = {
           return '<article class="notification-item' + (leida ? ' read' : ' unread') + '" data-notification-index="' + idx + '">' +
             '<button type="button" class="notification-open" onclick="App.notifications.openItem(\'' + teamId + '\',' + idx + ')">' +
               '<span class="notification-icon" aria-hidden="true">&#x1F4EC;</span>' +
-              '<span class="notification-copy"><strong>' + _esc(item.jugador.Apellidos + ', ' + item.jugador.Nombre) + '</strong>' +
+              '<span class="notification-copy"><strong data-no-i18n>' + _esc(item.jugador.Apellidos + ', ' + item.jugador.Nombre) + '</strong>' +
               '<span>' + _esc(tipo) + ' · ' + _esc(fecha.dn + ' ' + fecha.d + ' ' + fecha.m) + ' · ' + _esc(item.sesion.HoraInicio) + '</span></span>' +
               '<span class="notification-unread-dot" aria-hidden="true"></span>' +
             '</button>' +
@@ -734,22 +733,6 @@ const App = {
       });
   },
 
-  toggleUserMenu: function(event) {
-    event.stopPropagation();
-    document.getElementById('user-menu').classList.toggle('hidden');
-  },
-  closeUserMenu: function() {
-    var m = document.getElementById('user-menu');
-    if (m) m.classList.add('hidden');
-  },
-  irAjustes: function() {
-    if (App.state.rol === 'jugador') {
-      App.navigate('ajustes-cuenta');
-    } else if (App.state.usuario && App.state.usuario.ID) {
-      App.views['entrenador-detalle'].cargar(App.state.usuario.ID);
-    }
-  },
-
   confirmarCerrarSesion() {
     App.closeUserMenu();
     App.openModal('Cerrar Sesión',
@@ -773,36 +756,39 @@ const App = {
     wrap.classList.toggle('open', abrir);
     menu.classList.toggle('hidden', !abrir);
     button.setAttribute('aria-expanded', String(abrir));
+    if (abrir) menu.querySelector('[role="menuitem"]').focus();
     if (!App._userMenuListenersInstalled) {
       document.addEventListener('click', function(e) {
         if (!e.target.closest || !e.target.closest('#user-menu-wrap')) App.closeUserMenu();
       });
       document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') App.closeUserMenu();
+        var m = document.getElementById('user-menu');
+        if (!m || m.classList.contains('hidden')) return;
+        if (e.key === 'Escape') { e.preventDefault(); App.closeUserMenu(true); }
+        if (e.key === 'Tab') App.closeUserMenu();
+        if (['ArrowDown','ArrowUp','Home','End'].includes(e.key)) {
+          e.preventDefault();
+          var items = Array.from(m.querySelectorAll('[role="menuitem"]'));
+          var index = items.indexOf(document.activeElement);
+          index = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (index + (e.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length;
+          items[index].focus();
+        }
       });
       App._userMenuListenersInstalled = true;
     }
   },
 
-  closeUserMenu() {
+  closeUserMenu(restoreFocus) {
     var wrap = document.getElementById('user-menu-wrap');
     var menu = document.getElementById('user-menu');
     var button = document.getElementById('user-badge');
+    restoreFocus = restoreFocus || (menu && menu.contains(document.activeElement));
     if (wrap) wrap.classList.remove('open');
     if (menu) menu.classList.add('hidden');
     if (button) button.setAttribute('aria-expanded', 'false');
+    if (restoreFocus && button) button.focus();
   },
 
-  irAlPerfilEntrenador() {
-    App.closeUserMenu();
-    var entrenador = App.state.usuario;
-    if (!entrenador || !entrenador.ID) {
-      showToast('No se encontró el perfil del entrenador', 'error');
-      return;
-    }
-    App.state.detalleEntrenadorId = entrenador.ID;
-    App.navigate('entrenador-detalle');
-  },
 
   cerrarSesion(reason) {
     _clientLog('cerrarSesion', { reason: reason || 'manual_or_unknown', view: App.state.currentView || null });
@@ -950,7 +936,10 @@ const App = {
       'mis-stats':               'Mis Estadísticas',
       'mi-equipo':               'Mi Equipo',
       'informes':               'Informes',
-      'ajustes-cuenta':          'Ajustes de Cuenta',
+      'perfil-usuario':          'Perfil',
+      'ajustes':                 'Ajustes',
+      'seguridad':               'Seguridad',
+      'politicas':               'Privacidad y cookies',
     };
     document.getElementById('header-title').textContent = titulos[view] || 'CB Baeza';
 
@@ -994,7 +983,7 @@ const App = {
   },
 
   goBack() {
-    var _dirtyViews = ['equipo-form', 'jugador-form', 'entrenador-form', 'sesion', 'ajustes-cuenta'];
+    var _dirtyViews = ['equipo-form', 'jugador-form', 'entrenador-form', 'sesion', 'perfil-usuario', 'seguridad'];
     if (_dirtyViews.indexOf(App.state.currentView) >= 0 && App.state._formIsDirty) {
       App.openModal('Cambios sin guardar',
         '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
@@ -1109,61 +1098,28 @@ const App = {
         var hoy = _hoy();
         var mainEqIds = new Set(App.state.equipos.map(function(e) { return e.ID; }));
         lista.innerHTML = equipos.map(function(eq) {
-          // Mini-stats de la última sesión registrada
           var sesiones = App.cache.getSesionesByEquipo(eq.ID);
-          var ultimaGuardada = null;
-          for (var i = sesiones.length - 1; i >= 0; i--) {
-            if (sesiones[i].Fecha <= hoy && (sesiones[i].AsistenciaGuardada === true || sesiones[i].AsistenciaGuardada === 'TRUE')) {
-              ultimaGuardada = sesiones[i]; break;
-            }
-          }
-          var statsHtml = '', statsLabel = '';
-          var cP = 0, cA = 0, cR = 0;
-          if (ultimaGuardada) {
-            var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === ultimaGuardada.ID; });
-            if (rs.length) {
-              cP = rs.filter(function(r) { return App.cache.getEstadoRegistrado(r) === 'P'; }).length;
-              cA = rs.filter(function(r) { return App.cache.getEstadoRegistrado(r) === 'A'; }).length;
-              cR = rs.filter(function(r) { return App.cache.getEstadoRegistrado(r) === 'R'; }).length;
-              var fl = _fmtFecha(ultimaGuardada.Fecha);
-              statsLabel = 'Último entreno (' + fl.d + ' ' + fl.m + '):';
-              statsHtml = '<div class="eq-stats">' +
-                (cP ? '<span class="eq-stat-chip p"><span class="dot"></span>' + cP + '</span>' : '') +
-                (cA ? '<span class="eq-stat-chip a"><span class="dot"></span>' + cA + '</span>' : '') +
-                (cR ? '<span class="eq-stat-chip r"><span class="dot"></span>' + cR + '</span>' : '') +
-                '</div>';
-            }
-          }
+          var ahora = hoy + ' ' + new Date().toTimeString().slice(0,5);
+          var proxima = sesiones.filter(function(s) { return s.Cancelada !== true && s.Cancelada !== 'TRUE' && s.Fecha + ' ' + (s.HoraInicio || '00:00') >= ahora; }).sort(function(a,b) { return (a.Fecha + a.HoraInicio).localeCompare(b.Fecha + b.HoraInicio); })[0];
           var resumenEquipo = App.stats.resumen && App.stats.resumen.datos.equipos && App.stats.resumen.datos.equipos[eq.ID];
-          statsHtml += resumenEquipo ? '<div class="stats-periodo">Asistencia ' + _esc(App.stats.resumen.filtro.temporadaNombre) + ': ' + _pctTexto(resumenEquipo.asistenciaPct) + ' ' + _statsInfoBoton('Asistencia') + ' ' + _htmlTendencia(resumenEquipo.tendenciaPp) + (resumenEquipo.pendientes ? ' <span class="alerta-chip">' + resumenEquipo.pendientes + ' sin registrar</span>' : '') + '</div>' : '';
+          var asistencia = resumenEquipo ? resumenEquipo.asistenciaPct : null;
+          var plantilla = resumenEquipo ? resumenEquipo.jugadoresActivos : App.cache.getJugadoresByEquipo(eq.ID).length;
+          var pendientes = resumenEquipo ? resumenEquipo.pendientes : 0;
+          var pendienteLabel = pendientes + (pendientes === 1 ? ' entreno sin registrar' : ' entrenos sin registrar');
           // Chip Visor: el equipo es de solo lectura
           var esVisor = !App.state.esAdmin && !mainEqIds.has(eq.ID);
           var visorHtml = esVisor ? '<span class="chip-visor">&#x1F441; Visor</span>' : '';
           var eqId = eq.ID;
           var eqNombre = _esc(eq.Nombre);
-          var unread = esVisor ? 0 : App.notifications.unreadCount(eq.ID);
-          var notificationHtml = esVisor ? '' : '<button type="button" class="eq-notifications" aria-label="Notificaciones de ' + eqNombre + (unread ? ': ' + unread + ' nuevas' : '') + '" title="Notificaciones" onclick="App.notifications.openInbox(\'' + eqId + '\')">' +
-            '<span aria-hidden="true">&#x1F4EC;</span>' + (unread ? '<span class="eq-notifications-count">' + unread + '</span>' : '') + '</button>';
-          return '<div class="equipo-card-big">' +
-            '<div class="eq-big-hdr">' +
-              '<div class="eq-icon">&#x1F3C0;</div>' +
-              '<div style="flex:1"><div class="eq-nombre">' + eq.Nombre + '</div>' +
-              '<div class="eq-meta">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div></div>' +
-              visorHtml +
-            '</div>' +
-            '<div class="eq-big-stats">' +
-              '<div class="eq-big-stats-row"><div class="eq-big-stats-main">' +
-                (statsLabel ? '<div class="eq-last-label">' + statsLabel + '</div>' : '') +
-                '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-                  (statsHtml || '<span class="eq-no-stats">Sin sesiones registradas</span>') +
-                '</div>' +
-              '</div>' + notificationHtml + '</div>' +
-            '</div>' +
+          return '<article class="equipo-card-big">' +
+            '<div class="eq-big-hdr"><div class="eq-home-title"><span class="eq-home-eyebrow">Tu equipo</span><h2 class="eq-nombre">' + _statsTexto(eq.Nombre) + '</h2><span class="eq-meta">' + _statsTexto(eq.Categoria) + ' · ' + _statsTexto(eq.Modalidad) + '</span></div>' + visorHtml + '</div>' +
+            '<div class="eq-big-stats"><div class="eq-home-metrics"><div><span class="eq-home-label">Asistencia ' + (resumenEquipo ? _statsTexto(App.stats.resumen.filtro.temporadaNombre) : '') + _statsInfoBoton('Asistencia') + '</span><strong class="eq-home-percentage">' + _pctTexto(asistencia) + '</strong></div><div class="eq-home-roster"><strong>' + plantilla + '</strong><span>en plantilla</span></div></div>' +
+            '<div class="eq-home-bar" role="img" aria-label="Asistencia: ' + _pctTexto(asistencia) + '"><span style="width:' + (asistencia == null ? 0 : asistencia) + '%"></span></div>' +
+            '<div class="eq-home-next">' + (proxima ? 'Próximo entreno · <strong>' + _statsTexto(_fmtFecha(proxima.Fecha).d + ' ' + _fmtFecha(proxima.Fecha).m) + ' · ' + _statsTexto(proxima.HoraInicio) + '</strong>' : 'Sin próximos entrenamientos') + '</div></div>' +
             '<div class="eq-big-btns">' +
-              '<button class="btn-eq-asist" onclick="App.views.equipos.abrirEquipo(\'' + eqId + '\',\'' + eqNombre + '\')">&#x1F4CB; Registrar asistencia</button>' +
-              '<button class="btn-eq-stats" onclick="App.views.equipos.abrirEstadisticas(\'' + eqId + '\')">&#x1F4CA; Estad&iacute;sticas</button>' +
-            '</div>' +
-          '</div>';
+              '<button class="btn-eq-asist" onclick="App.views.equipos.abrirEquipo(\'' + eqId + '\',\'' + eqNombre + '\')">Registrar asistencia' + (pendientes ? '<span class="eq-pending-badge" aria-label="' + pendienteLabel + '" title="' + pendienteLabel + '">!</span>' : '') + '</button>' +
+              '<button class="btn-eq-stats" onclick="App.views.equipos.abrirEstadisticas(\'' + eqId + '\')">Estadísticas</button>' +
+            '</div></article>';
         }).join('');
         // Botón de sustitución puntual (solo entrenadores, no jugadores ni admins)
         if (App.state.rol === 'entrenador') {
@@ -2114,7 +2070,7 @@ const App = {
               var chipClass = item.estado === 'A' ? 'A' : 'R';
               var tipoLabel = item.estado === 'A' ? 'Ausente' : 'Retraso';
               return '<div class="justif-ro-item" onclick="App.views[\'sesion-guardada\'].verJustif(' + idx + ')">' +
-                '<div class="jrm-avatar" style="background:var(--verde);color:#fff;flex-shrink:0">' + (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '') + '</div>' +
+                '<div class="jrm-avatar" style="background:var(--verde);color:var(--button-ink);flex-shrink:0">' + (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '') + '</div>' +
                 '<div style="flex:1;min-width:0">' +
                   '<div class="li-name" style="font-size:.86rem">' + _esc(j.Apellidos) + ', ' + _esc(j.Nombre) + '</div>' +
                   (item.motivoJustif ? '<div style="font-size:.73rem;color:var(--texto-sec)">' + _esc(item.motivoJustif) + '</div>' : '') +
@@ -3188,7 +3144,7 @@ const App = {
         el.innerHTML = lista.map(function(e) {
           var ini = (e.Nombre ? e.Nombre[0] : '') + (e.Apellidos ? e.Apellidos[0] : '');
           var adminBadge = (e.EsAdmin === true || e.EsAdmin === 'TRUE') ? ' <span class="badge-admin">Admin</span>' : '';
-          var isMeBadge = (App.state.usuario && e.ID === App.state.usuario.ID) ? ' <span style="font-size:0.7em; background:#2196F3; color:white; padding:2px 6px; border-radius:10px; margin-left:4px;">(T\u00fa)</span>' : '';
+          var isMeBadge = (App.state.usuario && e.ID === App.state.usuario.ID) ? ' <span style="font-size:0.7em; background:var(--brand-bg); color:var(--on-accent); padding:2px 6px; border-radius:10px; margin-left:4px;">(T\u00fa)</span>' : '';
           var st = statsMap[e.ID] || { sesiones: 0, presenciaPct: null };
           var statsHtml = '<div class="ent-mini-stats"><span class="ems-big">' + _pctTexto(st.presenciaPct) + '</span><span class="ems-de">' + st.sesiones + ' ses.</span>' + _statsInfoBoton('Presencia') + '</div>';
           return '<div class="list-item" onclick="App.views[\'entrenador-detalle\'].cargar(\'' + e.ID + '\')">' +
@@ -3658,7 +3614,7 @@ const App = {
           _statsBloque('Asistencia por categoría',_statsHorizontales(d.porCategoria.map(function(c) { return {nombre:c.categoria,base:c.base,asistenciaPct:c.asistenciaPct}; }),'Asistencia por categoría')) +
           _statsBloque('Asistencia mes a mes',_statsMensual(d.serieMensual)) +
           _statsBloque('Motivos',_statsMotivos(d.motivos)) + _statsBloque('Cancelaciones',_statsCancelaciones(d.cancelaciones)) +
-          _statsBloque('Contactabilidad','<p>' + c.jugadoresActivos + ' jugadores activos</p><p>' + c.conEmailFamiliar + ' con email familiar · ' + c.conAvisosActivos + ' con avisos activos</p>') +
+          _statsBloque('Contactabilidad',_statsContactabilidad(c)) +
           '<div class="p-16 stats-actions"><button class="btn btn-primary btn-full" onclick="App.views.informes.exportar()">Exportar CSV de equipos</button></div>';
         el.innerHTML = html;
       },
@@ -3755,7 +3711,7 @@ const App = {
                 '<span class="player-profile-incomplete-icon" aria-hidden="true">i</span>' +
                 '<strong>Completa la información de tu perfil</strong></div>' +
                 '<ul>' + faltantesPerfil.map(function(texto) { return '<li>' + _esc(texto) + '</li>'; }).join('') + '</ul>' +
-                '<button type="button" onclick="App.navigate(\'ajustes-cuenta\')">Ir a ajustes <span aria-hidden="true">&#8250;</span></button></div>'
+                '<button type="button" onclick="App.navigate(\'perfil-usuario\')">Completar mi perfil <span aria-hidden="true">&#8250;</span></button></div>'
             : '';
         }
         var statsEl = document.getElementById('perfil-stats');
@@ -3880,143 +3836,145 @@ const App = {
       },
     },
 
-    // 3d-11: Ajustes de cuenta (jugador)
-    'ajustes-cuenta': {
+    'perfil-usuario': {
       render: function() {
-        var j = App.state.jugador;
-        if (!j) return;
-        var restoreDraft = App.state._ajustesDraftRestore;
-        if (!restoreDraft) {
-          App.state._formIsDirty = false;
-          // Datos personales
-        var fechaNacEl = document.getElementById('ajustes-fecha-nac'); if (fechaNacEl) fechaNacEl.value = j.FechaNac || '';
-        var tEl = document.getElementById('ajustes-tel');         if (tEl) tEl.value = j.Telefono || '';
-        var eEl = document.getElementById('ajustes-email');        if (eEl) eEl.value = j.Email    || '';
-        // Familiares
-        var p1n = document.getElementById('ajustes-padre1-nombre'); if (p1n) p1n.value = j.NombrePadre1    || '';
-        var p1a = document.getElementById('ajustes-padre1-apellidos'); if (p1a) p1a.value = j.ApellidosPadre1 || '';
-        var p1t = document.getElementById('ajustes-padre1-tel');    if (p1t) p1t.value = j.TelefonoPadre1 || '';
-        var p1e = document.getElementById('ajustes-padre1-email');  if (p1e) p1e.value = j.EmailPadre1     || '';
-        var p2n = document.getElementById('ajustes-padre2-nombre'); if (p2n) p2n.value = j.NombrePadre2    || '';
-        var p2a = document.getElementById('ajustes-padre2-apellidos'); if (p2a) p2a.value = j.ApellidosPadre2 || '';
-        var p2t = document.getElementById('ajustes-padre2-tel');    if (p2t) p2t.value = j.TelefonoPadre2 || '';
-        var p2e = document.getElementById('ajustes-padre2-email');  if (p2e) p2e.value = j.EmailPadre2     || '';
-        // Credenciales
-        var uEl  = document.getElementById('ajustes-usuario');      if (uEl)  uEl.value  = j.Usuario || '';
-        var pEl  = document.getElementById('ajustes-pin');          if (pEl)  pEl.value  = '';
-        var pcEl = document.getElementById('ajustes-pin-confirm');  if (pcEl) pcEl.value = '';
-        // Código de seguridad
-        var cEl  = document.getElementById('ajustes-codigo-seg');   if (cEl)  cEl.value  = '';
+        var jugador = App.state.rol === 'jugador', persona = jugador ? App.state.jugador : App.state.usuario;
+        var host = document.getElementById('perfil-usuario-contenido');
+        if (!persona || !persona.ID) { host.innerHTML = '<div class="account-card"><h2>Tu perfil</h2><p>Tu cuenta de administración no tiene ficha de entrenador.</p></div>'; return; }
+        this._campos = jugador ? [['FechaNac','Fecha de nacimiento','date'],['Telefono','Teléfono','tel'],['Email','Email','email']] : [['Nombre','Nombre','text'],['Apellidos','Apellidos','text'],['Telefono','Teléfono','tel']];
+        var campo = function(c) { return '<div class="form-group"><label for="perfil-' + c[0] + '">' + c[1] + '</label><input id="perfil-' + c[0] + '" data-perfil="' + c[0] + '" type="' + c[2] + '" value="' + _statsTexto(persona[c[0]] || '') + '"></div>'; };
+        var html = '<div class="account-profile-hero"><div id="perfil-avatar">' + App.avatarHtml(persona.FotoURL, persona.Nombre, 88) + '</div><h2 translate="no">' + _statsTexto([persona.Nombre,persona.Apellidos].filter(Boolean).join(' ')) + '</h2><p>' + (jugador ? 'Tu espacio en el club' : App.state.esAdmin ? 'Administración del club' : 'Equipo técnico') + '</p><button class="btn btn-secondary" type="button" onclick="App.views[\'perfil-usuario\'].elegirFoto()">Cambiar foto</button></div><form id="perfil-form" class="account-card"><h2>Datos personales</h2>' + this._campos.map(campo).join('');
+        if (!jugador) html += '<div class="form-group"><label for="perfil-email-lectura">Email de acceso</label><input id="perfil-email-lectura" type="email" readonly value="' + _statsTexto(persona.Email || App.state.auth.email || '') + '"><small>El email identifica tu cuenta y no se puede cambiar aquí.</small></div>';
+        if (jugador) {
+          html += '<h2>Contacto familiar</h2><p>Estos datos ayudan al club a contactar contigo y con tu familia.</p>';
+          [1,2].forEach(function(n) {
+            html += '<fieldset class="account-family"><legend>Familiar ' + n + '</legend>';
+            [['NombrePadre','Nombre','text'],['ApellidosPadre','Apellidos','text'],['TelefonoPadre','Teléfono','tel'],['EmailPadre','Email','email']].forEach(function(c) { var spec = [c[0]+n,c[1],c[2]]; App.views['perfil-usuario']._campos.push(spec); html += campo(spec); });
+            html += '<label class="account-check"><input type="checkbox" data-perfil="NotificarAusenciasPadre' + n + '" ' + (persona['NotificarAusenciasPadre'+n] !== false && persona['NotificarAusenciasPadre'+n] !== 'FALSE' ? 'checked' : '') + '>Recibir avisos de ausencias por email</label></fieldset>';
+          });
+          html += '<div class="form-group"><label for="perfil-codigo">Código de seguridad</label><input id="perfil-codigo" type="password" maxlength="6" autocomplete="off" placeholder="6 caracteres"><small>El mismo código que utilizas para justificar ausencias. Es necesario para guardar.</small></div>';
         }
-        App.state._ajustesDraftRestore = false;
-        // Dirty tracking
-        var setDirty = function() { App.state._formIsDirty = true; };
-        ['ajustes-fecha-nac','ajustes-tel','ajustes-email',
-         'ajustes-padre1-nombre','ajustes-padre1-apellidos','ajustes-padre1-tel','ajustes-padre1-email',
-         'ajustes-padre2-nombre','ajustes-padre2-apellidos','ajustes-padre2-tel','ajustes-padre2-email',
-         'ajustes-usuario','ajustes-pin','ajustes-pin-confirm'].forEach(function(id) {
-          var el = document.getElementById(id); if (el) el.oninput = setDirty;
-        });
+        host.innerHTML = html + '<button class="btn btn-primary btn-full" type="submit">Guardar cambios</button></form>';
+        App.state._formIsDirty = false;
+        document.getElementById('perfil-form').oninput = function() { App.state._formIsDirty = true; };
+        document.getElementById('perfil-form').onsubmit = function(e) { e.preventDefault(); App.views['perfil-usuario'].guardar(); };
       },
       guardar: function() {
-        var j = App.state.jugador;
-        if (!j) return;
-        // Datos personales
-        var nuevaFechaNac = (document.getElementById('ajustes-fecha-nac') ? document.getElementById('ajustes-fecha-nac').value : '').trim();
-        var nuevoTel    = (document.getElementById('ajustes-tel')           ? document.getElementById('ajustes-tel').value           : '').trim();
-        var nuevoEmail  = (document.getElementById('ajustes-email')         ? document.getElementById('ajustes-email').value         : '').trim();
-        var p1Nombre    = (document.getElementById('ajustes-padre1-nombre') ? document.getElementById('ajustes-padre1-nombre').value : '').trim();
-        var p1Apellidos = (document.getElementById('ajustes-padre1-apellidos') ? document.getElementById('ajustes-padre1-apellidos').value : '').trim();
-        var p1Tel       = (document.getElementById('ajustes-padre1-tel')    ? document.getElementById('ajustes-padre1-tel').value    : '').trim();
-        var p1Email     = (document.getElementById('ajustes-padre1-email')  ? document.getElementById('ajustes-padre1-email').value  : '').trim();
-        var p2Nombre    = (document.getElementById('ajustes-padre2-nombre') ? document.getElementById('ajustes-padre2-nombre').value : '').trim();
-        var p2Apellidos = (document.getElementById('ajustes-padre2-apellidos') ? document.getElementById('ajustes-padre2-apellidos').value : '').trim();
-        var p2Tel       = (document.getElementById('ajustes-padre2-tel')    ? document.getElementById('ajustes-padre2-tel').value    : '').trim();
-        var p2Email     = (document.getElementById('ajustes-padre2-email')  ? document.getElementById('ajustes-padre2-email').value  : '').trim();
-        // Credenciales
-        var nuevoUsuario = (document.getElementById('ajustes-usuario')      ? document.getElementById('ajustes-usuario').value       : '').trim().toLowerCase();
-        var nuevoPin     = (document.getElementById('ajustes-pin')          ? document.getElementById('ajustes-pin').value          : '').trim();
-        var confirmarPin = (document.getElementById('ajustes-pin-confirm')  ? document.getElementById('ajustes-pin-confirm').value  : '').trim();
-        // Código de seguridad
-        var codigoSeg    = (document.getElementById('ajustes-codigo-seg')   ? document.getElementById('ajustes-codigo-seg').value   : '').trim().toUpperCase();
-        // Validaciones
-        if (!nuevoUsuario) { showToast('El usuario no puede estar vac\u00edo', 'error'); return; }
-        if (nuevaFechaNac && nuevaFechaNac > _hoy()) { showToast('La fecha de nacimiento no puede ser futura', 'error'); return; }
-        if (nuevoPin && nuevoPin !== confirmarPin) { showToast('Los PINs no coinciden', 'error'); return; }
-        if (nuevoPin && (nuevoPin.length < 4 || !/^\d+$/.test(nuevoPin))) { showToast('El PIN debe tener 4 d\u00edgitos num\u00e9ricos', 'error'); return; }
-        if (nuevoEmail && !_validarEmail(nuevoEmail)) { showToast('El email no tiene un formato v\u00e1lido', 'error'); return; }
-        if (nuevoTel && !_validarTel(nuevoTel)) { showToast('El tel\u00e9fono no tiene un formato v\u00e1lido', 'error'); return; }
-        if (p1Tel && !_validarTel(p1Tel)) { showToast('El tel\u00e9fono del familiar 1 no es v\u00e1lido', 'error'); return; }
-        if (p1Email && !_validarEmail(p1Email)) { showToast('El email del familiar 1 no es v\u00e1lido', 'error'); return; }
-        if (p2Tel && !_validarTel(p2Tel)) { showToast('El tel\u00e9fono del familiar 2 no es v\u00e1lido', 'error'); return; }
-        if (p2Email && !_validarEmail(p2Email)) { showToast('El email del familiar 2 no es v\u00e1lido', 'error'); return; }
-        if (!codigoSeg || codigoSeg.length < 4) { showToast('Introduce el c\u00f3digo de seguridad', 'error'); return; }
-        confirmarYGuardar(
-          'Guardar cambios',
-          'Se actualizar\u00e1 tu perfil y/o credenciales de acceso.' +
-          '<br><span style="font-size:.8rem;color:var(--texto-sec)">El c\u00f3digo de seguridad se verificar\u00e1 en el servidor.</span>',
-          function() {
-            var authOriginal = Object.assign({}, App.state.auth);
-            var historyBefore = App.state.viewHistory.slice();
-            var operationToken = App.operation.begin('player-settings:' + j.ID);
-            if (!operationToken) return;
-            var datosPersonales = {
-              FechaNac: nuevaFechaNac, Telefono: nuevoTel, Email: nuevoEmail,
-              NombrePadre1: p1Nombre, ApellidosPadre1: p1Apellidos, TelefonoPadre1: p1Tel, EmailPadre1: p1Email,
-              NombrePadre2: p2Nombre, ApellidosPadre2: p2Apellidos, TelefonoPadre2: p2Tel, EmailPadre2: p2Email,
-            };
-            var parentIndex = App.state.viewHistory.lastIndexOf('perfil-jugador');
-            App.state.viewHistory = parentIndex >= 0
-              ? App.state.viewHistory.slice(0, parentIndex)
-              : App.state.viewHistory.filter(function(view) { return view !== 'ajustes-cuenta'; });
-            App.state._formIsDirty = false;
-            App.navigate('perfil-jugador', {}, false);
-            App.sync.start();
-            var callWithAuth = function(fn, args) {
-              return new Promise(function(resolve, reject) {
-                var call = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-                call[fn].apply(call, [authOriginal].concat(args));
-              }).then(function(value) { return { ok: true, value: value }; }, function(error) {
-                return { ok: false, error: error };
-              });
-            };
-            Promise.all([
-              callWithAuth('actualizarPerfilJugador', [j.ID, datosPersonales, codigoSeg]),
-              callWithAuth('actualizarCredencialesJugador', [j.ID, nuevoUsuario, nuevoPin || null, null, codigoSeg]),
-            ]).then(function(results) {
-              App.sync.done();
-              var profile = results[0];
-              var credentials = results[1];
-              var profileOk = profile.ok && profile.value && profile.value.success !== false && profile.value.actualizado !== false;
-              var credentialsOk = credentials.ok && credentials.value && credentials.value.success !== false && credentials.value.actualizado !== false;
-              if (profileOk) {
-                Object.assign(j, datosPersonales);
-                if (App.state.currentView === 'perfil-jugador') App.views['perfil-jugador'].render();
-              }
-              if (credentialsOk) {
-                j.Usuario = nuevoUsuario;
-                var authActualizada = Object.assign({}, authOriginal, { usuario: nuevoUsuario });
-                if (nuevoPin) authActualizada.pin = nuevoPin;
-                App.state.auth = authActualizada;
-                _setStoredAuth(JSON.stringify(authActualizada));
-              }
-              App.cache.upsert('jugadores', Object.assign({}, j));
-              if (profileOk && credentialsOk) {
-                App.state._formIsDirty = false;
-                App.operation.succeed(operationToken);
-                return;
-              }
-              var errors = [];
-              if (!profileOk) errors.push(profile.value && profile.value.error || profile.error && profile.error.message || 'No se pudieron guardar los datos personales');
-              if (!credentialsOk) errors.push(credentials.value && credentials.value.error || credentials.error && credentials.error.message || 'No se pudieron guardar las credenciales');
-              App.state.viewHistory = historyBefore;
-              App.state._ajustesDraftRestore = true;
-              App.state._formIsDirty = true;
-              App.navigate('ajustes-cuenta', {}, false);
-              App.operation.fail(operationToken, errors.join('; '));
-            });
-          }
-        );
+        var jugador = App.state.rol === 'jugador', datos = {}, codigo = jugador ? document.getElementById('perfil-codigo').value.trim().toUpperCase() : '';
+        document.querySelectorAll('[data-perfil]').forEach(function(el) { datos[el.dataset.perfil] = el.type === 'checkbox' ? el.checked : el.value.trim(); });
+        if (jugador && !/^[A-Z0-9]{6}$/.test(codigo)) { showToast('Introduce el código de seguridad de 6 caracteres', 'error'); return; }
+        if (datos.FechaNac && datos.FechaNac > _hoy()) { showToast('La fecha de nacimiento no puede ser futura', 'error'); return; }
+        for (var key in datos) {
+          if (datos[key] && key.indexOf('Email') === 0 && !_validarEmail(datos[key])) { showToast('Revisa el formato de los emails', 'error'); return; }
+          if (datos[key] && key.indexOf('Telefono') === 0 && !_validarTel(datos[key])) { showToast('Revisa el formato de los teléfonos', 'error'); return; }
+        }
+        App.operation.run('my-profile', 'actualizarMiPerfil', [datos,codigo], function() {
+          App.views['perfil-usuario']._actualizar(datos);
+          App.state._formIsDirty = false;
+          if (jugador) document.getElementById('perfil-codigo').value = '';
+          showToast('Perfil actualizado', 'success');
+        }).catch(function() { /* App.operation presenta el error y conserva el formulario. */ });
+      },
+      _actualizar: function(datos) {
+        var jugador = App.state.rol === 'jugador', persona = jugador ? App.state.jugador : App.state.usuario;
+        Object.assign(persona, datos);
+        App.cache.upsert(jugador ? 'jugadores' : 'entrenadores', Object.assign({},persona));
+        _updateUserBadge([persona.Nombre,persona.Apellidos].filter(Boolean).join(' '), jugador ? 'Jugador' : App.state.esAdmin ? 'Admin' : 'Entrenador');
+      },
+      elegirFoto: function() {
+        var persona = App.state.rol === 'jugador' ? App.state.jugador : App.state.usuario;
+        App.openModal('Tu imagen de equipo', '<div class="avatar-picker"><p>Elige un avatar del club o sube tu foto.</p><div class="avatar-grid">' + Object.keys(App.avatars).map(function(id) {
+          return '<button type="button" class="avatar-choice" aria-label="' + App.avatars[id][0] + '" aria-pressed="' + (persona.FotoURL === 'avatar:'+id) + '" onclick="App.views[\'perfil-usuario\'].guardarFoto(\'avatar:' + id + '\')">' + App.avatarHtml('avatar:'+id,'',56) + '<span>' + App.avatars[id][0] + '</span></button>';
+        }).join('') + '</div><label class="btn btn-primary btn-full avatar-upload" for="perfil-foto-file">Subir mi foto</label><input id="perfil-foto-file" class="sr-only" type="file" accept="image/*" onchange="App.views[\'perfil-usuario\'].subirFoto(this)"><p>Se recortará al centro. La foto solo se usa como imagen de perfil.</p><button type="button" class="btn btn-secondary btn-full" onclick="App.views[\'perfil-usuario\'].guardarFoto(\'\')">Quitar foto</button></div>');
+      },
+      guardarFoto: function(foto) {
+        App.operation.run('my-avatar', 'actualizarFotoPerfil', [foto], function(res) {
+          App.views['perfil-usuario']._actualizar({ FotoURL: res.fotoURL });
+          var persona = App.state.rol === 'jugador' ? App.state.jugador : App.state.usuario;
+          var avatar = document.getElementById('perfil-avatar');
+          if (avatar) avatar.innerHTML = App.avatarHtml(persona.FotoURL,persona.Nombre,88);
+          App.closeModal();
+          showToast('Foto actualizada', 'success');
+        }).catch(function() { /* App.operation presenta el error y conserva el selector. */ });
+      },
+      subirFoto: function(input) {
+        var file = input.files && input.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { showToast('Selecciona un archivo de imagen', 'error'); return; }
+        var url = URL.createObjectURL(file), image = new Image();
+        image.onload = function() {
+          try {
+            var canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+            var context = canvas.getContext('2d'), side = Math.min(image.naturalWidth,image.naturalHeight);
+            context.fillStyle = '#fff'; context.fillRect(0,0,128,128);
+            context.drawImage(image,(image.naturalWidth-side)/2,(image.naturalHeight-side)/2,side,side,0,0,128,128);
+            var quality = .75, foto = canvas.toDataURL('image/jpeg',quality);
+            while (foto.length > 16000 && quality > .15) { quality -= .1; foto = canvas.toDataURL('image/jpeg',quality); }
+            if (foto.length > 16000) throw new Error('La imagen es demasiado compleja. Prueba con otra foto.');
+            App.views['perfil-usuario'].guardarFoto(foto);
+          } catch (error) { showToast(error.message || 'No se pudo preparar la foto', 'error'); }
+          URL.revokeObjectURL(url);
+        };
+        image.onerror = function() { URL.revokeObjectURL(url); showToast('No se pudo abrir la imagen. Prueba con JPG o PNG.', 'error'); };
+        image.src = url;
+      },
+    },
+
+    'seguridad': {
+      render: function() {
+        var jugador = App.state.rol === 'jugador';
+        var pin = function(id,label,required) { var actual = id === 'seg-pin-actual'; return '<div class="form-group"><label for="' + id + '">' + label + '</label><input type="password" inputmode="numeric" ' + (actual ? 'maxlength="32"' : 'pattern="[0-9]{4,6}" maxlength="6"') + ' autocomplete="' + (actual ? 'current-password' : 'new-password') + '" id="' + id + '" ' + (required ? 'required' : '') + '></div>'; };
+        document.getElementById('seguridad-contenido').innerHTML = '<div class="account-intro"><span class="account-eyebrow">TU CUENTA, PROTEGIDA</span><h2>Seguridad</h2><p>Controla cómo accedes y cómo recuperar tus credenciales.</p></div><form id="seg-credenciales" class="account-card"><h2>Cambiar PIN</h2>' + (jugador ? '<div class="form-group"><label for="seg-usuario">Cambiar usuario</label><input id="seg-usuario" autocomplete="username" maxlength="12" value="' + _statsTexto(App.state.auth.usuario || '') + '"><small>Letras, números y puntos. Máximo 12 caracteres.</small></div>' : '') + pin('seg-pin-actual','PIN actual',true) + '<div class="form-row">' + pin('seg-pin-nuevo','Nuevo PIN',false) + pin('seg-pin-repetir','Repetir nuevo PIN',false) + '</div><p>' + (jugador ? 'Usa de 4 a 6 dígitos. Deja el nuevo PIN vacío si solo cambias tu usuario.' : 'Usa de 4 a 6 dígitos.') + '</p><button class="btn btn-primary btn-full" type="submit">Guardar credenciales</button></form>' +
+          (jugador ? '<form id="seg-codigo-form" class="account-card"><h2>Cambiar código de seguridad</h2><p>Este código protege los datos familiares y las justificaciones.</p><div class="form-group"><label for="seg-codigo-actual">Código actual</label><input id="seg-codigo-actual" type="password" maxlength="6" required autocomplete="off"></div><div class="form-group"><label for="seg-codigo-nuevo">Nuevo código (6 letras o números)</label><input id="seg-codigo-nuevo" type="password" maxlength="6" required autocomplete="off"></div><button class="btn btn-secondary btn-full" type="submit">Cambiar código de seguridad</button></form>' : '') +
+          '<div class="account-card"><h2>¿Olvidaste tu PIN o código?</h2><p>Enviaremos tus credenciales a los correos registrados en tu ficha. Los códigos de seguridad solo se envían a los contactos familiares.</p><div id="seg-recordatorio-aviso" role="status" aria-live="polite"></div><button id="seg-recordatorio" class="btn btn-secondary btn-full" type="button" onclick="App.views.seguridad.recordatorio()">Enviar recordatorio por email</button></div><div class="account-card"><h2>Privacidad</h2><button class="account-link" onclick="App.navigate(\'politicas\',{seccion:\'privacidad\'})">Política de privacidad <span aria-hidden="true">›</span></button><button class="account-link" onclick="App.navigate(\'politicas\',{seccion:\'cookies\'})">Política de cookies <span aria-hidden="true">›</span></button></div>';
+        App.state._formIsDirty = false;
+        document.getElementById('seg-credenciales').onsubmit = function(e) { e.preventDefault(); App.views.seguridad.credenciales(); };
+        var codigo = document.getElementById('seg-codigo-form');
+        if (codigo) codigo.onsubmit = function(e) { e.preventDefault(); App.views.seguridad.codigo(); };
+        document.querySelectorAll('#seguridad-contenido form').forEach(function(form) { form.oninput = function() { App.state._formIsDirty = true; }; });
+      },
+      credenciales: function() {
+        var nuevo = document.getElementById('seg-pin-nuevo').value, repetir = document.getElementById('seg-pin-repetir').value;
+        if (nuevo !== repetir) { showToast('Los PINs no coinciden', 'error'); return; }
+        if (nuevo && !/^\d{4,6}$/.test(nuevo)) { showToast('El PIN debe tener entre 4 y 6 dígitos', 'error'); return; }
+        var datos = { pinActual: document.getElementById('seg-pin-actual').value };
+        if (nuevo) datos.pinNuevo = nuevo;
+        if (App.state.rol === 'jugador') {
+          datos.usuarioNuevo = document.getElementById('seg-usuario').value.trim().toLowerCase();
+          if (!/^[a-z0-9.]{1,12}$/.test(datos.usuarioNuevo)) { showToast('El usuario debe tener hasta 12 letras, números o puntos', 'error'); return; }
+        } else if (!nuevo) { showToast('Introduce un nuevo PIN', 'error'); return; }
+        App.operation.run('my-credentials','cambiarCredenciales',[datos],function(res) {
+          App.state.auth = res.auth; _setStoredAuth(JSON.stringify(res.auth));
+          if (App.state.jugador && res.auth.usuario) App.views['perfil-usuario']._actualizar({ Usuario: res.auth.usuario });
+          document.getElementById('seg-credenciales').querySelectorAll('input[type="password"]').forEach(function(el) { el.value = ''; });
+          App.state._formIsDirty = false;
+          showToast('Credenciales actualizadas. Tu sesión sigue abierta.', 'success');
+        }).catch(function() { /* La sesión anterior sigue siendo válida si falla el cambio. */ });
+      },
+      codigo: function() {
+        var actual = document.getElementById('seg-codigo-actual').value.trim().toUpperCase(), nuevo = document.getElementById('seg-codigo-nuevo').value.trim().toUpperCase();
+        if (!/^[A-Z0-9]{6}$/.test(actual) || !/^[A-Z0-9]{6}$/.test(nuevo)) { showToast('Los códigos deben tener 6 letras o números', 'error'); return; }
+        App.operation.run('my-security-code','cambiarCodigoSeguridad',[actual,nuevo],function() {
+          document.getElementById('seg-codigo-form').reset(); App.state._formIsDirty = false; showToast('Código de seguridad actualizado', 'success');
+        }).catch(function() { /* App.operation presenta el error y conserva el formulario. */ });
+      },
+      recordatorio: function() {
+        var button = document.getElementById('seg-recordatorio');
+        if (button.disabled) return;
+        button.disabled = true;
+        server('enviarRecordatorioCredenciales').then(function(res) {
+          var aviso = document.getElementById('seg-recordatorio-aviso');
+          if (res.sinCorreo) { aviso.className = 'account-notice'; aviso.textContent = 'No tienes ningún correo registrado. Contacta con tu entrenador para recuperarlo.'; }
+          else if (!res.success) throw new Error(res.error || 'No se pudo enviar el recordatorio');
+          else { aviso.className = 'account-notice'; aviso.textContent = 'Recordatorio enviado. Revisa tu bandeja de entrada y la carpeta de spam.'; }
+        }).catch(function(error) { showToast(error.message || 'Error de conexión','error'); }).finally(function() { button.disabled = false; });
+      },
+    },
+
+    'politicas': {
+      render: function(params) {
+        document.getElementById('politicas-contenido').innerHTML = '<div class="account-intro"><span class="account-eyebrow">TRANSPARENCIA Y CONFIANZA</span><h2>Tu privacidad importa</h2><p>Cómo cuidamos tus datos en CB Baeza.</p></div><nav class="policy-nav" aria-label="Políticas"><a href="#politica-privacidad">Privacidad</a><a href="#politica-cookies">Cookies y almacenamiento</a></nav><article id="politica-privacidad" class="account-card policy-text"><h2>Política de privacidad</h2><h3>Responsable del tratamiento</h3><p>El Club de Baloncesto Baeza es el responsable de los datos utilizados en esta aplicación. Puedes contactar con el club a través de sus entrenadores o de su directiva para cualquier consulta sobre privacidad.</p><h3>Qué datos tratamos</h3><p>Datos de identificación, credenciales de acceso, información de contacto, contactos familiares, asignación a equipos, asistencia a entrenamientos, justificaciones de ausencias o retrasos y, si decides añadirla, tu fotografía de perfil. Las justificaciones pueden contener información sensible: incluye únicamente lo necesario para comunicar la incidencia.</p><h3>Para qué los utilizamos</h3><p>Gestionamos la actividad deportiva y la asistencia del club, facilitamos el trabajo de los entrenadores y enviamos avisos relacionados con la asistencia a las familias que los tengan activados. No utilizamos los datos para publicidad.</p><h3>Base jurídica y menores</h3><p>El tratamiento se apoya en el consentimiento para las funciones que lo requieren y en el interés legítimo del club en organizar su actividad deportiva, respetando los derechos de las personas. Los datos de menores se facilitan y gestionan mediante sus madres, padres o tutores legales. Puedes retirar tu consentimiento cuando corresponda, sin afectar a los tratamientos anteriores a su retirada.</p><h3>Destinatarios e infraestructura</h3><p>No cedemos tus datos a terceros para sus propios fines. El personal autorizado del club accede solo a la información necesaria para sus funciones. Google (Apps Script y Gmail) y Supabase actúan como proveedores de infraestructura y encargados del tratamiento. Sus servicios pueden implicar tratamiento fuera del Espacio Económico Europeo, sujeto a las garantías de protección de datos aplicables.</p><h3>Conservación</h3><p>Conservamos los datos durante la relación deportiva y el tiempo necesario para gestionar las temporadas, atender solicitudes y cumplir las obligaciones legales aplicables. Después se eliminan o anonimizan cuando dejan de ser necesarios. El club revisa la necesidad de conservar el historial y los contactos familiares.</p><h3>Tus derechos</h3><p>Puedes solicitar acceso, rectificación, supresión, oposición, limitación del tratamiento y portabilidad de tus datos, en los casos previstos por la normativa, contactando con la directiva o los entrenadores del club. Para proteger tu información puede ser necesario acreditar tu identidad o representación legal. También puedes presentar una reclamación ante la Agencia Española de Protección de Datos (AEPD), en <a href="https://www.aepd.es" target="_blank" rel="noopener noreferrer">www.aepd.es</a>.</p><h3>Seguridad</h3><p>Aplicamos controles de acceso por perfil y medidas técnicas y organizativas para proteger la información. No compartas tu PIN ni tu código de seguridad y cierra la sesión en dispositivos compartidos. Comunica al club cualquier acceso no autorizado que detectes.</p></article><article id="politica-cookies" class="account-card policy-text"><h2>Política de cookies y almacenamiento</h2><h3>Sin publicidad ni analítica</h3><p>Esta aplicación no utiliza cookies de publicidad ni de analítica. Guarda información técnica en el almacenamiento local de tu navegador (localStorage) para que puedas utilizarla.</p><h3>Qué se guarda en tu dispositivo</h3><ul><li><code>cb_baeza_auth</code>: mantiene tu sesión y tus credenciales de acceso hasta que cierres sesión o borres el almacenamiento.</li><li><code>cb_baeza_prefs</code>: recuerda el idioma y el tema visual elegidos.</li><li>Borradores locales: permiten recuperar cambios pendientes en formularios de la aplicación.</li></ul><p>El almacenamiento local no se envía automáticamente como una cookie. La aplicación utiliza la sesión guardada para autenticar las peticiones al servidor. Quien tenga acceso a tu dispositivo puede acceder a la sesión: evita guardar el acceso en equipos compartidos.</p><h3>Cookies técnicas de Google</h3><p>Google puede establecer cookies técnicas necesarias para servir la aplicación mediante Apps Script y para la seguridad o funcionamiento de su plataforma, según tu navegador y tu sesión de Google.</p><h3>Cómo borrar estos datos</h3><p>Puedes cerrar sesión desde el menú de usuario. Para borrar preferencias, borradores y cookies, abre la configuración de privacidad de tu navegador, busca los datos de sitios de Google Apps Script y elimina sus cookies y almacenamiento. También puedes borrar todos los datos de navegación. Perderás la sesión, las preferencias y los borradores guardados. Bloquear el almacenamiento o las cookies técnicas puede impedir algunas funciones.</p></article>';
+        if (params && params.seccion) requestAnimationFrame(function() { document.getElementById('politica-' + (params.seccion === 'cookies' ? 'cookies' : 'privacidad')).scrollIntoView({ block: 'start' }); });
       },
     },
 
@@ -4962,14 +4920,11 @@ function _fmtFecha(s) {
   if (!s) return {d:'-',m:'-',dn:'-',ml:'-'};
   var parts = s.split('-').map(Number);
   var dt = new Date(parts[0], parts[1]-1, parts[2]);
-  var dias = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
-  var mesesC = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-  var mesesL = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   return {
     d:  String(parts[2]).padStart(2,'0'),
-    m:  mesesC[parts[1]-1],
-    dn: dias[dt.getDay()],
-    ml: mesesL[parts[1]-1],
+    m: dt.toLocaleDateString(App.preferences.locale(), {month:'short'}),
+    dn: dt.toLocaleDateString(App.preferences.locale(), {weekday:'short'}),
+    ml: dt.toLocaleDateString(App.preferences.locale(), {month:'long'}),
   };
 }
 
@@ -4984,27 +4939,41 @@ function _esc(s) {
   return (s == null ? '' : String(s)).replace(/'/g, "\\'");
 }
 
+App.avatars = {
+  balon: ['Balón','<circle cx="32" cy="32" r="18" fill="#d9ad54"/><path d="M14 32h36M32 14v36M19 19c18 4 22 17 26 26M45 19c-18 4-22 17-26 26"/>'],
+  canasta: ['Canasta','<rect x="13" y="12" width="38" height="25" rx="4"/><path d="M25 25h14v10M19 37h26l-5 15H24zM25 38l7 14 7-14"/>'],
+  camiseta: ['Camiseta','<path d="m23 13-12 8 6 12 6-3v23h24V30l6 3 6-12-12-8c-5 7-19 7-24 0Z" transform="translate(-3 0)"/><path d="M28 29h9l-7 14" stroke="#d9ad54"/>'],
+  zapatilla: ['Zapatilla','<path d="M15 22h12l6 13 16 6c5 2 5 10 0 10H15c-5 0-5-7 0-10Z"/><path d="m30 30 7-3m-4 9 7-3M13 46h39" stroke="#d9ad54"/>'],
+  trofeo: ['Trofeo','<path d="M22 14h20v15c0 15-20 15-20 0ZM22 18H13v7c0 7 9 9 12 9m17-16h9v7c0 7-9 9-12 9M32 40v10m-11 3h22"/>'],
+  silbato: ['Silbato','<path d="m21 25 27-9 4 11-16 7c7 18-21 25-23 7-1-8 3-13 8-16Z"/><circle cx="25" cy="39" r="5"/><path d="m46 13 4-5m3 13 6-2" stroke="#d9ad54"/>'],
+  estrella: ['Estrella','<path d="m32 11 6 14 16 2-12 11 3 16-13-8-13 8 3-16-12-11 16-2Z" fill="#d9ad54"/>'],
+  pista: ['Pista','<rect x="10" y="15" width="44" height="34" rx="4"/><path d="M32 15v34m-22-9h9V24h-9m44 0h-9v16h9"/><circle cx="32" cy="32" r="8"/>'],
+  medalla: ['Medalla','<path d="m18 10 14 23 14-23M25 10l7 12 7-12"/><circle cx="32" cy="41" r="14" fill="#d9ad54"/><path d="m32 33 2 5 5 1-4 3 1 5-4-3-4 3 1-5-4-3 5-1Z"/>'],
+  red: ['Red','<ellipse cx="32" cy="19" rx="23" ry="6"/><path d="m10 21 9 32h26l9-32M18 23l24 30m-16-29 22 23m-2-24L22 53m16-29L16 47M15 35h34M18 45h28"/>'],
+  capitan: ['Capitán','<path d="m14 20 9 9 9-16 9 16 9-9-5 28H19Z" fill="#d9ad54"/><path d="M20 53h24M25 39h14"/>'],
+  rayo: ['Energía','<path d="M35 9 15 36h15l-3 19 23-29H35Z" fill="#d9ad54"/>'],
+};
+App.avatarHtml = function(fotoURL,nombre,size) {
+  size = Number(size) || 40;
+  var foto = String(fotoURL || ''), preset = foto.indexOf('avatar:') === 0 && App.avatars[foto.slice(7)];
+  var inside = preset ? '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="#f7edff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">' + preset[1] + '</g></svg>' : /^(https:\/\/|data:image\/[a-z0-9.+-]+;base64,)/i.test(foto) ? '<img src="' + _statsTexto(foto) + '" alt="" referrerpolicy="no-referrer">' : '<span>' + _statsTexto(String(nombre || '?').trim().split(/\s+/).slice(0,2).map(function(w) { return w.charAt(0).toUpperCase(); }).join('')) + '</span>';
+  return '<span class="club-avatar" style="width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size*.34) + 'px" aria-hidden="true">' + inside + '</span>';
+};
+
 function _updateUserBadge(nombre, rol) {
   var words = (nombre || '').trim().split(/\s+/);
   var persona = App.state.rol === 'jugador' ? App.state.jugador : App.state.usuario;
   var nombreCorto = persona
     ? [persona.Nombre, persona.Apellidos].map(function(parte) { return String(parte || '').trim().split(/\s+/)[0]; }).filter(Boolean).join(' ')
     : words.slice(0, 2).join(' ');
-  var ini = (nombreCorto || nombre || '').trim().split(/\s+/).slice(0, 2)
-    .map(function(w) { return w.charAt(0).toUpperCase(); }).join('');
-  document.getElementById('user-badge-avatar').textContent = ini || '?';
+  document.getElementById('user-badge-avatar').innerHTML = App.avatarHtml(persona && persona.FotoURL, nombreCorto || nombre, 28);
   document.getElementById('user-badge-name').textContent = nombreCorto || nombre || '';
   document.getElementById('user-badge-role').textContent = rol || '';
-  var esJugador = App.state.rol === 'jugador';
-  var opcionAjustes = document.querySelector('.user-menu-player');
-  var opcionPerfil = document.querySelector('.user-menu-coach');
-  if (opcionAjustes) opcionAjustes.classList.toggle('hidden', !esJugador);
-  if (opcionPerfil) opcionPerfil.classList.toggle('hidden', esJugador || !App.state.usuario || !App.state.usuario.ID);
 }
 
 function _pctTexto(p) { return p == null ? '—' : p + '%'; }
 function _nivelClase(p) { return p == null ? 'sec' : p >= 85 ? 'stats-high' : p >= 70 ? 'stats-mid' : 'stats-low'; }
-function _datoTexto(v, unidad) { return v == null ? '—' : _esc(String(v)) + (unidad || ''); }
+function _datoTexto(v, unidad) { return v == null ? '—' : _esc(typeof v === 'number' ? v.toLocaleString(App.preferences.locale()) : String(v)) + (unidad || ''); }
 function _htmlTendencia(pp) { return pp == null ? '' : '<span class="tendencia ' + (pp > 0 ? 'up' : pp < 0 ? 'down' : 'flat') + '">' + (pp === 0 ? 'Estable' : (pp > 0 ? '▲ ' : '▼ ') + Math.abs(pp) + (Math.abs(pp) === 1 ? ' punto' : ' puntos')) + '</span>' + _statsInfoBoton('Tendencia','tendencia'); }
 function _htmlKpi(titulo, valorHtml, sub, clase) {
   _statsQueueMotion();
@@ -5048,7 +5017,7 @@ function _statsQueueMotion() {
 }
 function _statsRing(value, label, small) {
   var id = 'stats-ring-' + (++_statsSvgId), pct = value == null ? 0 : Math.max(0,Math.min(100,value));
-  return '<div class="stats-ring' + (small ? ' stats-ring-small' : '') + '" data-ring-value="' + (value == null ? '' : value) + '" data-ring-label="' + _esc(label) + '"><svg viewBox="0 0 120 120" role="img" aria-label="' + _esc(label + ': ' + _pctTexto(value)) + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#4A148C"/><stop offset=".55" stop-color="#7B1FA2"/><stop offset="1" stop-color="#D64BC8"/></linearGradient></defs><circle class="stats-ring-track" cx="60" cy="60" r="49"/><circle class="stats-ring-progress" cx="60" cy="60" r="49" pathLength="100" stroke="url(#' + id + ')" stroke-dasharray="100" stroke-dashoffset="' + (100-pct) + '" transform="rotate(-90 60 60)"/></svg><span class="stats-ring-number" aria-hidden="true">' + _pctTexto(value) + '</span></div>';
+  return '<div class="stats-ring' + (small ? ' stats-ring-small' : '') + '" data-ring-value="' + (value == null ? '' : value) + '" data-ring-label="' + _esc(label) + '"><svg viewBox="0 0 120 120" role="img" aria-label="' + _esc(label + ': ' + _pctTexto(value)) + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop stop-color="var(--morado)"/><stop offset=".55" stop-color="var(--morado-m)"/><stop offset="1" stop-color="var(--stats-positive)"/></linearGradient></defs><circle class="stats-ring-track" cx="60" cy="60" r="49"/><circle class="stats-ring-progress" cx="60" cy="60" r="49" pathLength="100" stroke="url(#' + id + ')" stroke-dasharray="100" stroke-dashoffset="' + (100-pct) + '" transform="rotate(-90 60 60)"/></svg><span class="stats-ring-number" aria-hidden="true">' + _pctTexto(value) + '</span></div>';
 }
 function _statsAnimate() {
   var root = document.querySelector('.view.active');
@@ -5098,7 +5067,7 @@ function _htmlHeatmap(sesiones) {
 function _htmlDistribucion(dist) {
   var keys = ['alta','media','baja','pocasSesiones'], labels = ['Alta (≥85%)','Media (70–84%)','Baja (<70%)','Con pocas sesiones'];
   var valores = keys.map(function(k) { return dist[k] || 0; }), total = valores.reduce(function(n,v) { return n+v; },0);
-  return _statsDonut(valores,labels,['var(--stats-positive)','var(--stats-gold)','var(--stats-coral)','#B9A8CC'],String(total),'jugadores','Distribución de asistencia de la plantilla') + _statsDatos(['Nivel','Jugadores'],labels.map(function(label,i) { return [label,valores[i]]; }));
+  return _statsDonut(valores,labels,['var(--stats-positive)','var(--stats-gold)','var(--stats-coral)','var(--borde)'],String(total),'jugadores','Distribución de asistencia de la plantilla') + _statsDatos(['Nivel','Jugadores'],labels.map(function(label,i) { return [label,valores[i]]; }));
 }
 function _htmlLogro(code) {
   var label = ({perfecta:'Asistencia perfecta',puntual:'Siempre puntual',racha10:'Racha de 10+',mejorRacha:'Mejor racha del equipo'})[code] || code;
@@ -5123,7 +5092,7 @@ function _statsLogros(j,jugadores) {
   return logros.map(_htmlLogro).join('');
 }
 function _statsSerieMensual(serie) {
-  return _statsColumnas(serie.map(function(p) { return {nombre:_statsMes(p.mes),valores:[p.presentes,p.sesiones-p.presentes]}; }),['Presentes','Sin presencia'],['var(--morado)','#E5DCEC'],'Presencia mensual del entrenador') + _statsDatos(['Mes','Sesiones','Presentes'],serie.map(function(p) { return [_statsChartEsc(_statsMes(p.mes)),p.sesiones,p.presentes]; }));
+  return _statsColumnas(serie.map(function(p) { return {nombre:_statsMes(p.mes),valores:[p.presentes,p.sesiones-p.presentes]}; }),['Presentes','Sin presencia'],['var(--morado)','var(--borde)'],'Presencia mensual del entrenador') + _statsDatos(['Mes','Sesiones','Presentes'],serie.map(function(p) { return [_statsChartEsc(_statsMes(p.mes)),p.sesiones,p.presentes]; }));
 }
 
 function _csvDescargar(nombre, filas) {
@@ -5196,8 +5165,8 @@ function _statsTooltip(el,text,event) {
   tip.style.top = Math.max(top,Math.min(Math.max(top,bottom - box.height),rect.top - box.height - 10)) + 'px';
 }
 function _statsMes(mes) {
-  var partes = String(mes).split('-'), meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  return (meses[Number(partes[1])-1] || mes) + (partes.length > 1 ? ' ' + partes[0] : '');
+  var partes = String(mes).split('-');
+  return /^\d{4}-\d{2}$/.test(mes) ? new Date(Number(partes[0]),Number(partes[1])-1,1).toLocaleDateString(App.preferences.locale(),{month:'long'}) + ' ' + partes[0] : mes;
 }
 function _statsLeyenda(labels,colores) {
   return '<div class="stats-chart-legend">' + labels.map(function(label,i) { return '<span><i style="background:' + colores[i] + '" aria-hidden="true"></i>' + _statsChartEsc(label) + '</span>'; }).join('') + '</div>';
@@ -5207,7 +5176,7 @@ function _statsColumnas(filas,labels,colores,titulo,porcentaje) {
   return '<div class="stats-chart">' + _statsLeyenda(labels,colores) + '<div class="stats-columns-scroll"><div class="stats-columns" role="img" aria-label="' + _statsChartEsc(titulo) + '" style="--stats-columns:' + Math.max(1,filas.length) + '"><div class="stats-yaxis"><span>' + max + (porcentaje ? '%' : '') + '</span><span>' + Math.round(max/2) + '</span><span>0</span></div>' + filas.map(function(f) {
     var total = f.valores.reduce(function(n,v) { return n+(v || 0); },0), texto = f.nombre + ': ' + labels.map(function(label,i) { return label + ' ' + (f.valores[i] == null ? 'sin datos' : f.valores[i] + (porcentaje ? '%' : '')); }).join(' · ') + (f.extra ? ' · ' + f.extra : '');
     var segmentos = f.valores.filter(function(v) { return v > 0; }).length;
-    return '<div class="stats-column"' + _statsChartAttrs(texto) + '><div class="stats-column-plot"><span class="stats-column-value">' + (porcentaje ? _pctTexto(f.valores[0]) : total) + '</span><div class="stats-column-stack" style="height:' + total/max*100 + '%">' + f.valores.map(function(v,i) { return v ? '<span style="height:' + v/total*100 + '%;background:' + colores[i] + ';color:' + (i === 0 ? '#fff' : '#29202F') + '">' + (!porcentaje && segmentos >= 2 && v/max*160 >= 22 ? v : '') + '</span>' : ''; }).join('') + '</div></div><span class="stats-column-label">' + _statsChartEsc(f.nombre) + '</span></div>';
+    return '<div class="stats-column"' + _statsChartAttrs(texto) + '><div class="stats-column-plot"><span class="stats-column-value">' + (porcentaje ? _pctTexto(f.valores[0]) : total) + '</span><div class="stats-column-stack" style="height:' + total/max*100 + '%">' + f.valores.map(function(v,i) { return v ? '<span style="height:' + v/total*100 + '%;background:' + colores[i] + ';color:' + (i === 0 ? 'var(--button-ink)' : 'var(--texto)') + '">' + (!porcentaje && segmentos >= 2 && v/max*160 >= 22 ? v : '') + '</span>' : ''; }).join('') + '</div></div><span class="stats-column-label">' + _statsChartEsc(f.nombre) + '</span></div>';
   }).join('') + '</div></div>' + (!filas.length ? '<p class="stats-empty">Sin datos en este periodo</p>' : '') + '</div>';
 }
 function _statsMensual(serie) {
@@ -5218,17 +5187,17 @@ function _statsHorizontales(rows,title) {
 }
 function _statsDonut(valores,labels,colores,centro,caption,titulo,unidad) {
   var total = valores.reduce(function(n,v) { return n+(v || 0); },0), offset = 0;
-  return '<div class="stats-chart stats-donut"><svg viewBox="0 0 160 160" role="img" aria-label="' + _statsChartEsc(titulo + ': ' + labels.map(function(label,i) { return label + ' ' + valores[i] + (unidad || ''); }).join(', ')) + '"><circle cx="80" cy="80" r="60" fill="none" stroke="#F0EAF5" stroke-width="18"/>' + valores.map(function(v,i) {
+  return '<div class="stats-chart stats-donut"><svg viewBox="0 0 160 160" role="img" aria-label="' + _statsChartEsc(titulo + ': ' + labels.map(function(label,i) { return label + ' ' + valores[i] + (unidad || ''); }).join(', ')) + '"><circle cx="80" cy="80" r="60" fill="none" stroke="var(--borde)" stroke-width="18"/>' + valores.map(function(v,i) {
     var largo = total ? v/total*100 : 0, inicio = offset; offset += largo;
     return v ? '<circle class="stats-donut-segment" cx="80" cy="80" r="60" pathLength="100" fill="none" stroke="' + colores[i] + '" stroke-width="18" stroke-dasharray="' + largo + ' ' + (100-largo) + '" stroke-dashoffset="' + (-inicio) + '" transform="rotate(-90 80 80)"' + _statsChartAttrs(labels[i] + ': ' + v + (unidad || '') + (unidad ? '' : ' · ' + Math.round(largo) + '% del total')) + '/>' : '';
   }).join('') + '<text class="stats-donut-number" x="80" y="78" text-anchor="middle">' + _statsChartEsc(centro) + '</text><text class="stats-donut-caption" x="80" y="96" text-anchor="middle">' + _statsChartEsc(caption) + '</text></svg><div class="stats-donut-legend">' + labels.map(function(label,i) { return '<button type="button"' + _statsChartAttrs(label + ': ' + valores[i] + (unidad || '')) + '><i style="background:' + colores[i] + '" aria-hidden="true"></i><span>' + _statsChartEsc(label) + '</span><strong>' + valores[i] + (unidad || '') + '</strong></button>'; }).join('') + '</div>' + (!total ? '<p class="stats-empty">Sin datos en este periodo</p>' : '') + '</div>';
 }
 function _statsJustificacion(pct) {
-  return '<div class="stats-justification"><p class="stats-chart-caption">Justificación de ausencias y retrasos ' + _statsInfoBoton('Justificación de incidencias','justificacion') + '</p>' + (pct == null ? '<p class="stats-empty">Sin ausencias ni retrasos registrados</p>' : _statsDonut([pct,100-pct],['Justificados','Sin justificar'],['var(--morado)','#E5DCEC'],_pctTexto(pct),'justificados','Justificación de ausencias y retrasos','%')) + _statsDatos(['Incidencias justificadas'],[[_pctTexto(pct)]]) + '</div>';
+  return '<div class="stats-justification"><p class="stats-chart-caption">Justificación de ausencias y retrasos ' + _statsInfoBoton('Justificación de incidencias','justificacion') + '</p>' + (pct == null ? '<p class="stats-empty">Sin ausencias ni retrasos registrados</p>' : _statsDonut([pct,100-pct],['Justificados','Sin justificar'],['var(--morado)','var(--borde)'],_pctTexto(pct),'justificados','Justificación de ausencias y retrasos','%')) + _statsDatos(['Incidencias justificadas'],[[_pctTexto(pct)]]) + '</div>';
 }
 function _statsCobertura(d) {
   var datos = [[d.cobertura.conEntrenadorPct,'Con entrenador','cobertura','Sesiones con un entrenador del equipo'],[d.cobertura.sustitutoPct,'Con sustituto','suplencias','Sesiones con un entrenador invitado'],[d.refuerzosPct,'Refuerzos','refuerzos','Presencias de jugadores de refuerzo']];
-  return '<div class="stats-coverage">' + datos.map(function(f) { var pct = f[0], label = f[1] + ': ' + _pctTexto(pct); return '<div class="stats-chart stats-gauge"><svg viewBox="0 0 140 140" role="img" aria-label="' + _statsChartEsc(label) + '"><g' + _statsChartAttrs(label + ' · ' + f[3]) + '><circle cx="70" cy="70" r="54" fill="none" stroke="#F0EAF5" stroke-width="12"/><circle cx="70" cy="70" r="54" fill="none" stroke="var(--morado)" stroke-width="12" stroke-linecap="round" pathLength="100" stroke-dasharray="' + (pct || 0) + ' 100" transform="rotate(-90 70 70)"/><text class="stats-donut-number" x="70" y="77" text-anchor="middle">' + _pctTexto(pct) + '</text></g></svg><p><strong>' + f[1] + '</strong> ' + _statsInfoBoton(f[1],f[2]) + '</p><small>' + f[3] + '</small></div>'; }).join('') + '</div>' + _statsDatos(['Con entrenador','Con sustituto','Presencias de refuerzos'],[datos.map(function(f) { return _pctTexto(f[0]); })]);
+  return '<div class="stats-coverage">' + datos.map(function(f) { var pct = f[0], label = f[1] + ': ' + _pctTexto(pct); return '<div class="stats-chart stats-gauge"><svg viewBox="0 0 140 140" role="img" aria-label="' + _statsChartEsc(label) + '"><g' + _statsChartAttrs(label + ' · ' + f[3]) + '><circle cx="70" cy="70" r="54" fill="none" stroke="var(--borde)" stroke-width="12"/><circle cx="70" cy="70" r="54" fill="none" stroke="var(--morado)" stroke-width="12" stroke-linecap="round" pathLength="100" stroke-dasharray="' + (pct || 0) + ' 100" transform="rotate(-90 70 70)"/><text class="stats-donut-number" x="70" y="77" text-anchor="middle">' + _pctTexto(pct) + '</text></g></svg><p><strong>' + f[1] + '</strong> ' + _statsInfoBoton(f[1],f[2]) + '</p><small>' + f[3] + '</small></div>'; }).join('') + '</div>' + _statsDatos(['Con entrenador','Con sustituto','Presencias de refuerzos'],[datos.map(function(f) { return _pctTexto(f[0]); })]);
 }
 function _statsPendientes(lista,equipoId) {
   if (!lista.length) return '<div class="stats-pending-clear"><span aria-hidden="true">✓</span><strong>Todo al día</strong><p>No hay sesiones pendientes de registrar en este periodo.</p></div>';
@@ -5284,16 +5253,36 @@ function _statsRachaFuego(n) {
     '<path class="stats-streak-outer" d="M51 7C61 31 82 40 84 68C88 92 70 109 50 110C26 110 11 94 15 73C17 58 26 48 30 33C30 48 36 53 40 55C46 39 42 23 51 7Z"/>' +
     '<path class="stats-streak-inner" d="M52 51C55 67 70 73 66 89C64 99 57 104 48 103C37 102 30 94 33 83C35 75 43 70 43 61L48 72C52 66 50 59 52 51Z"/></svg>';
 }
+function _statsContactoSegmentos(c) {
+  return [{ nombre:'Email familiar', n:c.conEmailFamiliar, clase:'email' },{ nombre:'Solo teléfono', n:c.soloTelefono, clase:'telefono' },{ nombre:'Solo email personal', n:c.soloEmailPersonal, clase:'personal' },{ nombre:'Sin contacto', n:c.sinContacto, clase:'sin' }];
+}
+function _statsContactabilidad(c) {
+  var total = c.jugadoresActivos, segmentos = _statsContactoSegmentos(c);
+  var pct = function(n) { return total ? Math.round(n * 100 / total) : null; };
+  var offset = 0;
+  var anillos = segmentos.map(function(s) {
+    var longitud = total ? s.n * 100 / total : 0;
+    var circulo = '<circle class="contact-segment contact-' + s.clase + '" cx="60" cy="60" r="45" pathLength="100" stroke-dasharray="' + longitud + ' ' + (100-longitud) + '" stroke-dashoffset="' + -offset + '"' + _statsChartAttrsContacto(s,total) + '/>';
+    offset += longitud;
+    return s.n ? circulo : '';
+  }).join('');
+  var leyenda = segmentos.filter(function(s) { return s.clase !== 'personal' || s.n; }).map(function(s) { return '<li><span class="contact-dot contact-' + s.clase + '"></span><span>' + s.nombre + '</span><strong>' + s.n + '</strong></li>'; }).join('');
+  return '<div class="contactability"><div class="contact-headline"><div class="contact-donut"><svg viewBox="0 0 120 120" aria-label="Vías de contacto de ' + total + ' jugadores"><circle class="contact-ring-track" cx="60" cy="60" r="45"/>' + anillos + '</svg><div class="contact-donut-label"><strong>' + _pctTexto(pct(total-c.sinContacto)) + '</strong><span>localizables</span></div></div><ul class="contact-legend">' + leyenda + '</ul></div>' +
+    '<div class="contact-kpis"><div><strong>' + _pctTexto(pct(c.conAvisosActivos)) + '</strong><span>Avisos activos ' + _statsInfoBoton('Avisos activos','contactoAvisos') + '</span></div><div><strong>' + _pctTexto(pct(c.conTelefono)) + '</strong><span>Con teléfono ' + _statsInfoBoton('Con teléfono','contactoTelefono') + '</span></div><div><strong>' + c.sinContacto + '</strong><span>Sin contacto ' + _statsInfoBoton('Sin contacto','contactoSin') + '</span></div></div>' +
+    '<p class="stats-periodo">' + total + ' jugadores activos · Cada jugador se cuenta una vez en el club.</p><h3 class="contact-subtitle">Vías de contacto por equipo ' + _statsInfoBoton('Contacto por equipo','contactoEquipos') + '</h3><div class="contact-teams">' + c.porEquipo.map(function(e) {
+      return '<div class="contact-team"><div class="contact-team-name"><strong>' + _statsTexto(e.nombre) + '</strong><span>' + e.activos + ' jugadores</span></div><div class="contact-stack">' + _statsContactoSegmentos(e).filter(function(s) { return s.n; }).map(function(s) { return '<span class="contact-' + s.clase + '" style="width:' + (s.n * 100 / e.activos) + '%"' + _statsChartAttrsContacto(s,e.activos) + '></span>'; }).join('') + '</div></div>';
+    }).join('') + '</div><h3 class="contact-subtitle">Jugadores sin ningún contacto ' + _statsInfoBoton('Sin contacto','contactoSin') + '</h3><p class="stats-periodo">Abre su ficha para completar los datos con la familia.</p><div class="contact-missing">' + (c.sinContactoLista.map(function(j) { return '<div class="contact-missing-row"><div>' + _statsJugadorBoton(j.jugadorId,j.nombre + ' ' + j.apellidos) + '<span>' + _statsTexto(j.equipoNombre) + '</span></div><span aria-hidden="true">›</span></div>'; }).join('') || '<p class="contact-all-set">Todos tienen alguna vía de contacto.</p>') + '</div></div>';
+}
+function _statsChartAttrsContacto(s,total) {
+  return _statsChartAttrs(s.nombre + ': ' + s.n + ' de ' + total + ' jugadores');
+}
+
 function _statsRacha(d) {
   var n = d.rachaActual, mejor = d.mejorRacha, nivel = _statsRachaNivel(n);
-  var mensajes = ['Empieza tu racha','La chispa está encendida','Tu constancia prende','En plena llama','Una racha imparable','Modo inferno'];
   return '<section class="stats-streak stats-streak-tier-' + nivel + '" aria-label="Racha de asistencia">' +
     '<div class="stats-streak-art">' + _statsRachaFuego(n) + '</div><div class="stats-streak-copy">' +
-    '<div class="stats-streak-heading">Racha actual ' + _statsInfoBoton('Racha actual') + '</div>' +
-    '<div class="stats-streak-count">' + n + '<span>sesiones seguidas</span></div>' +
-    '<strong class="stats-streak-message">' + mensajes[nivel] + '</strong>' +
-    '<div class="stats-streak-best">Mejor racha: <strong>' + mejor + '</strong> sesiones ' + _statsInfoBoton('Mejor racha') + '</div></div>' +
-    '<details class="stats-streak-data"><summary>Ver datos de la racha</summary><dl><dt>Racha actual</dt><dd>' + n + ' sesiones seguidas</dd><dt>Mejor racha</dt><dd>' + mejor + ' sesiones</dd></dl></details></section>';
+    '<div class="stats-streak-count">' + n + '<span>sesiones seguidas</span>' + _statsInfoBoton('Racha actual') + '</div>' +
+    '<div class="stats-streak-best">Récord: <strong>' + mejor + '</strong> sesiones ' + _statsInfoBoton('Mejor racha') + '</div></div></section>';
 }
 function _statsMiniRacha(n) {
   return '<span class="stats-streak-mini stats-streak-tier-' + _statsRachaNivel(n) + '" aria-label="Racha actual: ' + n + ' sesiones seguidas">' + _statsRachaFuego(n) + '<strong>' + n + '</strong><span> seguidas</span></span>';
@@ -5336,7 +5325,11 @@ var _statsMetricas = {
   horasEntrenador: ['Horas dirigidas','Duración programada de las sesiones a las que asistió el entrenador.','Suma de minutos programados de sus registros con Asistio verdadero / 60, redondeado a una décima. No mide horas de llegada ni descuenta retrasos.'],
   sustituciones: ['Sustituciones dadas','Sesiones en las que el entrenador asistió como invitado.','Se cuentan registros válidos con Asistio verdadero y EsInvitado verdadero en sesiones computables del periodo.'],
   cubre: ['Coberturas recibidas','Sesiones de sus equipos en las que faltó y hubo otro entrenador presente.','Por cada sesión computable con relación vigente del entrenador distinta de Visor, se cuenta si no tiene presencia propia y sí hay otro técnico con Asistio verdadero. No es necesario que el otro técnico esté marcado como invitado.'],
-  contactabilidad: ['Contactabilidad','Disponibilidad de email familiar y de avisos para jugadores activos del club.','Se deduplican jugadores con alguna relación Activo verdadera en equipos de la temporada. Con email: al menos un email familiar no vacío. Con avisos: al menos uno de esos emails no tiene desactivado su indicador de notificación. No confirma entrega ni validez del email.'],
+  contactabilidad: ['Contactabilidad','Vías disponibles para localizar a los jugadores activos de la temporada. No garantiza que sean válidas ni que el mensaje se entregue.','Se deduplican jugadores con alguna relación Activo verdadera en equipos de la temporada. El gráfico separa, por prioridad: email familiar, teléfono sin email familiar, solo email personal y ningún contacto. No depende del periodo de asistencia. Localizables = jugadores con alguna de esas vías / jugadores activos × 100.'],
+  contactoAvisos: ['Avisos activos','Jugadores cuya familia tiene al menos un email con avisos habilitados.','Jugadores activos con EmailPadre1 o EmailPadre2 no vacío y su NotificarAusenciasPadre correspondiente distinto de false / jugadores activos del club × 100. Tener teléfono o email personal no activa los avisos familiares.'],
+  contactoTelefono: ['Con teléfono','Jugadores con algún teléfono propio o familiar registrado. Puede coincidir con tener email familiar.','Jugadores activos con Telefono, TelefonoPadre1 o TelefonoPadre2 no vacío / jugadores activos del club × 100. En el gráfico Solo teléfono exige no tener email familiar.'],
+  contactoSin: ['Sin contacto','Jugadores sin ninguna vía de contacto registrada; sus fichas necesitan completarse.','Se cuenta un jugador activo si no tiene EmailPadre1, EmailPadre2, Email, Telefono, TelefonoPadre1 ni TelefonoPadre2 no vacíos. La lista muestra cada jugador una vez y permite abrir su ficha.'],
+  contactoEquipos: ['Contacto por equipo','Distribución de las vías de contacto de la plantilla activa de cada equipo de la temporada.','Mismas categorías excluyentes que el gráfico global. Cada segmento se divide entre los jugadores con relación Activo verdadera del equipo. Un jugador de varios equipos aparece en cada uno, pero solo una vez en el total del club.'],
   categorias: ['Asistencia por categoría','Asistencia conjunta de los equipos de una categoría.','Se reúnen todos los registros válidos de esos equipos y se calcula (P + R) / (P + A + R) × 100. No es una media simple de los porcentajes de cada equipo.'],
   cancelaciones: ['Cancelaciones por motivo','Motivos registrados para cancelar entrenamientos.','Se agrupan las sesiones canceladas del periodo por MotivoCancelacion y se cuentan; si no hay motivo se usa Sin motivo.'],
   recientes: ['Últimas sesiones','Histórico reciente de registros válidos del jugador dentro del filtro.','Se ordenan por fecha y hora de inicio, del más reciente al más antiguo. El detalle conserva hasta 60 registros y cada vista puede mostrar menos. Canceladas, pendientes y excluidas no aparecen como ausencias.'],
@@ -5389,7 +5382,8 @@ function _statsInfo(metric) {
 function _statsFechaHumana(fecha) {
   if (!fecha || fecha === '0000-00-00') return 'Inicio de temporada';
   var p = String(fecha).split('-');
-  return Number(p[2]) + ' ' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(p[1])-1] + ' ' + p[0];
+  var d = new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));
+  return Number(p[2]) + ' ' + d.toLocaleDateString(App.preferences.locale(),{month:'short'}) + ' ' + p[0];
 }
 function _statsTemporadas() {
   var resumen = App.stats.resumen, temporadas = resumen ? resumen.temporadas : App.cache.temporadas || [];
@@ -5424,5 +5418,1138 @@ function _statsContacto(tipo,id) {
     return '<section class="stats-contact-card"><span class="stats-contact-kind">' + _statsTexto(c.titulo) + '</span>' + (c.nombre ? '<h3>' + _statsTexto(c.nombre) + '</h3>' : '') + (c.tel ? '<p>' + _statsTexto(c.tel) + '</p>' : '') + (email ? '<p>' + _statsTexto(email) + '</p>' : '') + '<div class="stats-contact-actions">' + (tel ? '<a href="tel:' + _statsTexto(tel) + '" aria-label="Llamar a ' + _statsTexto(c.nombre || c.titulo) + '">Llamar</a><a class="stats-contact-whatsapp" href="https://wa.me/' + tel.slice(1) + '" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp de ' + _statsTexto(c.nombre || c.titulo) + '">WhatsApp</a>' : '') + (emailValido ? '<a href="mailto:' + _statsTexto(encodeURIComponent(email)) + '" aria-label="Enviar email a ' + _statsTexto(c.nombre || c.titulo) + '">Email</a>' : '') + '</div></section>';
   }).join('') + '</div>');
 }
+
+
+App.preferences = {
+  temas: [
+    {id:'clasico', nombre:'Morado clásico', colores:['#4A148C','#FFFFFF','#F3E5F5'], barra:'#4A148C'},
+    {id:'lavanda', nombre:'Lavanda', colores:['#65408C','#FFFAFF','#EDE4F5'], barra:'#65408C'},
+    {id:'noche', nombre:'Noche morada', colores:['#BDA0ED','#21142F','#352342'], barra:'#21142F'},
+    {id:'medianoche', nombre:'Medianoche', colores:['#CBACFF','#08060D','#21162E'], barra:'#08060D'},
+    {id:'oro', nombre:'Oro y morado', colores:['#683D86','#FFFCF5','#E7BF65'], barra:'#412253'}
+  ],
+  idioma: document.documentElement && document.documentElement.lang === 'en' ? 'en' : 'es',
+  tema: document.documentElement && document.documentElement.dataset && document.documentElement.dataset.theme || 'clasico',
+  locale: function() { return this.idioma === 'en' ? 'en-GB' : 'es-ES'; },
+  guardar: function(cambios) {
+    if (cambios.idioma === 'es' || cambios.idioma === 'en') this.idioma = cambios.idioma;
+    if (this.temas.some(function(t) { return t.id === cambios.tema; })) this.tema = cambios.tema;
+    var tema = this.temas.find(function(t) { return t.id === App.preferences.tema; });
+    document.documentElement.dataset.theme = tema.id;
+    document.documentElement.lang = this.idioma;
+    document.title = this.idioma === 'en' ? 'CB Baeza — Attendance' : 'CB Baeza — Asistencia';
+    document.documentElement.style.colorScheme = /^(noche|medianoche)$/.test(tema.id) ? 'dark' : 'light';
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = tema.barra;
+    try { localStorage.setItem('cb_baeza_prefs', JSON.stringify({idioma:this.idioma,tema:this.tema})); } catch (e) { showToast('No se pudieron guardar los ajustes en este dispositivo','error'); }
+    App.i18n.aplicar(document.body);
+    if (App.state.currentView === 'ajustes') App.views.ajustes.render();
+  }
+};
+App.views.ajustes = {
+  render: function() {
+    document.getElementById('ajustes-contenido').innerHTML = '<div class="preferences-page"><h2>Ajustes</h2><p class="preferences-intro">Personaliza la aplicación en este dispositivo.</p><section class="preferences-panel"><h3>Idioma</h3><label for="preferencia-idioma">Idioma de la aplicación</label><select id="preferencia-idioma" onchange="App.preferences.guardar({idioma:this.value})"><option value="es" translate="no"' + (App.preferences.idioma === 'es' ? ' selected' : '') + '>Español</option><option value="en" translate="no"' + (App.preferences.idioma === 'en' ? ' selected' : '') + '>English</option></select></section><section class="preferences-panel"><h3>Apariencia</h3><p>Elige un tema</p><div class="theme-options">' + App.preferences.temas.map(function(t) { return '<button type="button" class="theme-option" aria-pressed="' + (t.id === App.preferences.tema) + '" onclick="App.preferences.guardar({tema:\'' + t.id + '\'})"><span class="theme-preview" aria-hidden="true" style="background:' + t.colores[1] + '"><i style="background:' + t.colores[0] + '"></i><b style="background:' + t.colores[2] + '"></b><em style="background:' + t.colores[0] + '"></em></span><strong>' + t.nombre + '</strong><span class="theme-selected">' + (t.id === App.preferences.tema ? 'Seleccionado' : 'Seleccionar') + '</span></button>'; }).join('') + '</div></section><p class="preferences-note">Los cambios se guardan solo en este dispositivo.</p></div>';
+  }
+};
+App.i18n = {
+  diccionario: {
+"Próximo":"Upcoming",
+"Próxima":"Upcoming",
+"DÍA SELECCIONADO":"SELECTED DAY",
+"No hay entrenamientos este día":"No training on this day",
+"Consultar la asistencia y la evolución del club":"View club attendance and trends",
+"Nuevo equipo":"New team",
+"Nuevo jugador":"New player",
+"Nuevo entrenador":"New coach",
+"Editar equipo":"Edit team",
+"Editar jugador":"Edit player",
+"Editar entrenador":"Edit coach",
+"Categoría *":"Category *",
+"Añadir entrenador":"Add coach",
+"Añadir jugador":"Add player",
+"Día seleccionado":"Selected day",
+"Siguiente mes":"Next month",
+"Mes anterior":"Previous month",
+"Día anterior":"Previous day",
+"Día siguiente":"Next day",
+"entrenador@gmail.com":"coach@gmail.com",
+"Si se deja vacío, se usará":"If left blank, the app will use",
+"Ej. Cadete Masculino A":"E.g. Under-16 Boys A",
+"Buscar jugador…":"Search players…",
+"Buscar entrenador…":"Search coaches…",
+"Ordenar jugadores":"Sort players",
+"email@ejemplo.com":"email@example.com",
+"padre@ejemplo.com":"parent1@example.com",
+"madre@ejemplo.com":"parent2@example.com",
+"4-6 dígitos":"4–6 digits",
+"4 dígitos":"4 digits",
+"6 caracteres":"6 characters",
+"Añade información adicional si lo deseas…":"Add any additional information…",
+"Introduce tu usuario y el PIN":"Enter your username and PIN",
+"Introduce tu email y el PIN":"Enter your email and PIN",
+"No hay otros equipos en el club":"There are no other teams in the club",
+"El equipo no tiene horario configurado":"The team has no schedule configured",
+"Fecha y horas son obligatorias":"Date and times are required",
+"Este jugador tiene una justificación activa":"This player has an active explanation",
+"Debe haber al menos un entrenador con asistencia registrada":"At least one coach must have recorded attendance",
+"El navegador ha bloqueado la ventana del justificante":"The browser blocked the explanation window",
+"No se pudo preparar el justificante en PDF":"The PDF explanation could not be prepared",
+"El nombre es obligatorio":"The name is required",
+"Debes asignar al menos un entrenador al equipo":"Assign at least one coach to the team",
+"La hora de inicio debe ser anterior a la hora de fin":"The start time must be before the end time",
+"Nombre y apellidos son obligatorios":"First and last names are required",
+"La fecha de nacimiento no puede ser futura":"The date of birth cannot be in the future",
+"Los dos PINs no coinciden":"The two PINs do not match",
+"Los PINs no coinciden":"The PINs do not match",
+"El email es obligatorio para nuevos entrenadores":"Email is required for new coaches",
+"Ya existe un entrenador con ese email":"A coach with that email already exists",
+"Revisa el formato de los emails":"Check the email address formats",
+"Perfil actualizado":"Profile updated",
+"Foto actualizada":"Photo updated",
+"Selecciona un archivo de imagen":"Select an image file",
+"No se pudo abrir la imagen. Prueba con JPG o PNG.":"The image could not be opened. Try JPG or PNG.",
+"Introduce un nuevo PIN":"Enter a new PIN",
+"No se encontró el contacto":"Contact not found",
+"Tu espacio en el club":"Your place in the club",
+"Repetir nuevo PIN":"Repeat new PIN",
+"de":"of",
+"(yo)":"(me)",
+"Tu imagen de equipo":"Your team image",
+"Privacidad y cookies":"Privacy and cookies",
+"Los datos respetan la temporada y el periodo seleccionados. — significa que no hay datos suficientes; no equivale a cero.":"Data follows the selected season and period. — means there is not enough data; it does not mean zero.",
+"Elegir temporada":"Choose season",
+"Mi Equipo":"My team",
+"(Tú)":"(You)",
+"Tu posición:":"Your position:",
+"Pre-just.":"Advance notice",
+"Extra":"Extra",
+"Sesión no iniciada. Inicia sesión.":"You are not signed in. Please sign in.",
+"Usuario y PIN son obligatorios.":"Username and PIN are required.",
+"Usuario no encontrado.":"Username not found.",
+"Email y PIN son obligatorios.":"Email and PIN are required.",
+"El PIN de acceso es incorrecto.":"The sign-in PIN is incorrect.",
+"El correo electrónico no está registrado en el club.":"This email address is not registered with the club.",
+"Acción restringida a administradores.":"This action is restricted to administrators.",
+"Acción restringida a entrenadores y administradores.":"This action is restricted to coaches and administrators.",
+"No tienes permiso para gestionar este equipo.":"You do not have permission to manage this team.",
+"No tienes permiso para gestionar este equipo (rol Visor).":"You do not have permission to manage this team (Viewer role).",
+"Solo puedes modificar tus propias credenciales.":"You can only change your own credentials.",
+"Solo un administrador puede cambiar el código de familias.":"Only an administrator can change the family code.",
+"No se modificaron las credenciales.":"The credentials were not changed.",
+"Solo puedes modificar tu propio perfil.":"You can only edit your own profile.",
+"La fecha de nacimiento no es válida o es futura.":"The date of birth is invalid or in the future.",
+"No se pudo actualizar el perfil.":"The profile could not be updated.",
+"No hay ninguna temporada activa.":"There is no active season.",
+"Nombre y apellidos son obligatorios.":"First and last names are required.",
+"Nombre, apellidos y email son obligatorios.":"First name, last name and email are required.",
+"El usuario debe tener al menos 3 caracteres.":"The username must contain at least 3 characters.",
+"El PIN debe tener entre 4 y 6 dígitos numéricos.":"The PIN must contain 4 to 6 digits.",
+"El código de familias debe tener al menos 4 caracteres.":"The family code must contain at least 4 characters.",
+"El jugador ya tiene un equipo principal. Desasígnalo primero o cámbialo a Secundario.":"The player already has a primary team. Remove that assignment first or change it to Secondary.",
+"Indica un PIN explícito para un nuevo administrador.":"Specify a PIN for the new administrator.",
+"Indica un PIN explícito para habilitar este administrador.":"Specify a PIN to enable this administrator.",
+"No se puede desactivar al último administrador activo.":"The last active administrator cannot be deactivated.",
+"Foto de perfil no válida.":"Invalid profile photo.",
+"No se pudo actualizar la foto.":"The photo could not be updated.",
+"El PIN actual es incorrecto.":"The current PIN is incorrect.",
+"Indica un usuario o PIN nuevo.":"Enter a new username or PIN.",
+"Solo los jugadores pueden cambiar su usuario.":"Only players can change their username.",
+"Solo los jugadores pueden cambiar el código de seguridad.":"Only players can change their security code.",
+"El código de seguridad debe tener 6 letras o números.":"The security code must contain 6 letters or numbers.",
+"No se pudo cambiar el código de seguridad.":"The security code could not be changed.",
+"jugadores":"players",
+"asistencia":"attendance",
+"sesiones por semana":"sessions per week",
+"sesiones como invitado":"sessions as a guest",
+"sesiones con otro entrenador":"sessions with another coach",
+"Asistencia mes a mes":"Attendance month by month",
+"Presentes, retrasos y ausencias":"Present, late and absent",
+"Últimas sesiones":"Recent sessions",
+"Últimas 12 sesiones":"Last 12 sessions",
+"Motivos y justificaciones":"Reasons and explanations",
+"Avisos y motivos":"Notices and reasons",
+"Ausencias":"Absences",
+"Con sustituto":"With cover",
+"Entrenamiento pendiente":"Training awaiting attendance",
+"Cancelada: motivo":"Cancellation reason",
+"Tipo":"Type",
+"Rol":"Role",
+"Logros y alertas":"Achievements and alerts",
+"Carga semanal":"Weekly load",
+"Serie mensual":"Monthly chart",
+"Asistencia jugadores":"Player attendance",
+"Latencia mediana":"Median recording delay",
+"Comparativa de equipos":"Team comparison",
+"Con pocas sesiones":"Too few sessions",
+"Alta (≥85%)":"High (≥85%)",
+"Media (70–84%)":"Medium (70–84%)",
+"Baja (<70%)":"Low (<70%)",
+"Teléfono del familiar 1":"Family contact 1 phone",
+"Teléfono del familiar 2":"Family contact 2 phone",
+"Email del familiar 1":"Family contact 1 email",
+"Email del familiar 2":"Family contact 2 email",
+"Nombre del familiar 1":"Family contact 1 first name",
+"Nombre del familiar 2":"Family contact 2 first name",
+"Apellidos del familiar 1":"Family contact 1 last name",
+"Apellidos del familiar 2":"Family contact 2 last name",
+"Fecha de nacimiento no informada":"Date of birth missing",
+"Teléfono no informado":"Phone number missing",
+"Crear y editar equipos, horarios, jugadores y entrenadores":"Create and edit teams, schedules, players and coaches",
+"Gestionar el registro de jugadores del club":"Manage the club's player register",
+"Gestionar el registro de entrenadores del club":"Manage the club's coach register",
+"Datos del equipo":"Team details",
+"Nombre *":"Name *",
+"Modalidad *":"Gender *",
+"Guardar equipo":"Save team",
+"Eliminar equipo":"Delete team",
+"Apellido (A-Z)":"Last name (A–Z)",
+"Nombre (A-Z)":"First name (A–Z)",
+"Edad (mayor a menor)":"Age (oldest first)",
+"Edad (menor a mayor)":"Age (youngest first)",
+"Datos del jugador":"Player details",
+"Apellidos *":"Last name *",
+"F. nacimiento":"Date of birth",
+"Familiar 1":"Family contact 1",
+"Familiar 2":"Family contact 2",
+"Enviar avisos de ausencia":"Send absence notifications",
+"Credenciales de acceso":"Sign-in credentials",
+"Cambio de credenciales":"Change credentials",
+"Confirmar PIN":"Confirm PIN",
+"Deja el PIN en blanco para mantener el actual.":"Leave the PIN blank to keep the current one.",
+"Guardar jugador":"Save player",
+"Eliminar jugador":"Delete player",
+"Datos del entrenador":"Coach details",
+"Email Google *":"Google email *",
+": cuenta de Google requerida para acceder.":": a Google account is required to sign in.",
+"Acceso":"Access",
+"como PIN inicial.":"as the initial PIN.",
+"Conceder permisos de administrador":"Grant administrator permissions",
+"Guardar entrenador":"Save coach",
+"Eliminar entrenador":"Delete coach",
+"Justificaciones programadas":"Scheduled explanations",
+"Se aplican automáticamente a tus entrenamientos semanales":"Automatically applied to your weekly training",
+"Programar":"Schedule",
+"Tipo de incidencia":"Incident type",
+"Ausencia":"Absence",
+"Hora de incorporación prevista":"Expected arrival time",
+"Detalle adicional":"Additional details",
+"(opcional)":"(optional)",
+"(proporcionado por el club)":"(provided by the club)",
+"Entrenamiento semanal":"Weekly training",
+"Guardar programación":"Save scheduled notice",
+"Guardado correctamente":"Saved successfully",
+"No se pudo guardar":"Could not save",
+"Entrenos":"Training",
+"Lun":"Mon",
+"Mar":"Tue",
+"Mie":"Wed",
+"Mié":"Wed",
+"Jue":"Thu",
+"Vie":"Fri",
+"Sab":"Sat",
+"Sáb":"Sat",
+"Dom":"Sun",
+"baybasket":"baby basketball",
+"pre-minibasket":"pre-mini basketball",
+"minibasket":"mini basketball",
+"infantil":"under-14",
+"cadete":"under-16",
+"junior":"under-18",
+"senior":"senior",
+"BayBasket":"Baby basketball",
+"Pre-minibasket":"Pre-mini basketball",
+"Minibasket":"Mini basketball",
+"Infantil":"Under-14",
+"Cadete":"Under-16",
+"Inicio de temporada":"Start of season",
+"1 mes":"1 month",
+"4 semanas":"4 weeks",
+"vs. últimas 4 semanas":"vs. last 4 weeks",
+"Cada entrenamiento suma":"Every training session counts",
+"Entrenamientos con lista":"Training sessions with attendance",
+"Sin temporada":"No season",
+"Localizables":"Reachable",
+"localizables":"reachable",
+"Email familiar":"Family email",
+"Solo teléfono":"Phone only",
+"Solo email personal":"Personal email only",
+"Vías de contacto por equipo":"Contact channels by team",
+"Jugadores sin ningún contacto":"Players with no contact details",
+"Abre su ficha para completar los datos con la familia.":"Open their profile to complete the details with their family.",
+"Todos tienen alguna vía de contacto.":"Everyone has at least one contact channel.",
+"Sin contacto registrado":"No contact details on file",
+"Avisos activos":"Notifications enabled",
+"Asistencia":"Attendance",
+"Qué parte de las sesiones registradas corresponde a jugadores que asistieron, también si llegaron tarde.":"The share of recorded player attendance where the player attended, including late arrivals.",
+"Se suman presentes y retrasos y se divide entre presentes, ausentes y retrasos; después se multiplica por 100 y se redondea. Una ausencia justificada sigue contando como ausencia. Solo entran registros no excluidos en sesiones finalizadas, guardadas y no canceladas de la temporada y periodo elegidos. Sin registros se muestra —.":"Add present and late records, divide by present, absent and late records, multiply by 100 and round. An explained absence still counts as absent. Only non-excluded records in completed, saved, non-cancelled sessions in the chosen season and period count. With no records, — is shown.",
+"Puntualidad":"Punctuality",
+"De las veces que vino, llegó a su hora. Las ausencias no afectan a este porcentaje.":"Of the times the player attended, how often they arrived on time. Absences do not affect this percentage.",
+"Se divide el número de llegadas a tiempo entre todas las veces que asistió (a tiempo o con retraso), se multiplica por 100 y se redondea. Si nadie asistió, se muestra —.":"Divide on-time arrivals by all attendances (on time or late), multiply by 100 and round. If nobody attended, — is shown.",
+"Sesiones registradas":"Recorded sessions",
+"Registros válidos de asistencia de jugadores en el periodo elegido.":"Valid player attendance records in the chosen period.",
+"Se cuentan presentes, ausentes y retrasos no excluidos en sesiones computables. En un equipo o en el club, un entrenamiento puede aportar un registro por jugador; no es el número de entrenamientos distintos.":"Count non-excluded present, absent and late records in eligible sessions. For a team or club, each player can contribute a record to a training session; this is not the number of distinct training sessions.",
+"Racha actual":"Current streak",
+"Secuencia más reciente de asistencias sin faltar. Llegar tarde mantiene la racha.":"The most recent run of attendance without an absence. Arriving late maintains the streak.",
+"Se ordenan los registros por fecha y hora, del más reciente al más antiguo, y se cuentan presencias o retrasos hasta la primera ausencia. Los registros excluidos o sin registrar no participan.":"Sort records by date and time, newest first, and count present or late records until the first absence. Excluded and unrecorded entries do not participate.",
+"Mejor racha":"Best streak",
+"La secuencia más larga de asistencias consecutivas dentro del periodo elegido.":"The longest run of consecutive attendance in the chosen period.",
+"Mayor número de presencias o retrasos seguidos al recorrer los registros por fecha y hora. Cada ausencia corta la secuencia.":"The greatest number of consecutive present or late records in chronological order. Each absence ends the streak.",
+"Tendencia":"Trend",
+"Compara la temporada con las últimas 4 semanas. Estable significa que el porcentaje no ha cambiado; una flecha indica cuántos puntos subió o bajó.":"Compares the season with the last 4 weeks. Stable means the percentage has not changed; an arrow shows how many points it rose or fell.",
+"Porcentaje de asistencia de los últimos 28 días menos el porcentaje de la temporada. Solo se muestra para la temporada activa completa y con al menos 4 registros recientes válidos. La referencia «vs. últimas 4 semanas» no compara dos bloques consecutivos de 28 días.":"Attendance percentage over the last 28 days minus the season percentage. Shown only for the full active season with at least 4 valid recent records. The last-4-weeks reference does not compare two consecutive 28-day periods.",
+"Sesiones computables":"Eligible sessions",
+"Entrenamientos que pueden entrar en los cálculos del periodo.":"Training sessions eligible for calculations in the period.",
+"Sesiones de la temporada elegida cuya fecha está en el intervalo, ya han terminado, no están canceladas y tienen la asistencia guardada. Cada sesión se cuenta una vez.":"Sessions in the chosen season and date range that have ended, are not cancelled and have saved attendance. Each session counts once.",
+"Sesiones canceladas":"Cancelled sessions",
+"Entrenamientos marcados como cancelados en el periodo.":"Training sessions marked as cancelled in the period.",
+"Se cuentan las sesiones canceladas de la temporada cuya fecha está entre el inicio y el fin del filtro. No entran en los porcentajes de asistencia.":"Count cancelled sessions in the season between the filter start and end dates. They do not enter attendance percentages.",
+"Sesiones pendientes":"Pending sessions",
+"Entrenamientos ya terminados en los que aún no se ha guardado la asistencia.":"Completed training sessions whose attendance has not yet been saved.",
+"Se cuentan sesiones no canceladas del intervalo cuya fecha y hora de fin ya han pasado y no tienen AsistenciaGuardada. No se convierten en ausencias ni entran en los porcentajes.":"Count non-cancelled sessions in the date range whose end date and time have passed and whose attendance is not saved. They do not become absences or enter percentages.",
+"Horas programadas":"Scheduled hours",
+"Duración prevista de los entrenamientos computables, no tiempo real de llegada o salida.":"Scheduled duration of eligible training sessions, not actual arrival or departure time.",
+"Suma de los minutos entre HoraInicio y HoraFin de cada sesión computable, dividida entre 60 y redondeada a una décima. Una duración ausente o negativa aporta cero.":"Sum minutes between each eligible session’s start and end, divide by 60 and round to one decimal. Missing or negative duration contributes zero.",
+"Horas programadas asistidas":"Scheduled hours attended",
+"Duración prevista de los entrenamientos a los que el jugador asistió.":"Scheduled duration of training sessions the player attended.",
+"Suma de la duración programada de los registros P o R, dividida entre 60 y redondeada a una décima. No se descuentan minutos de retraso.":"Sum scheduled duration for present or late records, divide by 60 and round to one decimal. Late minutes are not deducted.",
+"Asistentes medios":"Average attendance",
+"Promedio de jugadores presentes o con retraso por entrenamiento computable.":"Average number of present or late players per eligible training session.",
+"Total de P + R del equipo dividido entre sus sesiones computables, redondeado a una décima. Una sesión computable sin jugadores registrados sigue contando en el divisor.":"Divide total present and late records for the team by eligible sessions and round to one decimal. An eligible session with no recorded players still counts in the divisor.",
+"Plantilla activa":"Active squad",
+"Jugadores con relación de equipo vigente al final del periodo.":"Players whose team membership is valid at the end of the period.",
+"Se cuenta cada jugador una vez por equipo si su intervalo de alta y baja incluye la fecha final del filtro. Incluye relaciones principales y secundarias.":"Count each player once per team if the membership interval includes the filter’s end date. Includes primary and secondary memberships.",
+"Distribución de la plantilla":"Squad distribution",
+"Reparto de jugadores de la plantilla del periodo según su asistencia.":"Players in the period’s squad grouped by attendance.",
+"Con al menos 5 registros: alta ≥ 85 %, media entre 70 y 84 %, baja < 70 %. Con 1 a 4 registros se muestra Pocas sesiones. Quienes no tienen registros no se incluyen en estos grupos.":"With at least 5 records: high ≥ 85%, medium 70–84%, low < 70%. With 1–4 records, Too few sessions is shown. Players with no records are not included.",
+"Motivos de ausencias y retrasos":"Reasons for absences and late arrivals",
+"Motivos asociados a incidencias justificadas, separados entre ausencias y retrasos.":"Reasons associated with explained incidents, separated into absences and late arrivals.",
+"Se agrupan únicamente registros A o R con TieneJustificacion por MotivoCategoria; si falta el motivo se usa Sin motivo. No se infieren motivos para incidencias sin justificar.":"Group only explained absent or late records by reason category; use No reason if missing. Reasons are not inferred for unexplained incidents.",
+"Incidencias justificadas":"Explained incidents",
+"Qué parte de las ausencias y retrasos tiene una justificación registrada.":"The share of absences and late arrivals with a recorded explanation.",
+"Se suman ausencias y retrasos justificados, se divide entre todas las ausencias y retrasos y se multiplica por 100; se redondea al entero. Una justificación no transforma una ausencia en presencia. Sin incidencias se muestra —.":"Add explained absences and late arrivals, divide by all absences and late arrivals, multiply by 100 and round. An explanation does not turn an absence into attendance. With no incidents, — is shown.",
+"Avisos y justificaciones":"Notices and explanations",
+"Incidencias justificadas y forma en que se comunicaron.":"Explained incidents and how they were communicated.",
+"Total: registros A o R justificados. Programadas: JustificadoPor es programacion. Previos: las demás justificaciones cuya fecha es anterior al inicio del entrenamiento. Una incidencia programada no vuelve a contarse como aviso previo.":"Total: explained absent or late records. Scheduled: recorded through a scheduled notice. Advance: other explanations sent before training began. A scheduled incident is not counted again as an advance notice.",
+"Antelación de avisos":"Advance notice",
+"Tiempo habitual con el que se avisó antes del entrenamiento.":"Typical time between a notice and the start of training.",
+"Mediana de las horas entre FechaJustificacion y el inicio de la sesión, solo para A o R justificados previamente y no procedentes de programación. Se ordenan los valores y se toma el central, o la media de los dos centrales; se redondea a una décima. Sin avisos válidos se muestra —.":"Median hours between explanation and session start, only for previously explained absent or late records not from scheduled notices. Sort values and take the middle, or the average of the middle two, rounded to one decimal. With no valid notices, — is shown.",
+"Asistencia por día":"Attendance by weekday",
+"Cómo varía la asistencia según el día de la semana.":"How attendance varies by day of the week.",
+"Se agrupan los registros válidos por el día de la fecha de la sesión, de lunes a domingo. En cada grupo se calcula (P + R) / (P + A + R) × 100.":"Group valid records by the session’s weekday, Monday to Sunday. In each group calculate (present + late) / (present + absent + late) × 100.",
+"Asistencia mes a mes":"Attendance month by month",
+"Cada barra cuenta cuántas veces estuvo presente, llegó tarde o faltó durante ese mes.":"Each bar counts how often the person was present, late or absent that month.",
+"Los registros válidos se agrupan por el mes de la sesión y se cuentan por separado presentes, retrasos y ausentes. En entrenadores, la barra cuenta las veces que estuvo presente de sus sesiones registradas. Solo se incluyen meses con registros.":"Group valid records by session month and count present, late and absent separately. For coaches, the bar counts attendances among their recorded sessions. Only months with records are included.",
+"Evolución semanal":"Weekly trend",
+"Asistencia de jugadores agrupada en semanas que empiezan el lunes.":"Player attendance grouped into weeks starting on Monday.",
+"Se agrupan los registros por el lunes de la semana de la sesión y se calcula (P + R) / (P + A + R) × 100 en cada grupo. Solo se incluyen semanas con registros.":"Group records by the Monday of the session’s week and calculate (present + late) / (present + absent + late) × 100 in each group. Only weeks with records are included.",
+"Cobertura técnica":"Coaching coverage",
+"Porcentaje de entrenamientos con al menos un entrenador asignado presente.":"Percentage of training sessions with at least one assigned coach present.",
+"Sesiones computables con algún entrenador presente cuya relación con el equipo estaba vigente ese día y no era Visor / sesiones computables × 100. Cada sesión cuenta una sola vez.":"Eligible sessions with a present coach whose team membership was valid that day and was not Viewer / eligible sessions × 100. Each session counts once.",
+"Sesiones con sustituto":"Sessions with cover",
+"Entrenamientos en los que participó al menos un técnico invitado.":"Training sessions with at least one guest coach.",
+"Sesiones computables con algún registro de entrenador con Asistio verdadero y EsInvitado verdadero / sesiones computables × 100. Puede coincidir con una sesión cubierta por un técnico asignado.":"Eligible sessions with a present guest coach / eligible sessions × 100. This can overlap with a session covered by an assigned coach.",
+"Presencias de refuerzos":"Reinforcement attendance",
+"Parte de las asistencias de jugadores que corresponde a secundarios o invitados.":"The share of player attendances belonging to secondary or guest players.",
+"Registros P o R de jugadores con relación Secundario vigente ese día o, sin relación, marcados como invitados / todos los P + R del equipo × 100.":"Present or late records for players with a valid secondary membership that day, or guests without membership / all present and late team records × 100.",
+"Latencia de registro":"Recording delay",
+"Tiempo habitual transcurrido desde el fin de una sesión hasta su primer registro de asistencia.":"Typical time from a session’s end until attendance was first recorded.",
+"Mediana de máximo(0, FechaPrimerRegistro − fecha y hora de fin), expresada en horas y redondeada a una décima. Solo sesiones computables con FechaPrimerRegistro; sin hora de fin se usa 23:59. No mide la última edición.":"Median of max(0, first recording timestamp − session end), in hours rounded to one decimal. Only eligible sessions with a first-recording timestamp count; a missing end time uses 23:59. This does not measure the latest edit.",
+"Retraso medio":"Average lateness",
+"Minutos de retraso medios entre los retrasos con duración informada.":"Average minutes late among late arrivals with a reported duration.",
+"Suma de MinutosRetraso / número de registros R con minutos enteros positivos, redondeado a una décima. Los retrasos sin minutos no se interpretan como cero.":"Total minutes late / number of late records with positive whole minutes, rounded to one decimal. Missing minutes are not treated as zero.",
+"Carga semanal":"Weekly load",
+"Número medio de entrenamientos asistidos por semana del periodo.":"Average number of training sessions attended per week of the period.",
+"Total de registros P + R dividido entre todas las semanas de lunes a domingo que toca el intervalo, incluidas semanas sin asistencia; redondeado a una décima.":"Total present and late records divided by all Monday–Sunday weeks touched by the interval, including weeks without attendance, rounded to one decimal.",
+"Sesiones extra":"Extra sessions",
+"Participación en entrenamientos marcados como extra.":"Participation in training sessions marked as extra.",
+"Para un jugador se cuentan sus registros válidos en sesiones EsExtra y cuántos son P o R. Para un equipo se cuentan sus sesiones computables EsExtra una sola vez.":"For a player, count valid records in extra sessions and how many are present or late. For a team, count each eligible extra session once.",
+"Presencia del entrenador":"Coach presence",
+"Proporción de registros de asistencia del entrenador en los que estuvo presente.":"The share of coach attendance records where the coach was present.",
+"Registros con Asistio verdadero / registros con Asistio booleano verdadero o falso, no excluidos, en sesiones computables × 100. Las sesiones sin registro del entrenador no se añaden al divisor.":"Present records / non-excluded records explicitly marked present or absent in eligible sessions × 100. Sessions without a coach record are not added to the divisor.",
+"Sesiones del entrenador":"Coach sessions",
+"Sesiones computables con un registro válido de asistencia del entrenador.":"Eligible sessions with a valid attendance record for the coach.",
+"Se cuentan sus registros no excluidos con Asistio verdadero o falso. No se cuentan todas las sesiones de sus equipos ni se suponen ausencias cuando falta un registro.":"Count non-excluded records explicitly marked present or absent. Not all sessions for the coach’s teams count, and missing records are not assumed to be absences.",
+"Horas dirigidas":"Coaching hours",
+"Duración programada de las sesiones a las que asistió el entrenador.":"Scheduled duration of sessions the coach attended.",
+"Suma de minutos programados de sus registros con Asistio verdadero / 60, redondeado a una décima. No mide horas de llegada ni descuenta retrasos.":"Sum scheduled minutes for present records / 60, rounded to one decimal. This does not measure arrival times or deduct lateness.",
+"Sustituciones dadas":"Cover provided",
+"Sesiones en las que el entrenador asistió como invitado.":"Sessions the coach attended as a guest.",
+"Se cuentan registros válidos con Asistio verdadero y EsInvitado verdadero en sesiones computables del periodo.":"Count valid present guest records in eligible sessions in the period.",
+"Coberturas recibidas":"Cover received",
+"Sesiones de sus equipos en las que faltó y hubo otro entrenador presente.":"Sessions for the coach’s teams where they were absent and another coach was present.",
+"Por cada sesión computable con relación vigente del entrenador distinta de Visor, se cuenta si no tiene presencia propia y sí hay otro técnico con Asistio verdadero. No es necesario que el otro técnico esté marcado como invitado.":"For each eligible session with a valid non-Viewer membership, count it if the coach has no presence record but another coach is present. The other coach need not be marked as a guest.",
+"Contactabilidad":"Contact coverage",
+"Vías disponibles para localizar a los jugadores activos de la temporada. No garantiza que sean válidas ni que el mensaje se entregue.":"Available ways to contact active players in the season. This does not guarantee validity or delivery.",
+"Se deduplican jugadores con alguna relación Activo verdadera en equipos de la temporada. El gráfico separa, por prioridad: email familiar, teléfono sin email familiar, solo email personal y ningún contacto. No depende del periodo de asistencia. Localizables = jugadores con alguna de esas vías / jugadores activos × 100.":"Deduplicate players with an active membership in teams for the season. The chart separates, by priority: family email, phone without family email, personal email only and no contact. This is independent of the attendance period. Reachable = players with any contact channel / active players × 100.",
+"Avisos activos":"Notifications enabled",
+"Jugadores cuya familia tiene al menos un email con avisos habilitados.":"Players whose family has at least one email with notifications enabled.",
+"Jugadores activos con EmailPadre1 o EmailPadre2 no vacío y su NotificarAusenciasPadre correspondiente distinto de false / jugadores activos del club × 100. Tener teléfono o email personal no activa los avisos familiares.":"Active players with a non-empty family email and its notification setting not false / active club players × 100. A phone number or personal email does not enable family notifications.",
+"Con teléfono":"With phone number",
+"Jugadores con algún teléfono propio o familiar registrado. Puede coincidir con tener email familiar.":"Players with a personal or family phone number on file. This can overlap with family email.",
+"Jugadores activos con Telefono, TelefonoPadre1 o TelefonoPadre2 no vacío / jugadores activos del club × 100. En el gráfico Solo teléfono exige no tener email familiar.":"Active players with a non-empty personal or family phone number / active club players × 100. In the chart, Phone only excludes players with family email.",
+"Sin contacto":"No contact details",
+"Jugadores sin ninguna vía de contacto registrada; sus fichas necesitan completarse.":"Players with no contact channel on file; their profiles need completing.",
+"Se cuenta un jugador activo si no tiene EmailPadre1, EmailPadre2, Email, Telefono, TelefonoPadre1 ni TelefonoPadre2 no vacíos. La lista muestra cada jugador una vez y permite abrir su ficha.":"Count an active player if all personal and family email addresses and phone numbers are empty. The list shows each player once and links to their profile.",
+"Contacto por equipo":"Contact by team",
+"Distribución de las vías de contacto de la plantilla activa de cada equipo de la temporada.":"Contact channels for the active squad of each team in the season.",
+"Mismas categorías excluyentes que el gráfico global. Cada segmento se divide entre los jugadores con relación Activo verdadera del equipo. Un jugador de varios equipos aparece en cada uno, pero solo una vez en el total del club.":"The same mutually exclusive categories as the club chart. Divide each segment by active team members. A player in several teams appears in each, but only once in the club total.",
+"Asistencia por categoría":"Attendance by category",
+"Asistencia conjunta de los equipos de una categoría.":"Combined attendance for teams in a category.",
+"Se reúnen todos los registros válidos de esos equipos y se calcula (P + R) / (P + A + R) × 100. No es una media simple de los porcentajes de cada equipo.":"Combine all valid records for those teams and calculate (present + late) / (present + absent + late) × 100. This is not a simple average of team percentages.",
+"Cancelaciones por motivo":"Cancellations by reason",
+"Motivos registrados para cancelar entrenamientos.":"Recorded reasons for cancelling training sessions.",
+"Se agrupan las sesiones canceladas del periodo por MotivoCancelacion y se cuentan; si no hay motivo se usa Sin motivo.":"Group cancelled sessions in the period by cancellation reason and count them; use No reason if missing.",
+"Últimas sesiones":"Recent sessions",
+"Histórico reciente de registros válidos del jugador dentro del filtro.":"Recent valid player records within the filter.",
+"Se ordenan por fecha y hora de inicio, del más reciente al más antiguo. El detalle conserva hasta 60 registros y cada vista puede mostrar menos. Canceladas, pendientes y excluidas no aparecen como ausencias.":"Sort by date and start time, newest first. The detail retains up to 60 records; each view may display fewer. Cancelled, pending and excluded sessions do not appear as absences.",
+"Ranking de asistencia":"Attendance ranking",
+"Orden de asistencia entre los jugadores de la plantilla principal del jugador.":"Attendance order among members of the player’s primary team.",
+"Participan miembros vigentes al final del periodo con al menos 5 registros. Se ordenan por asistencia descendente, después por número de registros descendente y por apellidos. La posición es ordinal; con menos de 5 registros se muestran aparte.":"Include members valid at the period’s end with at least 5 records. Sort by attendance descending, record count descending, then surname. Positions are ordinal; players with fewer than 5 records are shown separately.",
+"Logros":"Achievements",
+"Reconocimientos de asistencia, puntualidad y continuidad.":"Recognition for attendance, punctuality and continuity.",
+"Con al menos 5 registros: asistencia perfecta si es 100 %, puntualidad perfecta si es 100 %, racha de 10 si la actual es ≥ 10 y mejor racha si iguala la mayor racha actual de los candidatos del equipo y esta es ≥ 3. Pueden coincidir varios logros.":"With at least 5 records: perfect attendance at 100%, perfect punctuality at 100%, a streak of 10 at ≥ 10, and best streak when equal to the highest current eligible team streak of at least 3. Several achievements can apply.",
+"Alertas de asistencia":"Attendance alerts",
+"Señales para revisar un caso; no sanciones automáticas.":"Signals to review a case, not automatic penalties.",
+"Tres últimas ausencias seguidas; tendencia de −20 pp o inferior; o al menos 3 ausencias sin justificar en los últimos 28 días. La tendencia necesita al menos 4 registros recientes y solo se calcula para la temporada activa completa.":"The last 3 records are absences; a trend of −20 percentage points or lower; or at least 3 unexplained absences in the last 28 days. Trend requires at least 4 valid recent records and applies only to the full active season.",
+"Faltas sin justificar":"Unjustified absences",
+"Ausencias sin una justificación registrada.":"Absences without a recorded explanation.",
+"Número de registros A válidos en el periodo cuyo indicador TieneJustificacion no es verdadero. No incluye retrasos.":"Count valid absent records in the period whose explanation flag is not true. Late arrivals are not included.",
+"Comparativa con el club":"Comparison with the club",
+"Diferencia entre la asistencia del equipo y la del conjunto del club.":"Difference between team attendance and club-wide attendance.",
+"Porcentaje de asistencia del equipo menos porcentaje de asistencia del club, en puntos porcentuales. El club reúne todos los registros válidos del mismo filtro; no promedia porcentajes de equipos.":"Team attendance percentage minus club attendance percentage, in percentage points. The club combines all valid records within the same filter; it does not average team percentages.",
+"Participación por equipo":"Participation by team",
+"Asistencia de una persona desglosada por equipo.":"A person’s attendance broken down by team.",
+"Se agrupan sus registros válidos por equipo y se aplica la fórmula de asistencia o presencia correspondiente. El tipo refleja la relación vigente al final del periodo o, si no existe, la participación registrada.":"Group valid records by team and apply the relevant attendance or presence formula. Type reflects membership at the end of the period, or recorded participation if there is no membership.",
+"Sesiones de baja asistencia":"Low-attendance sessions",
+"Entrenamientos computables con asistencia de jugadores inferior al 60 %.":"Eligible training sessions with player attendance below 60%.",
+"Se cuenta una sesión si tiene registros válidos de jugadores y (P + R) / (P + A + R) × 100, redondeado al entero, es menor que 60.":"Count a session if it has valid player records and (present + late) / (present + absent + late) × 100, rounded to a whole number, is below 60.",
+"Tu perfil":"Your profile",
+"Email de acceso":"Sign-in email",
+"El email identifica tu cuenta y no se puede cambiar aquí.":"Your email identifies your account and cannot be changed here.",
+"Contacto familiar":"Family contact",
+"Estos datos ayudan al club a contactar contigo y con tu familia.":"These details help the club contact you and your family.",
+"Recibir avisos de ausencias por email":"Receive absence notifications by email",
+"El mismo código que utilizas para justificar ausencias. Es necesario para guardar.":"The same code you use to explain absences. It is required to save.",
+"Elige un avatar del club o sube tu foto.":"Choose a club avatar or upload your photo.",
+"Subir mi foto":"Upload my photo",
+"Se recortará al centro. La foto solo se usa como imagen de perfil.":"The photo will be cropped to the centre and used only as your profile picture.",
+"Quitar foto":"Remove photo",
+"TU CUENTA, PROTEGIDA":"YOUR ACCOUNT, PROTECTED",
+"Controla cómo accedes y cómo recuperar tus credenciales.":"Manage how you sign in and recover your credentials.",
+"Letras, números y puntos. Máximo 12 caracteres.":"Letters, numbers and dots. Up to 12 characters.",
+"Usa de 4 a 6 dígitos. Deja el nuevo PIN vacío si solo cambias tu usuario.":"Use 4 to 6 digits. Leave the new PIN blank if you are only changing your username.",
+"Usa de 4 a 6 dígitos.":"Use 4 to 6 digits.",
+"Guardar credenciales":"Save credentials",
+"Este código protege los datos familiares y las justificaciones.":"This code protects family details and explanations.",
+"Nuevo código (6 letras o números)":"New code (6 letters or numbers)",
+"¿Olvidaste tu PIN o código?":"Forgot your PIN or code?",
+"Enviaremos tus credenciales a los correos registrados en tu ficha. Los códigos de seguridad solo se envían a los contactos familiares.":"We will email your credentials to the addresses in your profile. Security codes are sent only to family contacts.",
+"Enviar recordatorio por email":"Email a reminder",
+"TRANSPARENCIA Y CONFIANZA":"TRANSPARENCY AND TRUST",
+"Tu privacidad importa":"Your privacy matters",
+"Cómo cuidamos tus datos en CB Baeza.":"How we look after your data at CB Baeza.",
+"Cookies y almacenamiento":"Cookies and storage",
+"Responsable del tratamiento":"Data controller",
+"El Club de Baloncesto Baeza es el responsable de los datos utilizados en esta aplicación. Puedes contactar con el club a través de sus entrenadores o de su directiva para cualquier consulta sobre privacidad.":"Club de Baloncesto Baeza is responsible for the data used in this application. Contact the club's coaches or board with any privacy questions.",
+"Qué datos tratamos":"What data we process",
+"Datos de identificación, credenciales de acceso, información de contacto, contactos familiares, asignación a equipos, asistencia a entrenamientos, justificaciones de ausencias o retrasos y, si decides añadirla, tu fotografía de perfil. Las justificaciones pueden contener información sensible: incluye únicamente lo necesario para comunicar la incidencia.":"Identification details, sign-in credentials, contact information, family contacts, team assignments, training attendance, absence or lateness explanations and, if you add one, your profile photo. Explanations may contain sensitive information: include only what is needed to communicate the incident.",
+"Para qué los utilizamos":"How we use your data",
+"Gestionamos la actividad deportiva y la asistencia del club, facilitamos el trabajo de los entrenadores y enviamos avisos relacionados con la asistencia a las familias que los tengan activados. No utilizamos los datos para publicidad.":"We manage the club's sporting activities and attendance, support coaches and send attendance notifications to families who enable them. We do not use your data for advertising.",
+"Base jurídica y menores":"Legal basis and minors",
+"El tratamiento se apoya en el consentimiento para las funciones que lo requieren y en el interés legítimo del club en organizar su actividad deportiva, respetando los derechos de las personas. Los datos de menores se facilitan y gestionan mediante sus madres, padres o tutores legales. Puedes retirar tu consentimiento cuando corresponda, sin afectar a los tratamientos anteriores a su retirada.":"Processing relies on consent where required and on the club's legitimate interest in organising its sporting activities while respecting individual rights. Minors' data is provided and managed by parents or legal guardians. Where applicable, you may withdraw consent without affecting processing carried out before withdrawal.",
+"Destinatarios e infraestructura":"Recipients and infrastructure",
+"No cedemos tus datos a terceros para sus propios fines. El personal autorizado del club accede solo a la información necesaria para sus funciones. Google (Apps Script y Gmail) y Supabase actúan como proveedores de infraestructura y encargados del tratamiento. Sus servicios pueden implicar tratamiento fuera del Espacio Económico Europeo, sujeto a las garantías de protección de datos aplicables.":"We do not share your data with third parties for their own purposes. Authorised club staff access only information needed for their roles. Google (Apps Script and Gmail) and Supabase provide infrastructure and act as data processors. Their services may involve processing outside the European Economic Area, subject to applicable data protection safeguards.",
+"Conservación":"Retention",
+"Conservamos los datos durante la relación deportiva y el tiempo necesario para gestionar las temporadas, atender solicitudes y cumplir las obligaciones legales aplicables. Después se eliminan o anonimizan cuando dejan de ser necesarios. El club revisa la necesidad de conservar el historial y los contactos familiares.":"We retain data throughout your sporting relationship with the club and as long as needed to manage seasons, respond to requests and meet applicable legal obligations. Data is then deleted or anonymised when no longer needed. The club reviews the need to retain historical records and family contacts.",
+"Tus derechos":"Your rights",
+"Puedes solicitar acceso, rectificación, supresión, oposición, limitación del tratamiento y portabilidad de tus datos, en los casos previstos por la normativa, contactando con la directiva o los entrenadores del club. Para proteger tu información puede ser necesario acreditar tu identidad o representación legal. También puedes presentar una reclamación ante la Agencia Española de Protección de Datos (AEPD), en":"You may request access, rectification, erasure, objection, restriction or portability of your data where provided by law by contacting the board or coaches. To protect your information, proof of identity or legal representation may be required. You may also lodge a complaint with Spain's data protection authority (AEPD) at",
+"Aplicamos controles de acceso por perfil y medidas técnicas y organizativas para proteger la información. No compartas tu PIN ni tu código de seguridad y cierra la sesión en dispositivos compartidos. Comunica al club cualquier acceso no autorizado que detectes.":"We apply role-based access controls and technical and organisational safeguards. Do not share your PIN or security code, and sign out on shared devices. Notify the club of any unauthorised access you detect.",
+"Política de cookies y almacenamiento":"Cookies and storage policy",
+"Sin publicidad ni analítica":"No advertising or analytics",
+"Esta aplicación no utiliza cookies de publicidad ni de analítica. Guarda información técnica en el almacenamiento local de tu navegador (localStorage) para que puedas utilizarla.":"This application does not use advertising or analytics cookies. It saves technical information in your browser's local storage (localStorage) so you can use it.",
+"Qué se guarda en tu dispositivo":"What is saved on your device",
+": mantiene tu sesión y tus credenciales de acceso hasta que cierres sesión o borres el almacenamiento.":": keeps your session and sign-in credentials until you sign out or clear storage.",
+": recuerda el idioma y el tema visual elegidos.":": remembers your chosen language and theme.",
+"Borradores locales: permiten recuperar cambios pendientes en formularios de la aplicación.":"Local drafts: allow you to recover unsaved changes in app forms.",
+"El almacenamiento local no se envía automáticamente como una cookie. La aplicación utiliza la sesión guardada para autenticar las peticiones al servidor. Quien tenga acceso a tu dispositivo puede acceder a la sesión: evita guardar el acceso en equipos compartidos.":"Local storage is not automatically sent like a cookie. The app uses your saved session to authenticate server requests. Anyone with access to your device may access your session: avoid saving sign-in details on shared devices.",
+"Cookies técnicas de Google":"Google technical cookies",
+"Google puede establecer cookies técnicas necesarias para servir la aplicación mediante Apps Script y para la seguridad o funcionamiento de su plataforma, según tu navegador y tu sesión de Google.":"Google may set technical cookies needed to serve the app through Apps Script and for the security or operation of its platform, depending on your browser and Google session.",
+"Cómo borrar estos datos":"How to delete this data",
+"Puedes cerrar sesión desde el menú de usuario. Para borrar preferencias, borradores y cookies, abre la configuración de privacidad de tu navegador, busca los datos de sitios de Google Apps Script y elimina sus cookies y almacenamiento. También puedes borrar todos los datos de navegación. Perderás la sesión, las preferencias y los borradores guardados. Bloquear el almacenamiento o las cookies técnicas puede impedir algunas funciones.":"Sign out from the user menu. To remove preferences, drafts and cookies, open your browser's privacy settings, find Google Apps Script site data and delete its cookies and storage. You can also clear all browsing data. Your saved session, preferences and drafts will be lost. Blocking storage or technical cookies may prevent some features from working.",
+"Administración del club":"Club administration",
+"Equipo técnico":"Coaching staff",
+"Introduce el código de seguridad de 6 caracteres":"Enter your 6-character security code",
+"Revisa el formato de los teléfonos":"Check the phone number formats",
+"El PIN debe tener entre 4 y 6 dígitos":"The PIN must contain 4 to 6 digits",
+"El usuario debe tener hasta 12 letras, números o puntos":"The username must contain up to 12 letters, numbers or dots",
+"Credenciales actualizadas. Tu sesión sigue abierta.":"Credentials updated. You are still signed in.",
+"Los códigos deben tener 6 letras o números":"Codes must contain 6 letters or numbers",
+"Código de seguridad actualizado":"Security code updated",
+"No tienes ningún correo registrado. Contacta con tu entrenador para recuperarlo.":"You have no email address on file. Contact your coach to recover your credentials.",
+"Balón":"Basketball",
+"Canasta":"Basket",
+"Camiseta":"Jersey",
+"Zapatilla":"Trainer",
+"Trofeo":"Trophy",
+"Silbato":"Whistle",
+"Estrella":"Star",
+"Pista":"Court",
+"Medalla":"Medal",
+"Red":"Net",
+"Capitán":"Captain",
+"Energía":"Energy",
+"Sesiones de esta semana":"This week's sessions",
+"Generar semana":"Generate week",
+"Añadir entrenamiento":"Add training session",
+"Marcar todas leídas":"Mark all as read",
+"Borrar todas":"Delete all",
+"¿Seguro que quieres cerrar sesión?":"Are you sure you want to sign out?",
+"Tendrás que introducir tu PIN de nuevo para acceder.":"You will need to enter your PIN again to sign in.",
+"Cerrar Sesión":"Sign out",
+"¿Salir sin guardar?":"Leave without saving?",
+"Los cambios realizados se perderán.":"Your changes will be lost.",
+"Seguir editando":"Keep editing",
+"Salir sin guardar":"Leave without saving",
+"No tienes equipos asignados.":"You have no assigned teams.",
+"Tu equipo":"Your team",
+"en plantilla":"in the squad",
+"Estadísticas":"Statistics",
+"Solo podrás gestionar sus sesiones y asistencia. No modifica tu asignación permanente.":"You can manage only their sessions and attendance. This does not change your permanent assignment.",
+"Fin":"End",
+"Notas":"Notes",
+"Crear":"Create",
+"Sin jugadores asignados":"No assigned players",
+"Sin entrenadores asignados":"No assigned coaches",
+"Confirmar cancelación":"Confirm cancellation",
+"Sin entrenadores":"No coaches",
+"Guardar como PDF":"Save as PDF",
+"jugadores activos":"active players",
+"sesiones":"sessions",
+"Ninguno asignado":"None assigned",
+"Anadir":"Add",
+"Sin jugadores registrados":"No registered players",
+"Sin equipo asignado":"No assigned team",
+"Comparte estas credenciales con el jugador y su familia:":"Share these credentials with the player and their family:",
+"Código familias":"Family code",
+"PIN inicial":"Initial PIN",
+"Entendido":"Got it",
+"Sin entrenadores registrados":"No registered coaches",
+"Sin alertas":"No alerts",
+"Sesiones pendientes de registrar":"Sessions awaiting attendance",
+"Exportar CSV de equipos":"Export teams CSV",
+"Revisa las sesiones pendientes":"Review pending sessions",
+"Sin faltas pendientes de justificar":"No absences awaiting explanation",
+"Completa la información de tu perfil":"Complete your profile information",
+"Completar mi perfil":"Complete my profile",
+"No asignado a ningún equipo":"Not assigned to a team",
+"Tú":"You",
+"Sin datos registrados aún":"No recorded data yet",
+"Ningún jugador":"No players",
+"Sin horario configurado":"No schedule configured",
+"Motivo personal":"Personal reason",
+"-- Selecciona un motivo --":"-- Select a reason --",
+"No tienes programaciones. Pulsa Programar para añadir una.":"You have no scheduled notices. Tap Schedule to add one.",
+"Introduce el código de autorización para confirmar.":"Enter the authorization code to confirm.",
+"Código de autorización":"Authorization code",
+"Actualizando…":"Updating…",
+"Cargando estadísticas":"Loading statistics",
+"Evolución semanal del equipo · asistencia (%)":"Team weekly trend · attendance (%)",
+"P: Presente · A: Ausente · R: Retraso · —: Sin registrar":"P: Present · A: Absent · R: Late · —: Not recorded",
+"Sin sesiones en este periodo":"No sessions in this period",
+"Copia estos datos para guardarlos como CSV.":"Copy this data to save it as CSV.",
+"Llegadas a tiempo entre quienes asistieron":"On-time arrivals among those who attended",
+"Cada minuto cuenta":"Every minute counts",
+"Sin incidencias registradas":"No recorded incidents",
+"Récord:":"Record:",
+"Qué significa":"What it means",
+"Cómo se calcula":"How it is calculated",
+"Elige qué temporada quieres explorar.":"Choose which season to explore.",
+"Temporada anterior":"Previous season",
+"Calendario y entrenamientos del día":"Calendar and today's training",
+"Justificación":"Explanation",
+"Borrar notificación":"Delete notification",
+"Sesión no válida":"Invalid session",
+"Iniciando sesión...":"Signing in...",
+"Sesión iniciada":"Signed in",
+"Mis Estadísticas":"My statistics",
+"Sin próximos entrenamientos":"No upcoming training",
+"No se pudo crear la sesión":"The session could not be created",
+"Error al crear la sesión":"Error creating session",
+"Sesión no encontrada":"Session not found",
+"Descargar justificación en PDF":"Download explanation as PDF",
+"Asistió":"Attended",
+"No asistió":"Did not attend",
+"Error: recarga la página (formulario no encontrado)":"Error: reload the page (form not found)",
+"¿Deseas guardarlo igualmente?":"Do you want to save it anyway?",
+"El email no tiene un formato válido":"The email address format is invalid",
+"El teléfono no tiene un formato válido (mín. 9 dígitos)":"The phone number format is invalid (at least 9 digits)",
+"El email del familiar 1 no es válido":"Family contact 1's email is invalid",
+"El teléfono del familiar 1 no es válido":"Family contact 1's phone number is invalid",
+"El email del familiar 2 no es válido":"Family contact 2's email is invalid",
+"El teléfono del familiar 2 no es válido":"Family contact 2's phone number is invalid",
+"El PIN debe tener entre 4 y 6 dígitos numéricos":"The PIN must contain 4 to 6 digits",
+"No se enviarán avisos de ausencia por email.":"Absence notifications will not be sent by email.",
+"No hay ningún email familiar informado y activado para recibirlos. Puedes guardar igualmente y configurar los contactos más adelante.":"There is no family email with notifications enabled. You can save anyway and set up contacts later.",
+"Duración de las sesiones":"Session duration",
+"Evolución semanal de la asistencia del equipo":"Weekly team attendance trend",
+"Antelación de avisos":"Advance notice",
+"Cobertura técnica y refuerzos":"Coaching coverage and reinforcements",
+"Asistencia por categoría":"Attendance by category",
+"Aún no registrado":"Not yet recorded",
+"Día":"Day",
+"No se pudo enviar la justificación":"The explanation could not be sent",
+"Editar programación":"Edit scheduled notice",
+"Programar justificación":"Schedule explanation",
+"Pausar programación":"Pause scheduled notice",
+"Activar programación":"Activate scheduled notice",
+"Introduce el código de autorización de 6 caracteres":"Enter the 6-character authorization code",
+"No se pudo eliminar la programación":"The scheduled notice could not be deleted",
+"No se pudo guardar la programación":"The scheduled notice could not be saved",
+"Programación guardada":"Scheduled notice saved",
+"La programación dejará de aplicarse a los próximos entrenamientos hasta que la vuelvas a activar.":"This notice will stop applying to upcoming training until you reactivate it.",
+"La programación volverá a aplicarse automáticamente a los próximos entrenamientos.":"This notice will automatically apply to upcoming training again.",
+"Eliminar programación":"Delete scheduled notice",
+"Se eliminará esta programación y dejará de aplicarse a los próximos entrenamientos.":"This scheduled notice will be deleted and stop applying to upcoming training.",
+"No se pudo actualizar la programación":"The scheduled notice could not be updated",
+"Ya hay una operación en curso":"An operation is already in progress",
+"El servidor no confirmó el guardado":"The server did not confirm the save",
+"No se pudieron calcular las estadísticas":"Statistics could not be calculated",
+"Sesión no iniciada.":"Not signed in.",
+"Periodo de estadísticas":"Statistics period",
+"Estadísticas no disponibles":"Statistics unavailable",
+"Asistencia en las últimas sesiones":"Attendance at recent sessions",
+"Sí":"Yes",
+"Distribución de asistencia de la plantilla":"Squad attendance distribution",
+"Asistencia por día de la semana":"Attendance by weekday",
+"Duración de los entrenamientos a los que vino":"Scheduled duration of training attended",
+"Justificación de incidencias":"Incident explanations",
+"Cómo interpretar estos datos":"How to interpret this data",
+"Registrar":"Record",
+"Justificación enviada":"Explanation sent",
+"Editar justificación":"Edit explanation",
+"Eliminar justificación":"Delete explanation",
+"Generado automáticamente — CB Baeza":"Automatically generated — CB Baeza",
+"Justificación de incidencia — CB Baeza":"Incident explanation — CB Baeza",
+"Asegúrate de comunicarle los nuevos datos.":"Make sure to share the new details.",
+"Comparte también el Código familias con los padres. El jugador puede cambiar su PIN desde la app.":"Share the family code with the parents too. The player can change their PIN in the app.",
+  "Ajustes": "Settings",
+  "Personaliza la aplicación en este dispositivo.": "Customize the app on this device.",
+  "Idioma": "Language",
+  "Idioma de la aplicación": "App language",
+  "Apariencia": "Appearance",
+  "Elige un tema": "Choose a theme",
+  "Morado clásico": "Classic purple",
+  "Lavanda": "Lavender",
+  "Noche morada": "Purple night",
+  "Medianoche": "Midnight",
+  "Oro y morado": "Gold and purple",
+  "Seleccionado": "Selected",
+  "Seleccionar": "Select",
+  "Los cambios se guardan solo en este dispositivo.": "Changes are saved on this device only.",
+  "No se pudieron guardar los ajustes en este dispositivo": "Settings could not be saved on this device",
+  "Perfil": "Profile",
+  "Seguridad": "Security",
+  "Políticas": "Policies",
+  "Política de privacidad": "Privacy policy",
+  "Política de cookies": "Cookie policy",
+  "Cerrar sesión": "Sign out",
+  "Iniciar sesión": "Sign in",
+  "Entrar": "Sign in",
+  "Jugador": "Player",
+  "Jugadores": "Players",
+  "Entrenador": "Coach",
+  "Entrenadores": "Coaches",
+  "Administrador": "Administrator",
+  "Administración": "Administration",
+  "Gestión": "Management",
+  "Gestion": "Management",
+  "Inicio": "Home",
+  "Equipos": "Teams",
+  "Equipo": "Team",
+  "Mi equipo": "My team",
+  "Mis equipos": "My teams",
+  "Mis estadísticas": "My statistics",
+  "Ver mis estadísticas": "View my statistics",
+  "Calendario": "Calendar",
+  "Sesiones": "Sessions",
+  "Sesión": "Session",
+  "Entrenamiento": "Training",
+  "Entrenamientos": "Training sessions",
+  "Asistencia": "Attendance",
+  "Puntualidad": "Punctuality",
+  "Informes": "Reports",
+  "Informes del club": "Club reports",
+  "Historial": "History",
+  "Historial de sesiones": "Session history",
+  "Histórico": "History",
+  "Temporada": "Season",
+  "Temporadas": "Seasons",
+  "Temporada completa": "Full season",
+  "Últimas 4 semanas": "Last 4 weeks",
+  "Este mes": "This month",
+  "Todos": "All",
+  "Todas": "All",
+  "Buscar": "Search",
+  "Buscar jugador": "Search player",
+  "Buscar entrenador": "Search coach",
+  "Buscar equipo": "Search team",
+  "Buscar...": "Search...",
+  "Buscar…": "Search…",
+  "Nombre": "First name",
+  "Apellidos": "Last name",
+  "Nombre y apellidos": "Full name",
+  "Fecha de nacimiento": "Date of birth",
+  "Teléfono": "Phone",
+  "Teléfono de contacto": "Contact phone",
+  "Correo electrónico": "Email address",
+  "Correo": "Email",
+  "Usuario": "Username",
+  "Usuario o email": "Username or email",
+  "Usuario o correo electrónico": "Username or email",
+  "Contraseña": "Password",
+  "PIN actual": "Current PIN",
+  "Nuevo PIN": "New PIN",
+  "Repetir PIN": "Repeat PIN",
+  "PIN de acceso": "Access PIN",
+  "Código de seguridad": "Security code",
+  "Código actual": "Current code",
+  "Nuevo código": "New code",
+  "Guardar": "Save",
+  "Guardar cambios": "Save changes",
+  "Cancelar": "Cancel",
+  "Aceptar": "OK",
+  "Confirmar": "Confirm",
+  "Eliminar": "Delete",
+  "Editar": "Edit",
+  "Añadir": "Add",
+  "Nuevo": "New",
+  "Nueva": "New",
+  "Volver": "Back",
+  "Cerrar": "Close",
+  "Continuar": "Continue",
+  "Siguiente": "Next",
+  "Anterior": "Previous",
+  "Hoy": "Today",
+  "Ayer": "Yesterday",
+  "Mañana": "Tomorrow",
+  "Ahora": "Now",
+  "Cargando…": "Loading…",
+  "Cargando...": "Loading...",
+  "Guardando…": "Saving…",
+  "Guardando...": "Saving...",
+  "Guardado": "Saved",
+  "Sin conexión": "Offline",
+  "Conectado": "Connected",
+  "Error de conexión": "Connection error",
+  "Reintentar": "Retry",
+  "Sin datos": "No data",
+  "No hay datos": "No data",
+  "Sin resultados": "No results",
+  "Sin equipo": "No team",
+  "Sin equipos": "No teams",
+  "Sin jugadores": "No players",
+  "Sin sesiones": "No sessions",
+  "Sin sesiones registradas": "No recorded sessions",
+  "No hay sesiones este día.": "No sessions on this day.",
+  "No hay entrenamientos este día.": "No training on this day.",
+  "Presente": "Present",
+  "Presentes": "Present",
+  "Ausente": "Absent",
+  "Ausentes": "Absent",
+  "Retraso": "Late",
+  "Retrasos": "Late arrivals",
+  "Sin registrar": "Not recorded",
+  "Registrada": "Recorded",
+  "Registrado": "Recorded",
+  "Pendiente": "Pending",
+  "Pendientes": "Pending",
+  "Cancelada": "Cancelled",
+  "Canceladas": "Cancelled",
+  "Sesión cancelada": "Cancelled session",
+  "Reactivar": "Reactivate",
+  "Reactivar sesión": "Reactivate session",
+  "Cancelar sesión": "Cancel session",
+  "Eliminar sesión": "Delete session",
+  "Guardar asistencia": "Save attendance",
+  "Asistencia guardada": "Attendance saved",
+  "Marcar todos presentes": "Mark all present",
+  "Marcar avisos": "Apply notices",
+  "Avisó: Ausencia": "Notice: Absent",
+  "Avisó: Retraso": "Notice: Late",
+  "Minutos de retraso": "Minutes late",
+  "Justificada": "Justified",
+  "Justificado": "Justified",
+  "Sin justificar": "Unjustified",
+  "Justificar": "Submit explanation",
+  "Justificar ausencia": "Explain absence",
+  "Justificar retraso": "Explain late arrival",
+  "Motivo": "Reason",
+  "Motivos": "Reasons",
+  "Sin motivo": "No reason",
+  "Otro": "Other",
+  "Observaciones": "Notes",
+  "Fecha": "Date",
+  "Hora": "Time",
+  "Hora de inicio": "Start time",
+  "Hora de fin": "End time",
+  "Fecha y hora": "Date and time",
+  "Horario": "Schedule",
+  "Horario semanal": "Weekly schedule",
+  "Principal": "Primary",
+  "Secundario": "Secondary",
+  "Invitado": "Guest",
+  "Invitados": "Guests",
+  "Titular": "Regular",
+  "Visor": "Viewer",
+  "Dorsal": "Jersey number",
+  "Categoría": "Category",
+  "Modalidad": "Gender",
+  "Masculino": "Male",
+  "Femenino": "Female",
+  "Mixto": "Mixed",
+  "Activo": "Active",
+  "Activa": "Active",
+  "Inactivo": "Inactive",
+  "Inactiva": "Inactive",
+  "Contacto": "Contact",
+  "Contactar": "Contact",
+  "Llamar": "Call",
+  "Enviar email": "Send email",
+  "Familia": "Family",
+  "Familiar": "Family member",
+  "Padre / Madre / Tutor 1": "Parent / guardian 1",
+  "Padre / Madre / Tutor 2": "Parent / guardian 2",
+  "Datos personales": "Personal details",
+  "Datos de contacto": "Contact details",
+  "Datos familiares": "Family details",
+  "Mi perfil": "My profile",
+  "Editar perfil": "Edit profile",
+  "Foto de perfil": "Profile photo",
+  "Cambiar foto": "Change photo",
+  "Eliminar foto": "Remove photo",
+  "Subir foto": "Upload photo",
+  "Elegir avatar": "Choose avatar",
+  "Cambiar PIN": "Change PIN",
+  "Cambiar usuario": "Change username",
+  "Cambiar credenciales": "Change credentials",
+  "Cambiar código de seguridad": "Change security code",
+  "Recordar credenciales": "Email credentials",
+  "Enviar recordatorio": "Send reminder",
+  "No hay ningún correo registrado. Contacta con tu entrenador.": "There is no email address on file. Contact your coach.",
+  "Ya se ha enviado un correo hace poco. Inténtalo más tarde.": "An email was sent recently. Please try again later.",
+  "Tu cuenta de administración no tiene ficha de entrenador.": "Your administrator account has no coach profile.",
+  "PIN incorrecto.": "Incorrect PIN.",
+  "Código de seguridad incorrecto.": "Incorrect security code.",
+  "Acceso denegado.": "Access denied.",
+  "Sesión no encontrada.": "Session not found.",
+  "Equipo no encontrado.": "Team not found.",
+  "Jugador no encontrado.": "Player not found.",
+  "Entrenador no encontrado.": "Coach not found.",
+  "La sesión está cancelada.": "The session is cancelled.",
+  "La sesión está cancelada. Reactívala para registrar asistencia.": "The session is cancelled. Reactivate it to record attendance.",
+  "Solo administración": "Administrators only",
+  "Asistencia perfecta": "Perfect attendance",
+  "Siempre puntual": "Always on time",
+  "Racha de 10+": "Streak of 10+",
+  "Mejor racha del equipo": "Best team streak",
+  "3 ausencias seguidas": "3 consecutive absences",
+  "Caída de asistencia": "Attendance drop",
+  "Faltas sin justificar": "Unjustified absences",
+  "Racha actual": "Current streak",
+  "Mejor racha": "Best streak",
+  "Racha": "Streak",
+  "seguidas": "in a row",
+  "sesiones seguidas": "consecutive sessions",
+  "Evolución semanal": "Weekly trend",
+  "Evolución mensual": "Monthly trend",
+  "Asistencia por día": "Attendance by weekday",
+  "Distribución de la plantilla": "Squad distribution",
+  "Plantilla": "Squad",
+  "Plantilla activa": "Active squad",
+  "Jugadores activos": "Active players",
+  "Asistentes medios": "Average attendance",
+  "Horas programadas": "Scheduled hours",
+  "Horas dirigidas": "Coaching hours",
+  "Sesiones registradas": "Recorded sessions",
+  "Sesiones computables": "Eligible sessions",
+  "Sesiones canceladas": "Cancelled sessions",
+  "Sesiones pendientes": "Pending sessions",
+  "Sesiones extra": "Extra sessions",
+  "Sesión extra": "Extra session",
+  "Crear sesión extra": "Create extra session",
+  "Registrar asistencia": "Record attendance",
+  "Ver datos": "View data",
+  "Ver detalle": "View details",
+  "Exportar CSV": "Export CSV",
+  "Exportar equipos": "Export teams",
+  "Exportar alertas": "Export alerts",
+  "Tendencia": "Trend",
+  "Estable": "Stable",
+  "Sin cambios": "No change",
+  "Cobertura técnica": "Coaching coverage",
+  "Refuerzos": "Reinforcements",
+  "Sustituciones dadas": "Cover provided",
+  "Coberturas recibidas": "Cover received",
+  "Con entrenador": "With a coach",
+  "Registro": "Recording",
+  "Latencia de registro": "Recording delay",
+  "Cancelaciones": "Cancellations",
+  "Cancelaciones por motivo": "Cancellations by reason",
+  "Motivos y avisos": "Reasons and notices",
+  "Avisos": "Notices",
+  "Avisos previos": "Advance notices",
+  "Programadas": "Scheduled",
+  "Justificaciones": "Explanations",
+  "Antelación mediana": "Median notice",
+  "Retraso medio": "Average lateness",
+  "Carga": "Training load",
+  "Sesiones por semana": "Sessions per week",
+  "Horas asistidas": "Hours attended",
+  "Horas programadas asistidas": "Scheduled hours attended",
+  "Por equipo": "By team",
+  "Por día": "By weekday",
+  "Ranking": "Ranking",
+  "Tu posición": "Your position",
+  "Con pocas sesiones aún": "Still too few sessions",
+  "Pocas sesiones": "Too few sessions",
+  "Logros": "Achievements",
+  "Alertas": "Alerts",
+  "Jugadores en riesgo": "Players at risk",
+  "Asistencia (mayor a menor)": "Attendance (highest first)",
+  "Asistencia (menor a mayor)": "Attendance (lowest first)",
+  "Ordenar por": "Sort by",
+  "Ordenar": "Sort",
+  "Contactabilidad": "Contact coverage",
+  "Contacto de las familias": "Family contact coverage",
+  "Con email familiar": "With family email",
+  "Con avisos activos": "With notifications enabled",
+  "Con teléfono": "With phone number",
+  "Sin contacto": "No contact details",
+  "Lunes": "Monday",
+  "Martes": "Tuesday",
+  "Miércoles": "Wednesday",
+  "Jueves": "Thursday",
+  "Viernes": "Friday",
+  "Sábado": "Saturday",
+  "Domingo": "Sunday",
+  "lunes": "Monday",
+  "martes": "Tuesday",
+  "miércoles": "Wednesday",
+  "jueves": "Thursday",
+  "viernes": "Friday",
+  "sábado": "Saturday",
+  "domingo": "Sunday",
+  "ene": "Jan",
+  "feb": "Feb",
+  "mar": "Mar",
+  "abr": "Apr",
+  "may": "May",
+  "jun": "Jun",
+  "jul": "Jul",
+  "ago": "Aug",
+  "sep": "Sep",
+  "oct": "Oct",
+  "nov": "Nov",
+  "dic": "Dec",
+  "Enero": "January",
+  "Febrero": "February",
+  "Marzo": "March",
+  "Abril": "April",
+  "Mayo": "May",
+  "Junio": "June",
+  "Julio": "July",
+  "Agosto": "August",
+  "Septiembre": "September",
+  "Octubre": "October",
+  "Noviembre": "November",
+  "Diciembre": "December",
+  "Privacidad": "Privacy",
+  "Cookies": "Cookies",
+  "Resumen": "Summary",
+  "Ver más": "View more",
+  "Más información": "More information",
+  "Cómo se calcula": "How it is calculated",
+  "Qué significa": "What it means",
+  "Notificaciones": "Notifications",
+  "No hay notificaciones": "No notifications",
+  "Email registrado": "Registered email",
+  "entrenador@ejemplo.com": "coach@example.com",
+  "nombre.apellido": "firstname.lastname",
+  "Gestión de asistencia": "Attendance management",
+  "Gestión de Asistencia": "Attendance management",
+  "Baloncesto Baeza": "Baeza basketball",
+  "Opciones de usuario": "User options",
+  "Abrir menú de usuario": "Open user menu",
+  "Volver atrás": "Go back",
+  "Instalación no disponible": "Venue unavailable",
+  "Festivo o vacaciones": "Public holiday or vacation",
+  "Climatología": "Weather",
+  "Falta de jugadores": "Not enough players",
+  "Partido o torneo": "Game or tournament",
+  "Sin datos en este periodo": "No data for this period",
+  "Todo al día": "All up to date",
+  "No hay sesiones pendientes de registrar en este periodo.": "There are no sessions awaiting attendance in this period.",
+  "Información": "Information",
+  "Presencia": "Presence",
+  "Sin presencia": "Not present",
+  "Mes": "Month",
+  "Nivel": "Level",
+  "Alta": "High",
+  "Media": "Medium",
+  "Baja": "Low",
+  "Sesiones con un entrenador del equipo": "Sessions with a team coach",
+  "Sesiones con un entrenador invitado": "Sessions with a guest coach",
+  "Presencias de jugadores de refuerzo": "Attendance by reinforcement players",
+  "Justificación de ausencias y retrasos": "Absence and lateness explanations",
+  "Justificados": "Justified",
+  "justificados": "justified",
+  "Incidencias justificadas": "Explained incidents",
+  "Sin ausencias ni retrasos registrados": "No recorded absences or late arrivals",
+  "Marcar como leída": "Mark as read",
+  "Marcar todas como leídas": "Mark all as read"
+},
+  originales: new WeakMap(),
+  atributos: new WeakMap(),
+  texto: function(texto) {
+    if (App.preferences.idioma !== 'en') return texto;
+    var trimmed = texto.trim(), translation = this.diccionario[trimmed];
+    if (typeof translation === 'string') return texto.replace(trimmed, translation);
+    var decorated = /^([^A-Za-zÀ-ž0-9]*)(.+?)(\s*[›←→✓✕]*)$/.exec(trimmed);
+    if (decorated && typeof this.diccionario[decorated[2]] === 'string') return texto.replace(trimmed,decorated[1] + this.diccionario[decorated[2]] + decorated[3]);
+    if (trimmed.endsWith(':') && typeof this.diccionario[trimmed.slice(0,-1)] === 'string') return texto.replace(trimmed,this.diccionario[trimmed.slice(0,-1)] + ':');
+    var self = this;
+    if (/\s[·—]\s/.test(trimmed)) return texto.replace(trimmed,trimmed.split(/(\s[·—]\s)/).map(function(part) { return /^\s[·—]\s$/.test(part) ? part : self.texto(part); }).join(''));
+    if (/^Información sobre /.test(trimmed)) return texto.replace(trimmed,'Information about ' + this.texto(trimmed.slice(18)));
+    var labelled = /^(Antelación mediana|Latencia mediana|Puntualidad|Dorsal|Asistencia)(:?\s+)(.+)$/.exec(trimmed);
+    if (labelled) return texto.replace(trimmed,this.texto(labelled[1]) + labelled[2] + labelled[3]);
+    for (var i = 0; i < this.patrones.length; i++) {
+      var patron = this.patrones[i];
+      if (patron[0].test(trimmed)) return texto.replace(trimmed, trimmed.replace(patron[0],patron[1]));
+    }
+    return texto;
+  },
+  patrones: [
+    [/^(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre) (\d{4}) \((\d+)\)$/, function(all,month,year,count) { return App.i18n.texto(month) + ' ' + year + ' (' + count + ')'; }],
+    [/^(\d+) entrenamiento$/, '$1 training session'],
+    [/^Marcar avisos \((\d+)\)$/, 'Apply notices ($1)'],
+    [/^Guardado a las (.+)$/, 'Saved at $1'],
+    [/^Pendiente de guardar$/, 'Awaiting save'],
+    [/^([A-Za-z]+), (\d+) de ([A-Za-z]+)$/, '$1, $2 $3'],
+    [/^([A-Za-z]+) (\d+) de ([A-Za-z]+)$/, '$1 $2 $3'],
+    [/^de (\d+)$/, 'of $1'],
+    [/^(.+) \(yo\)$/, '$1 (me)'],
+    [/^(.+) \(Tú\)$/, '$1 (You)'],
+    [/^([▲▼]?\s*[+−-]?\d+) punto$/, '$1 point'],
+    [/^El usuario "(.+)" ya está en uso\.$/, 'The username "$1" is already in use.'],
+    [/^El email "(.+)" ya está en uso por otro entrenador\.$/, 'The email "$1" is already used by another coach.'],
+    [/^Ya existe un entrenador con el email: (.+)$/, 'A coach already exists with the email: $1'],
+    [/^Vías de contacto de (.+)$/, 'Contact channels for $1'],
+    [/^Posición (.+)$/, 'Position $1'],
+    [/^([0-9]+) años$/, '$1 years old'],
+    [/^([0-9]+) faltas sin justificar$/, '$1 unexplained absences'],
+    [/^(\d+) jugadores activos$/, '$1 active players'],
+    [/^(\d+) jugadores en plantilla activa$/, '$1 players in the active squad'],
+    [/^(\d+) entrenamientos con lista$/, '$1 training sessions with attendance'],
+    [/^(\d+) sesiones con lista$/, '$1 sessions with attendance'],
+    [/^(\d+) ses\.$/, '$1 sessions'],
+    [/^(\d+) registros$/, '$1 records'],
+    [/^(\d+) canceladas?$/, '$1 cancelled'],
+    [/^(\d+) pendientes?$/, '$1 pending'],
+    [/^(\d+) de baja asistencia$/, '$1 with low attendance'],
+    [/^(\d+) retrasos con minutos$/, '$1 late arrivals with minutes recorded'],
+    [/^(\d+) justificaciones$/, '$1 explanations'],
+    [/^(\d+) avisos previos$/, '$1 advance notices'],
+    [/^(\d+) programadas$/, '$1 scheduled'],
+    [/^(\d+) asistidas \/ (\d+) registradas$/, '$1 attended / $2 recorded'],
+    [/^(\d+) \/ (\d+) sesiones$/, '$1 / $2 sessions'],
+    [/^([▲▼]?\s*[+−-]?\d+) puntos$/, '$1 points'],
+    [/^(\d+) puntos bajo el club$/, '$1 points below the club'],
+    [/^(\d+) puntos sobre el club$/, '$1 points above the club'],
+    [/^(\d+) entrenos? sin registrar$/, '$1 unrecorded training session'],
+    [/^Próximo entreno(.*)$/, 'Next training$1'],
+    [/^(\d+) jugadores activos · Cada jugador se cuenta una vez en el club\.$/, '$1 active players · Each player is counted once in the club.'],
+    [/^(\d+) jugadores activos\. Cada jugador se cuenta una vez en el club\.$/, '$1 active players. Each player is counted once in the club.'],
+    [/^Cada jugador se cuenta una vez en el club\.$/, 'Each player is counted once in the club.'],
+    [/^Presencia mensual del entrenador$/, 'Coach monthly presence'],
+    [/^Distribución de asistencia de la plantilla$/, 'Squad attendance distribution'],
+    [/^Contactar · (.+)$/, 'Contact · $1'],
+    [/^Familiar (\d+)$/, 'Family contact $1'],
+    [/^Llamar a (.+)$/, 'Call $1'],
+    [/^Enviar email a (.+)$/, 'Email $1'],
+    [/^WhatsApp de (.+)$/, 'WhatsApp for $1'],
+    [/^(.+): sin teléfono ni email disponible\.$/, '$1: no phone number or email available.'],
+    [/^Nuevo código \(6 letras o números\)$/, 'New code (6 letters or numbers)'],
+    [/^Recordatorio enviado a (\d+) correos?\.?$/, 'Reminder sent to $1 email addresses.'],
+    [/^([a-z]+) (\d{4})$/, function(all,month,year) { var months = {enero:'January',febrero:'February',marzo:'March',abril:'April',mayo:'May',junio:'June',julio:'July',agosto:'August',septiembre:'September',octubre:'October',noviembre:'November',diciembre:'December'}; return months[month] ? months[month] + ' ' + year : all; }],
+    [/^(\d+) sesiones seguidas$/, '$1 consecutive sessions'],
+    [/^(\d+) seguidas$/, '$1 in a row'],
+    [/^Hace (\d+) días?$/, '$1 days ago'],
+    [/^Hace (\d+) horas?$/, '$1 hours ago'],
+    [/^Hace (\d+) min(?:utos)?$/, '$1 minutes ago'],
+    [/^(\d+) sesiones$/, '$1 sessions'],
+    [/^(\d+) entrenamientos$/, '$1 training sessions'],
+    [/^(\d+) jugadores$/, '$1 players'],
+    [/^(\d+) sin registrar$/, '$1 not recorded'],
+    [/^Tu posición: (.+) de (.+)$/, 'Your position: $1 of $2'],
+    [/^Racha actual: (\d+) sesiones seguidas$/, 'Current streak: $1 consecutive sessions'],
+    [/^Datos de (.+) a (.+)$/, 'Data from $1 to $2'],
+    [/^Información sobre (.+)$/, 'Information about $1'],
+    [/^Contacto del jugador$/, 'Player contact'],
+    [/^Aviso enviado: Ausencia$/, 'Notice sent: Absent'],
+    [/^Aviso enviado: Retraso$/, 'Notice sent: Late'],
+    [/^(\d+) de (\d+)$/, '$1 of $2'],
+    [/^(.+) \(activa\)$/, '$1 (active)']
+  ],
+  aplicar: function(root) {
+    if (!root || !root.querySelectorAll) return;
+    var self = this;
+    var protectedValues = new Set();
+    ['jugadores','entrenadores','equipos','sesiones','asistJugadores','programacionesJustificaciones'].forEach(function(key) {
+      (App.cache[key] || []).forEach(function(row) {
+        ['Nombre','Apellidos','Motivo','MotivoCategoria','Observaciones','Notas'].forEach(function(field) { if (row[field]) protectedValues.add(String(row[field]).trim()); });
+        if (row.Nombre && row.Apellidos) protectedValues.add(row.Nombre + ' ' + row.Apellidos);
+      });
+    });
+    function skip(el) { return !el || el.closest('script,style,[data-no-i18n],[translate="no"],.jug-nombre,.li-name,.detalle-nombre,.eq-perfil-nombre,.jug-justif-aviso,#user-badge-name'); }
+    function traducir(node) {
+      if (skip(node.parentElement) || node.parentElement.closest('textarea')) return;
+      var current = node.nodeValue, saved = self.originales.get(node);
+      if (!saved || current !== saved.output) saved = {source:current};
+      if (protectedValues.has(saved.source.trim())) return;
+      var output = self.texto(saved.source);
+      saved.output = output; self.originales.set(node,saved);
+      if (output !== current) node.nodeValue = output;
+    }
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) traducir(walker.currentNode);
+    var elements = [root].concat(Array.from(root.querySelectorAll('[placeholder],[aria-label],[title],[alt]')));
+    elements.forEach(function(el) {
+      if (skip(el)) return;
+      var saved = self.atributos.get(el) || {};
+      ['placeholder','aria-label','title','alt'].forEach(function(attr) {
+        if (!el.hasAttribute(attr)) return;
+        var value = el.getAttribute(attr), old = saved[attr];
+        if (!old || value !== old.output) old = {source:value};
+        old.output = self.texto(old.source); saved[attr] = old;
+        if (value !== old.output) el.setAttribute(attr,old.output);
+      });
+      self.atributos.set(el,saved);
+    });
+  },
+  iniciar: function() {
+    var self = this;
+    document.title = App.preferences.idioma === 'en' ? 'CB Baeza — Attendance' : 'CB Baeza — Asistencia';
+    this.observador = new MutationObserver(function(records) {
+      self.observador.disconnect();
+      var roots = new Set();
+      records.forEach(function(r) { roots.add(r.target.nodeType === 3 ? r.target.parentElement : r.target); });
+      roots.forEach(function(root) { self.aplicar(root); });
+      self.observar();
+    });
+    this.aplicar(document.body); this.observar();
+  },
+  observar: function() { this.observador.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title','alt']}); }
+};
+document.addEventListener('DOMContentLoaded',function() { App.i18n.iniciar(); });
 
 </script>

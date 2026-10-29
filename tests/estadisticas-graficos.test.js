@@ -181,8 +181,8 @@ test('las barras de un solo segmento no repiten etiquetas interiores y las peque
   const { context } = cliente();
   const unico = context._statsMensual([{ mes: '2026-10', P: 2, R: 0, A: 0, base: 2 }]);
   assert.match(unico, /stats-column-value">2<\/span>/);
-  assert.doesNotMatch(unico, /color:#fff">2<\/span>/);
+  assert.doesNotMatch(unico, /;color:[^"]+">2<\/span>/);
   const mixto = context._statsMensual([{ mes: '2026-10', P: 20, R: 1, A: 5, base: 26 }]);
-  assert.match(mixto, /color:#fff">20<\/span>/);
-  assert.doesNotMatch(mixto, /color:#29202F">1<\/span>/);
+  assert.match(mixto, /;color:[^"]+">20<\/span>/);
+  assert.doesNotMatch(mixto, /;color:[^"]+">1<\/span>/);
 });

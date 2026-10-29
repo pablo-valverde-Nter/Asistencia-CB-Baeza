@@ -16,6 +16,7 @@ const script = code => '<script>' + code.replace(/<\/script/gi, '<\\/script') + 
 
 // Runs before the app so startup exceptions and its first server call are captured.
 function installShim(fixture, ahora) {
+  const preferenceParams = new URLSearchParams(location.search);
   const errores = window.__errors = [];
   window.__calls = [];
   window.__pending = 0;
@@ -41,6 +42,7 @@ function installShim(fixture, ahora) {
   window.__ahora = ahora;
   window.__role = new URLSearchParams(location.search).get('role') || 'admin';
   localStorage.clear();
+  localStorage.setItem('cb_baeza_prefs', JSON.stringify({ idioma:preferenceParams.get('lang') || 'es', tema:preferenceParams.get('theme') || 'clasico' }));
   localStorage.setItem('cb_baeza_auth', JSON.stringify(window.__role === 'jugador'
     ? { tipo: 'jugador', usuario: 'bruno', pin: '1234' }
     : { tipo: 'entrenador', email: 'luis@example.test', pin: '1234' }));
@@ -94,6 +96,15 @@ function installRunner(backend) {
           setTimeout(() => {
             try {
               if (name === 'logCliente') { if (success) success(undefined, user); return; }
+              const accountAllowed = ['actualizarFotoPerfil','actualizarMiPerfil','cambiarCredenciales','cambiarCodigoSeguridad','enviarRecordatorioCredenciales'];
+              if (accountAllowed.includes(String(name)) && new URLSearchParams(location.search).get('state')?.startsWith('cuenta-')) {
+                (window.__accountCalls ||= []).push(String(name));
+                const result = name === 'actualizarFotoPerfil' ? { success:true, fotoURL:args[1] }
+                  : name === 'cambiarCredenciales' ? { success:true, auth:{ ...args[0], ...(args[1].usuarioNuevo ? {usuario:args[1].usuarioNuevo} : {}), ...(args[1].pinNuevo ? {pin:args[1].pinNuevo} : {}) } }
+                  : name === 'actualizarMiPerfil' ? {success:true, actualizado:true} : {success:true, destinatarios:1};
+                if (success) success(result,user);
+                return;
+              }
               if (name !== 'cargarDatos' && name !== 'getEstadisticas' && name !== 'getEstadisticasLote') {
                 window.__calls.push({ funcion: String(name), argumentos: args });
                 throw new Error('Llamada no permitida en smoke: ' + String(name));
@@ -170,6 +181,30 @@ function driveViews() {
           if (!element.innerText.trim()) throw new Error('Vista vacía: ' + view);
           result.info[view] = element.querySelectorAll('.stats-info-button').length;
           result.rachas[view] = Boolean(element.querySelector('.stats-streak .stats-streak-count'));
+          if (view === 'equipos') {
+            const badge = element.querySelector('.btn-eq-asist .eq-pending-badge');
+            if (!badge || badge.textContent !== '!' || !/1 entreno sin registrar|1 unrecorded training session/.test(badge.getAttribute('aria-label'))) throw new Error('Inicio sin indicador compacto de entrenamientos pendientes');
+            if (/Último entreno|sin registrar/.test(element.innerText)) throw new Error('Inicio muestra detalles antiguos o pendientes fuera del botón');
+            if (!element.querySelector('.eq-home-bar') || !/en plantilla|Próximo entreno|in the squad|Next training/.test(element.innerText)) throw new Error('Inicio sin nuevas métricas de equipo');
+            if (element.querySelector('.eq-notifications, .eq-notifications-count')) throw new Error('Inicio duplica las notificaciones de pendientes fuera del botón de asistencia');
+          }
+          if (['perfil-jugador','mis-stats','jugador-detalle'].includes(view)) {
+            const streak = element.querySelector('.stats-streak');
+            if (!streak || streak.getBoundingClientRect().height > 90 || !/sesiones seguidas|consecutive sessions/.test(streak.innerText) || !/Récord:|Record:/.test(streak.innerText)) throw new Error('Racha ausente o no compacta');
+          }
+          if (view === 'informes') {
+            const contact = App.stats.detalle('club').data.datos.contactabilidad;
+            const chart = element.querySelector('.contactability');
+            if (!chart || chart.querySelectorAll('.contact-team').length !== contact.porEquipo.length || chart.querySelectorAll('.contact-missing-row').length !== contact.sinContactoLista.length) throw new Error('Contactabilidad incompleta');
+            if (chart.querySelectorAll('[data-stats-tip]').length < 3 || chart.querySelectorAll('.stats-info-button').length < 4) throw new Error('Contactabilidad sin ayudas ni detalles interactivos');
+            const sum = _statsContactoSegmentos(contact).reduce((n,s) => n+s.n,0);
+            if (sum !== contact.jugadoresActivos) throw new Error('Categorías de contacto no cubren la plantilla sin solaparse');
+            const button = chart.querySelector('.contact-missing-row button');
+            if (!button) throw new Error('Fixture sin jugador pendiente de contacto');
+            button.click();
+            if (App.state.currentView !== 'jugador-detalle' || !contact.sinContactoLista.some(j => j.jugadorId === App.state.detalleJugadorId)) throw new Error('La lista de contacto no abre la ficha del jugador');
+            App.navigate('informes',{},false);
+          }
           if (/\bbase\b|\bpp\b|P\/A\/R|computables/i.test(element.textContent)) throw new Error('Texto técnico visible en estadísticas de ' + view);
           if (window.__role === 'admin' && view === 'informes') {
             const descargar = _csvDescargar;
@@ -201,6 +236,14 @@ function driveViews() {
         await settle();
       }
       const state = new URLSearchParams(location.search).get('state');
+      const preferenceView = new URLSearchParams(location.search).get('prefsView');
+      if (['ajustes','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'].includes(preferenceView)) {
+        App.state.equipoSesionesId = 'equipo-cadete';
+        App.state._equipoNombre = App.cache.getEquipoById('equipo-cadete').Nombre;
+        App.state.sesionId = App.cache.sesiones.find(s => s.ID_Equipo === 'equipo-cadete' && !s.Cancelada).ID;
+        App.navigate(preferenceView,{},false);
+        await settle();
+      }
       const active = document.querySelector('.view.active');
       if (state === 'info') {
         const button = active.querySelector('.stats-info-button');
@@ -232,6 +275,38 @@ function driveViews() {
         section.closest('.stats-block').scrollIntoView({ block: 'start' });
       }
       if (!['tooltip','mensual','cobertura','pendientes'].includes(state)) window.scrollTo(0, 0);
+      if (state === 'contactabilidad') {
+        const chart = active.querySelector('.contactability');
+        if (!chart) throw new Error('No existe bloque de contactabilidad');
+        chart.closest('.stats-block').scrollIntoView({ block:'start' });
+      }
+      if (state?.startsWith('cuenta-')) {
+        const accountState = state.slice(7);
+        if (accountState === 'menu') {
+          App.toggleUserMenu();
+          const menu = document.getElementById('user-menu');
+          if (menu.classList.contains('hidden') || menu.querySelectorAll('[role="menuitem"]').length !== 4) throw new Error('Menú de cuenta incompleto');
+          if (document.activeElement !== menu.querySelector('button')) throw new Error('El menú no recibe el foco');
+          document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+          if (document.activeElement !== document.getElementById('user-badge')) throw new Error('Escape no devuelve el foco');
+          App.toggleUserMenu();
+        } else {
+          const view = accountState === 'avatar' ? 'perfil-usuario' : accountState;
+          App.navigate(view,{},false);
+          if (!document.getElementById('view-'+view)?.classList.contains('active')) throw new Error('Vista de cuenta no disponible: '+view);
+          if (accountState === 'avatar') {
+            await App.views['perfil-usuario'].guardarFoto('avatar:balon');
+            await settle();
+            App.views['perfil-usuario'].elegirFoto();
+            if (document.querySelectorAll('.avatar-choice').length < 12) throw new Error('Faltan avatares de club');
+          }
+          if (accountState === 'perfil-usuario' && window.__role === 'jugador' && document.querySelectorAll('.account-check input').length !== 2) throw new Error('Faltan preferencias familiares');
+          if (accountState === 'seguridad' && !document.getElementById('seg-pin-actual')) throw new Error('Falta el PIN actual');
+          if (accountState === 'politicas' && !document.getElementById('politica-cookies')) throw new Error('Falta política de cookies');
+        }
+        result.cuenta = {estado:accountState,llamadas:window.__accountCalls || []};
+        window.scrollTo(0,0);
+      }
       if (state) await new Promise(resolve => setTimeout(resolve, 350));
     } catch (error) { result.errores.push(error.stack || error.message); }
     publish();
@@ -299,6 +374,27 @@ async function captureMobile(browser, url, output, role, screenshot) {
     }
     const { result: smoke } = await send('Runtime.evaluate', { expression: 'document.getElementById("smoke-result").textContent', returnByValue: true }, sessionId);
     const report = JSON.parse(smoke.value);
+    await writeFile(screenshot.replace(/\.png$/, '.json'), JSON.stringify(report,null,2));
+    if (new URL(url).searchParams.get('lang') === 'en') {
+      const { result: audit } = await send('Runtime.evaluate', { expression: `JSON.stringify((() => {
+        const words = /\\b(?:asistencia|puntualidad|sesiones|entrenamientos|jugadores|entrenadores|ausencias|retrasos|guardar|cancelar|ajustes|equipo|equipos|racha|seguidas|temporada|contactabilidad|correo|teléfono|registrar|pendientes|programadas|seleccionar|idioma|apariencia|privacidad|seguridad|cargando|repetir|espacio|elige|elegir|datos|significa|suficientes|récord|semanas|puntos|personaliza|imagen|nacimiento|apellidos|contraseña|credenciales|recordatorio|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|nuevo|nueva|añadir|seleccionado|vacío|usará|categoría|próximo|próxima)\\b/i;
+        const residual = [];
+        const walker = document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+        while(walker.nextNode()) {
+          const node = walker.currentNode, parent = node.parentElement;
+          if (!parent || parent.closest('script,style,[data-no-i18n],[translate="no"],#smoke-result') || !parent.getClientRects().length) continue;
+          const text = node.nodeValue.trim();
+          if (text && words.test(text)) residual.push(text);
+        }
+        return [...new Set(residual)];
+      })())`, returnByValue:true }, sessionId);
+      const residual = JSON.parse(audit.value);
+      const { result: preferences } = await send('Runtime.evaluate', { expression:'JSON.stringify({theme:document.documentElement.dataset.theme,language:document.documentElement.lang})', returnByValue:true },sessionId);
+      const applied = JSON.parse(preferences.value), expected = new URL(url).searchParams;
+      if (applied.theme !== expected.get('theme') || applied.language !== expected.get('lang')) throw new Error('Preferencias no aplicadas: ' + preferences.value);
+      await writeFile(screenshot.replace(/\.png$/, '-es-residual.json'), JSON.stringify(residual,null,2));
+      console.log('EN Spanish-only residuals ' + role + ': ' + JSON.stringify(residual));
+    }
     if (report.errores.length) throw new Error(report.errores.join('\n'));
     const { result } = await send('Runtime.evaluate', { expression: 'JSON.stringify({width:innerWidth,height:innerHeight})', returnByValue: true }, sessionId);
     const viewport = JSON.parse(result.value);
@@ -386,6 +482,8 @@ async function main() {
       }
       const states = [['info', role === 'admin' ? 'informes' : 'mis-stats'], ['temporadas', role === 'admin' ? 'informes' : 'mis-stats'], ['tooltip', role === 'admin' ? 'equipo-detalle' : 'mis-stats'], ['mensual', role === 'admin' ? 'equipo-detalle' : 'mis-stats']];
       if (role === 'admin') states.push(['contacto','jugador-detalle'],['cobertura','equipo-detalle'],['pendientes','equipo-detalle']);
+      if (role === 'admin') states.push(['contactabilidad','informes']);
+      for (const state of ['menu','perfil-usuario','avatar','seguridad','politicas']) states.push(['cuenta-'+state,role === 'admin' ? 'equipos' : 'perfil-jugador']);
       for (const [state, view] of states) {
         url.searchParams.set('final', view);
         url.searchParams.set('state', state);
@@ -395,6 +493,29 @@ async function main() {
         console.log('Captura ' + role + '/' + state + ' (412x915): ' + screenshotState);
       }
       url.searchParams.delete('state');
+      for (const theme of ['noche','medianoche']) {
+        for (const view of role === 'admin' ? ['equipos','equipos-admin','jugadores-admin','entrenadores-admin','equipo-detalle','jugador-detalle','entrenador-detalle','informes','ajustes','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'] : ['perfil-jugador','mis-stats','mi-equipo','ajustes']) {
+          const preferenceUrl = new URL(url.href);
+          preferenceUrl.searchParams.set('theme',theme);
+          preferenceUrl.searchParams.set('lang','en');
+          preferenceUrl.searchParams.set('final',view);
+          if (['ajustes','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'].includes(view)) preferenceUrl.searchParams.set('prefsView',view);
+          const name = role + '-' + theme + '-en-' + view;
+          await captureMobile(browser,preferenceUrl.href,output,name,join(output,name + '-412x915.png'));
+          check(name + ': captura de tema e idioma',true);
+        }
+        for (const state of ['cuenta-menu','cuenta-perfil-usuario','cuenta-avatar','cuenta-seguridad','cuenta-politicas','info','temporadas','contactabilidad']) {
+          if (state === 'contactabilidad' && role !== 'admin') continue;
+          const preferenceUrl = new URL(url.href);
+          preferenceUrl.searchParams.set('theme',theme);
+          preferenceUrl.searchParams.set('lang','en');
+          preferenceUrl.searchParams.set('final',state.startsWith('cuenta-') ? (role === 'admin' ? 'equipos' : 'perfil-jugador') : (role === 'admin' ? 'informes' : 'mis-stats'));
+          preferenceUrl.searchParams.set('state',state);
+          const name = role + '-' + theme + '-en-' + state;
+          await captureMobile(browser,preferenceUrl.href,output,name,join(output,name + '-412x915.png'));
+          check(name + ': captura de tema e idioma',true);
+        }
+      }
     } catch (error) {
       check(role + ': ejecución del harness', false);
       console.log('  ERROR ' + role + ': ' + error.message);
@@ -425,6 +546,8 @@ async function main() {
   const motives = [...new Set(datos.asistJugadores.filter(row => row.ID_Jugador !== 'jugador-bruno')
     .flatMap(row => [row.MotivoCategoria, row.Motivo]).filter(Boolean))];
   check('mi-equipo: sin motivos ajenos', ranking.trim() && motives.every(motive => !ranking.includes(motive)));
+  check('Inicio: nuevo diseño sin última sesión', /en plantilla/.test(admin.equipos || '') && !/Último entreno/.test(admin.equipos || ''));
+  check('Informes: contacto global, por equipo y lista accionable', /localizables/.test(admin.informes || '') && /Vías de contacto por equipo/.test(admin.informes || '') && /Jugadores sin ningún contacto/.test(admin.informes || ''));
   await writeFile(join(output, 'report.json'), JSON.stringify({ checks, resultados: results }, null, 2));
   for (const item of checks) console.log((item.ok ? 'PASS ' : 'FAIL ') + item.nombre);
   const failures = checks.filter(item => !item.ok).length;

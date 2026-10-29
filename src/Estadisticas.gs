@@ -498,7 +498,8 @@ const Estadisticas = {
   club_(x) {
     const equipos = [];
     const categorias = new Map();
-    const activos = new Set();
+    const activos = new Map();
+    const porEquipo = [];
     for (const [id, equipo] of x.equiposPeriodo) {
       const e = this.detalleEquipo_(x, id);
       equipos.push({ id, nombre: equipo.Nombre, categoria: equipo.Categoria, modalidad: equipo.Modalidad,
@@ -507,17 +508,48 @@ const Estadisticas = {
       if (!categorias.has(equipo.Categoria)) categorias.set(equipo.Categoria, []);
       const registros = categorias.get(equipo.Categoria);
       for (const r of x.filasEquipo.get(id) || []) registros.push(r);
-      for (const rel of x.jugadoresEquipo.get(id) || []) if (this.verdadero_(rel.Activo)) activos.add(rel.ID_Jugador);
+      const plantilla = new Set();
+      for (const rel of x.jugadoresEquipo.get(id) || []) if (this.verdadero_(rel.Activo)) plantilla.add(rel.ID_Jugador);
+      for (const jugadorId of plantilla) if (!activos.has(jugadorId)) activos.set(jugadorId, equipo.Nombre);
+      porEquipo.push({ equipoId: id, nombre: equipo.Nombre, plantilla });
     }
-    let conEmailFamiliar = 0;
-    let conAvisosActivos = 0;
-    for (const id of activos) {
+    const contacto = new Map();
+    for (const id of activos.keys()) {
       const j = x.jugadores.get(id) || {};
-      const email1 = !!String(j.EmailPadre1 || '').trim();
-      const email2 = !!String(j.EmailPadre2 || '').trim();
-      if (email1 || email2) conEmailFamiliar++;
-      if ((email1 && j.NotificarAusenciasPadre1 !== false) || (email2 && j.NotificarAusenciasPadre2 !== false)) conAvisosActivos++;
+      const texto = v => !!String(v || '').trim();
+      const email1 = texto(j.EmailPadre1);
+      const email2 = texto(j.EmailPadre2);
+      const emailFamiliar = email1 || email2;
+      const telefono = texto(j.Telefono) || texto(j.TelefonoPadre1) || texto(j.TelefonoPadre2);
+      const emailPersonal = texto(j.Email);
+      contacto.set(id, { emailFamiliar, telefono,
+        avisos: (email1 && j.NotificarAusenciasPadre1 !== false) || (email2 && j.NotificarAusenciasPadre2 !== false),
+        soloTelefono: !emailFamiliar && telefono,
+        soloEmailPersonal: !emailFamiliar && !telefono && emailPersonal,
+        sinContacto: !emailFamiliar && !telefono && !emailPersonal });
     }
+    const resumirContacto = ids => {
+      const r = { activos: 0, conEmailFamiliar: 0, conAvisosActivos: 0, conTelefono: 0, soloTelefono: 0, soloEmailPersonal: 0, sinContacto: 0 };
+      for (const id of ids) {
+        const c = contacto.get(id);
+        r.activos++;
+        if (c.emailFamiliar) r.conEmailFamiliar++;
+        if (c.avisos) r.conAvisosActivos++;
+        if (c.telefono) r.conTelefono++;
+        if (c.soloTelefono) r.soloTelefono++;
+        if (c.soloEmailPersonal) r.soloEmailPersonal++;
+        if (c.sinContacto) r.sinContacto++;
+      }
+      return r;
+    };
+    const total = resumirContacto(activos.keys());
+    const sinContactoLista = [];
+    for (const [id, equipoNombre] of activos) {
+      if (!contacto.get(id).sinContacto) continue;
+      const j = x.jugadores.get(id) || {};
+      sinContactoLista.push({ jugadorId: id, nombre: j.Nombre || '', apellidos: j.Apellidos || '', equipoNombre });
+    }
+    sinContactoLista.sort((a, b) => a.apellidos.localeCompare(b.apellidos));
     const porCategoria = [];
     for (const [categoria, filas] of categorias) {
       const c = this.conteo_(filas);
@@ -526,7 +558,10 @@ const Estadisticas = {
     const agrupaciones = this.agrupaciones_(x.filas);
     return { ...this.clubResumen_(x), equipos, porCategoria, serieSemanal: agrupaciones.serieSemanal, serieMensual: agrupaciones.serieMensual,
       motivos: this.justificaciones_(x.filas).motivos, cancelaciones: this.cancelaciones_(x.canceladas),
-      contactabilidad: { jugadoresActivos: activos.size, conEmailFamiliar, conAvisosActivos } };
+      contactabilidad: { jugadoresActivos: total.activos, conEmailFamiliar: total.conEmailFamiliar, conAvisosActivos: total.conAvisosActivos,
+        conTelefono: total.conTelefono, soloTelefono: total.soloTelefono, soloEmailPersonal: total.soloEmailPersonal, sinContacto: total.sinContacto,
+        porEquipo: porEquipo.map(e => ({ equipoId: e.equipoId, nombre: e.nombre, ...resumirContacto(e.plantilla) })),
+        sinContactoLista } };
   },
   logros_(jugador, mejor) {
     if (jugador.base < CONFIG.ESTADISTICAS.MIN_BASE_RANKING) return [];

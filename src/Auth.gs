@@ -84,13 +84,24 @@ const Auth = {
       .find(row => String(row.Email || '').toLowerCase().trim() === normalizedEmail) || null;
   },
 
+  /** Identidad privada para operaciones sobre la propia cuenta. */
+  getCuentaActual_(auth) {
+    const validacion = Auth.validate(auth);
+    if (!validacion.success) throw new Error(validacion.error);
+    const rol = Auth.getRol(auth);
+    const jugador = rol === CONFIG.ROLES.JUGADOR ? Auth.getJugadorActual(auth) : null;
+    const entrenador = jugador ? null : Auth.getEntrenadorActual(auth);
+    const administrador = rol === CONFIG.ROLES.ADMIN ? Auth._getAdministradorByEmail_(auth.email) : null;
+    return { rol, jugador, entrenador, administrador };
+  },
+
   /** Devuelve el registro de Entrenadores del usuario o null si es jugador. */
   getEntrenadorActual(auth) {
     const tipo = String(auth && auth.tipo || 'entrenador').toLowerCase();
     if (tipo === 'jugador') return null;
     const email = String(auth.email || '').toLowerCase().trim();
-    const rows  = findWhere(CONFIG.SHEETS.ENTRENADORES, 'Email', email);
-    return rows.length > 0 ? rows[0] : null;
+    return getSheetData(CONFIG.SHEETS.ENTRENADORES)
+      .find(row => String(row.Email || '').toLowerCase().trim() === email) || null;
   },
 
   /** Devuelve el registro de Jugadores del usuario autenticado como jugador o null. */

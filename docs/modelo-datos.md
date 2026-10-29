@@ -58,7 +58,7 @@ Registro global de jugadores del club, independiente de equipos o temporadas.
 | `FechaNac` | String (YYYY-MM-DD) | Fecha de nacimiento |
 | `Telefono` | String | Teléfono de contacto (o de los padres en menores) |
 | `Email` | String | Email de contacto |
-| `FotoURL` | String | URL de Google Drive con la foto |
+| `FotoURL` | String | Foto anterior (URL), avatar `avatar:<slug>` o JPEG `data:image/jpeg;base64,...` (máximo 16000 caracteres); vacío elimina la foto |
 | `Dorsal` | Number | Número de camiseta (puede variar por equipo, aquí es referencia) |
 
 ---
@@ -93,8 +93,17 @@ Registro global de entrenadores. Identificados por su email de Google.
 | `Apellidos` | String | Apellidos |
 | `Email` | String | **Email de Google** — clave de autenticación |
 | `Telefono` | String | Teléfono de contacto |
+| `FotoURL` | String | Avatar o JPEG de perfil, con el mismo formato y límite que `Jugadores.FotoURL`; aplicar `supabase/perfil.sql` en instalaciones existentes |
 
-**Reglas:** El email debe coincidir con `Session.getActiveUser().getEmail()` para el control de acceso. No hay distinción de roles entre entrenadores.
+**Reglas:** El acceso usa email y PIN, sin depender de la sesión Google. Los administradores se validan en `Administradores`, no mediante `Entrenadores.EsAdmin`. No hay distinción de roles entre entrenadores.
+
+### Cuenta propia
+
+- `actualizarFotoPerfil` modifica la foto propia; `actualizarMiPerfil` conserva la verificación familiar de jugadores y limita al personal a nombre, apellidos y teléfono. Un administrador sin ficha de entrenador no puede editar su perfil ni su foto.
+- `cambiarCredenciales` exige el PIN actual y devuelve las nuevas credenciales de sesión. El PIN administrativo se modifica en `Administradores`; el del entrenador en `Entrenadores`. El usuario de jugador sigue siendo único.
+- `cambiarCodigoSeguridad` exige el código familiar anterior y guarda uno de seis letras o números en mayúsculas.
+- `enviarRecordatorioCredenciales` permite un envío por cuenta cada diez minutos. Los correos familiares reciben usuario, PIN y código; el correo propio del jugador solo recibe usuario y PIN. Si el mismo correo figura en ambos, se envía la versión sin código. El personal recibe su PIN de acceso. Los mensajes no se registran en logs.
+- `actualizarEntrenador` valida email y PIN antes de autorizar; los no administradores solo pueden modificar su nombre, apellidos y teléfono, nunca Email, PIN ni EsAdmin.
 
 ---
 
@@ -193,3 +202,4 @@ Temporadas ──< Equipos ──< Horarios
 - **Borrado**: nunca se borran jugadores o entrenadores del registro global; se desactivan con `Activo = false`.
 - **Generación de sesiones**: la función `generarSesionesSemana(equipoId)` crea una sesión por cada fila de `Horarios` del equipo para la semana actual, si no existe ya.
 - **Control de acceso**: `Auth.gs` valida entrenadores contra `Entrenadores.Email` y administradores activos contra la tabla privada `Administradores`.
+- **Preferencias del dispositivo**: `localStorage.cb_baeza_prefs` guarda `{ idioma: 'es' | 'en', tema: 'clasico' | 'lavanda' | 'noche' | 'medianoche' | 'oro' }`. No se envían a Apps Script ni a Supabase. Se aplican antes del primer pintado; los cambios de idioma y tema son inmediatos y solo afectan a ese navegador. La traducción mantiene los nombres y los motivos escritos por los usuarios sin modificar; los contenedores de datos pueden excluirse con `data-no-i18n` o `translate="no"`.

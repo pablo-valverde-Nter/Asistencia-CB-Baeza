@@ -22,7 +22,7 @@ const SCHEMA = {
     'ID', 'ID_Jugador', 'ID_Equipo', 'Tipo', 'Activo', 'FechaAlta', 'FechaBaja'
   ],
   Entrenadores: [
-    'ID', 'Nombre', 'Apellidos', 'Email', 'Telefono', 'PIN', 'EsAdmin'
+    'ID', 'Nombre', 'Apellidos', 'Email', 'Telefono', 'FotoURL', 'PIN', 'EsAdmin'
   ],
   Administradores: [
     'ID', 'Email', 'PIN', 'Activo'
