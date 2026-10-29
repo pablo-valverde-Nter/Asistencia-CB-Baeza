@@ -404,25 +404,33 @@ function clienteCaptura(documentOverrides = {}) {
   return vm.runInContext('App', context);
 }
 
-test('el preaviso no registra un estado y marcar avisos conserva su justificacion', () => {
-  const chip = {};
-  const card = { dataset: { id: 'member', estado: '', preaviso: 'A', justif: 'true', tipoJustif: 'Ausencia' },
-    querySelector(selector) { return selector === '.estado-chip' ? chip : null; } };
-  const boton = {};
-  const app = clienteCaptura({ querySelectorAll: selector => selector === '#sesion-jugs .jug-card' ? [card] : [],
-    getElementById: () => boton });
-  app.views.sesion._removed = { jugadores: new Set(), entrenadores: new Set() };
-  const registro = { Estado: null, TieneJustificacion: true, TipoJustificacion: 'Ausencia' };
-  assert.equal(app.cache.getEstadoAsistencia(registro), 'A');
-  assert.equal(app.cache.getEstadoRegistrado(registro), null);
-  assert.equal(app.views.sesion._collectAttendance().jugadores[0].estado, null);
-  app.views.sesion.marcarAvisos();
-  assert.equal(app.views.sesion._collectAttendance().jugadores[0].estado, 'A');
-  assert.equal(card.className, 'jug-card A');
-  assert.equal(card.dataset.justif, 'true');
-  assert.equal(card.dataset.justifCleared, undefined);
-  assert.equal(boton.hidden, true);
-  assert.equal(app.state._formIsDirty, true);
+test('el formulario prerrellena A y R desde el aviso sin registrar hasta guardar', () => {
+  const elements = new Map();
+  let cards = [];
+  const app = clienteCaptura({
+    querySelectorAll: selector => selector === '#sesion-jugs .jug-card' ? cards : [],
+    getElementById(id) { if (!elements.has(id)) elements.set(id, { style: {} }); return elements.get(id); },
+  });
+  app.cache.sesiones = [{ ID: 's1', ID_Equipo: 'team' }];
+  app.cache.jugadores = [{ ID: 'absence' }, { ID: 'late' }];
+  app.cache.jugadoresEquipos = app.cache.jugadores.map(j => ({ ID_Jugador: j.ID, ID_Equipo: 'team', Activo: true }));
+  app.cache.asistJugadores = [
+    { ID_Sesion: 's1', ID_Jugador: 'absence', TieneJustificacion: true, TipoJustificacion: 'Ausencia', MotivoCategoria: 'Consulta' },
+    { ID_Sesion: 's1', ID_Jugador: 'late', TieneJustificacion: true, TipoJustificacion: 'Retraso' },
+  ];
+  const vista = app.views.sesion._buildFromCache(app.cache.sesiones[0]);
+  assert.deepEqual(Array.from(vista.jugadores, j => j.estado), ['A', 'R']);
+  app.views.sesion._bindSwipeRows = () => {};
+  app.views.sesion._startAutoSave = () => {};
+  app.views.sesion._render(vista);
+  const html = elements.get('sesion-jugs').innerHTML;
+  assert.match(html, /Avisó: Ausencia · Consulta/);
+  assert.match(html, /Avisó: Retraso/);
+  cards = Array.from(html.matchAll(/data-id="([^"]+)" data-estado="([^"]+)"/g), match => ({ dataset: { id: match[1], estado: match[2] } }));
+  assert.deepEqual(Array.from(app.views.sesion._collectAttendance().jugadores, j => j.estado), ['A', 'R']);
+  assert.equal(app.cache.getEstadoRegistrado(app.cache.asistJugadores[0]), null);
+  assert.equal(app.cache.sesiones[0].AsistenciaGuardada, undefined);
+  assert.equal(app.state._formIsDirty, false);
 });
 
 test('la cache mantiene el aviso sin estado y guarda minutos y primer registro sin sobrescribirlo', () => {
@@ -434,7 +442,7 @@ test('la cache mantiene el aviso sin estado y guarda minutos y primer registro s
     TipoJustificacion: 'Retraso', MotivoCategoria: 'Consulta' };
   app.cache.asistJugadores = [aviso];
   const vista = app.views.sesion._buildFromCache(app.cache.sesiones[0]);
-  assert.equal(vista.jugadores[0].estado, null);
+  assert.equal(vista.jugadores[0].estado, 'R');
   assert.equal(vista.jugadores[0].preaviso, 'R');
   app.views.sesion._applyAttendanceCache('s1', [{ jugadorId: 'member', estado: null }], [], [], [], '2026-10-27 21:00');
   assert.equal(app.cache.asistJugadores[0], aviso);
@@ -445,22 +453,29 @@ test('la cache mantiene el aviso sin estado y guarda minutos y primer registro s
   assert.equal(app.cache.asistJugadores[0].MinutosRetraso, null);
 });
 
-test('cambiar un preaviso no pide confirmar y salir de retraso borra sus minutos', () => {
+test('cambiar un aviso prerrellenado pide confirmar y solo al confirmar limpia la justificacion', () => {
   const minutos = { value: '15' };
-  const card = { dataset: { id: 'member', estado: '', preaviso: 'R', justif: 'true' },
-    querySelector(selector) { return selector === '.retraso-min' ? minutos : selector === '.estado-chip' ? {} : null; } };
+  let etiquetasEliminadas = 0;
+  const card = { dataset: { id: 'member', estado: 'R', preaviso: 'R', justif: 'true', min: '15', tipoJustif: 'Retraso' },
+    querySelector(selector) { return selector === '.retraso-min' ? minutos : selector === '.estado-chip' ? {} : { remove() { etiquetasEliminadas++; } }; } };
   const app = clienteCaptura();
-  app.openModal = () => assert.fail('El preaviso no debe pedir confirmacion');
+  let titulo;
+  app.openModal = title => { titulo = title; };
   app.views.sesion.toggleEstado(card);
-  assert.equal(card.dataset.estado, 'P');
+  assert.equal(titulo, 'Asistencia justificada');
+  assert.equal(card.dataset.estado, 'R');
   assert.equal(card.dataset.justif, 'true');
   assert.equal(card.dataset.justifCleared, undefined);
-  card.dataset.estado = 'R';
-  card.dataset.min = '15';
-  app.views.sesion._doToggleEstado(card);
+  assert.equal(app.state._formIsDirty, false);
+  app.state._pendingConfirmSave();
+  assert.equal(card.dataset.estado, 'P');
   assert.equal(card.dataset.min, undefined);
   assert.equal(minutos.value, '');
+  assert.equal(card.dataset.justif, 'false');
   assert.equal(card.dataset.justifCleared, 'true');
+  assert.equal(card.dataset.preaviso, undefined);
+  assert.equal(etiquetasEliminadas, 2);
+  assert.equal(app.state._formIsDirty, true);
 });
 
 test('la sesion cancelada abre un modal sin navegar y no cuenta avisos ni faltas', () => {

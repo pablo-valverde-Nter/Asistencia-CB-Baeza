@@ -14,7 +14,7 @@ function cliente() {
   app.state.auth = {}; app.state.rol = 'admin'; app.state.esAdmin = true; app.state.currentView = 'equipos';
   let renders = 0;
   app.navigate = () => renders++;
-  return { app, calls, frames, renderCount: () => renders };
+  return { app, calls, frames, context, renderCount: () => renders };
 }
 const filtro = { temporadaId: 't1', periodo: 'temporada' };
 const resumen = { entidad: 'resumen', filtro, datos: { equipos: { e1: {}, e2: {} } } };
@@ -94,4 +94,45 @@ test('los lotes respetan el máximo de 60 consultas y los errores conservan dato
   assert.equal(entrada.estado, 'ok');
   assert.equal(entrada.refreshing, false);
   assert.equal(entrada.error, 'Sin conexión');
+});
+
+test('rachas: seis niveles, brasa vacía y mejor racha accesible', () => {
+  const { context } = cliente();
+  vm.runInContext('_statsInfoBoton = titulo => "<button>Info " + titulo + "</button>"', context);
+  for (const [n, nivel] of [[0, 0], [1, 1], [2, 1], [3, 2], [5, 2], [6, 3], [9, 3], [10, 4], [14, 4], [15, 5], [30, 5]]) {
+    context.d = { rachaActual: n, mejorRacha: 31 };
+    const hero = vm.runInContext('_statsRacha(d)', context);
+    const mini = vm.runInContext('_statsMiniRacha(d.rachaActual)', context);
+    assert.match(hero, new RegExp('stats-streak-tier-' + nivel));
+    assert.match(mini, new RegExp('stats-streak-tier-' + nivel));
+    assert.match(hero, new RegExp('stats-streak-count">' + n + '<span>sesiones seguidas'));
+    assert.match(hero, /Mejor racha: <strong>31<\/strong>/);
+    assert.match(hero, /<details[^>]*>[\s\S]*Racha actual[\s\S]*Mejor racha/);
+    assert.match(hero, /role="img" aria-label="/);
+    assert.match(mini, new RegExp('aria-label="Racha actual: ' + n + ' sesiones seguidas"'));
+    assert.equal(hero.includes('stats-streak-sparks'), nivel === 5);
+    assert.equal(hero.includes('Empieza tu racha'), n === 0);
+    assert.doesNotMatch(hero, /\bbase\b/i);
+  }
+});
+
+test('rachas: el motor real alimenta el héroe y el ranking privado', () => {
+  const { datos, AHORA } = require('./fixtures/estadisticas-fixture');
+  const { context } = cliente();
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Config.gs'), 'utf8') + '\n' +
+    fs.readFileSync(path.join(__dirname, '../src/Estadisticas.gs'), 'utf8') + '\nglobalThis.motor = Estadisticas;', context);
+  const propio = context.motor.consultar(datos, { entidad: 'propio' }, { rol: 'jugador', jugadorId: 'jugador-bruno' }, AHORA).datos;
+  context.d = propio.jugador;
+  vm.runInContext('_statsInfoBoton = titulo => "<button>Info " + titulo + "</button>"', context);
+  const hero = vm.runInContext('_statsRacha(d)', context);
+  assert.match(hero, /stats-streak-tier-3/);
+  assert.equal(propio.jugador.rachaActual, 6);
+  assert.match(hero, /Info Racha actual/);
+  assert.match(hero, /Info Mejor racha/);
+  const yo = propio.equipo.ranking.find(fila => fila.esYo);
+  assert.equal(yo.rachaActual, propio.jugador.rachaActual);
+  assert.equal('alertas' in yo, false);
+  assert.equal('motivos' in yo, false);
+  context.nombre = '<img src=x onerror="alert(1)">&\'';
+  assert.equal(vm.runInContext('_statsRachaTexto(nombre)', context), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;&amp;&#39;');
 });

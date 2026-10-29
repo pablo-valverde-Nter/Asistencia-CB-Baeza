@@ -231,25 +231,29 @@ const Estadisticas = {
   },
   agrupaciones_(filas) {
     const semanas = new Map();
+    const meses = new Map();
     const dias = new Map();
     for (const r of filas) {
       const c = this.diaSemana_(r.s.Fecha);
       this.agregarIndice_(semanas, c.semana, r);
+      this.agregarIndice_(meses, r.s.Fecha.slice(0, 7), r);
       this.agregarIndice_(dias, c.dia, r);
     }
-    const serieSemanal = [];
-    for (const [semana, registros] of semanas) {
-      const c = this.conteo_(registros);
-      serieSemanal.push({ semana, base: c.base, ...this.porcentajes_(c) });
-    }
+    const serie = (grupos, clave) => {
+      const puntos = [];
+      for (const [valor, registros] of grupos) {
+        const c = this.conteo_(registros);
+        puntos.push({ [clave]: valor, P: c.P, A: c.A, R: c.R, base: c.base, ...this.porcentajes_(c) });
+      }
+      return puntos.sort((a, b) => a[clave] < b[clave] ? -1 : a[clave] > b[clave] ? 1 : 0);
+    };
     const porDia = [];
     for (const [dia, registros] of dias) {
       const c = this.conteo_(registros);
       porDia.push({ dia, base: c.base, asistenciaPct: this.porcentajes_(c).asistenciaPct });
     }
-    serieSemanal.sort((a, b) => a.semana.localeCompare(b.semana));
     porDia.sort((a, b) => a.dia - b.dia);
-    return { serieSemanal, porDia };
+    return { serieSemanal: serie(semanas, 'semana'), serieMensual: serie(meses, 'mes'), porDia };
   },
   justificaciones_(filas) {
     const motivos = new Map();
@@ -468,10 +472,8 @@ const Estadisticas = {
     const m = x.clubPorcentajes;
     let minutos = 0;
     for (const s of x.computables) minutos += this.minutos_(s);
-    let jugadoresConAlerta = 0;
-    for (const id of x.jugadoresPeriodo) if (this.detalleJugador_(x, id).alertas.length) jugadoresConAlerta++;
     return { asistenciaPct: m.asistenciaPct, puntualidadPct: m.puntualidadPct, sesiones: x.computables.length,
-      canceladas: x.canceladas.length, pendientes: x.pendientes.length, horasProgramadas: this.decimal_(minutos / 60), jugadoresConAlerta };
+      canceladas: x.canceladas.length, pendientes: x.pendientes.length, horasProgramadas: this.decimal_(minutos / 60) };
   },
   resumen_(x, contexto) {
     const resultado = { equipos: {}, jugadores: {}, entrenadores: {} };
@@ -496,10 +498,7 @@ const Estadisticas = {
   club_(x) {
     const equipos = [];
     const categorias = new Map();
-    const alertas = [];
     const activos = new Set();
-    const equiposJugador = new Map();
-    const principalesJugador = new Map();
     for (const [id, equipo] of x.equiposPeriodo) {
       const e = this.detalleEquipo_(x, id);
       equipos.push({ id, nombre: equipo.Nombre, categoria: equipo.Categoria, modalidad: equipo.Modalidad,
@@ -508,20 +507,7 @@ const Estadisticas = {
       if (!categorias.has(equipo.Categoria)) categorias.set(equipo.Categoria, []);
       const registros = categorias.get(equipo.Categoria);
       for (const r of x.filasEquipo.get(id) || []) registros.push(r);
-      for (const rel of x.jugadoresEquipo.get(id) || []) {
-        if (this.verdadero_(rel.Activo)) activos.add(rel.ID_Jugador);
-        if (rel.desde > x.filtro.hasta || rel.hasta < x.filtro.desde) continue;
-        if (!equiposJugador.has(rel.ID_Jugador)) equiposJugador.set(rel.ID_Jugador, equipo.Nombre);
-        if (rel.Tipo === 'Principal' && this.vigente_(rel, x.filtro.hasta)) principalesJugador.set(rel.ID_Jugador, equipo.Nombre);
-      }
-    }
-    for (const id of x.jugadoresPeriodo) {
-      const detalle = this.detalleJugador_(x, id);
-      if (!detalle.alertas.length) continue;
-      const jugador = x.jugadores.get(id) || {};
-      const primerEquipo = detalle.equipos.length ? detalle.equipos[0].nombre : '';
-      alertas.push({ jugadorId: id, nombre: jugador.Nombre || '', apellidos: jugador.Apellidos || '',
-        equipoNombre: principalesJugador.get(id) || equiposJugador.get(id) || primerEquipo, alertas: detalle.alertas });
+      for (const rel of x.jugadoresEquipo.get(id) || []) if (this.verdadero_(rel.Activo)) activos.add(rel.ID_Jugador);
     }
     let conEmailFamiliar = 0;
     let conAvisosActivos = 0;
@@ -537,10 +523,10 @@ const Estadisticas = {
       const c = this.conteo_(filas);
       porCategoria.push({ categoria, base: c.base, asistenciaPct: this.porcentajes_(c).asistenciaPct });
     }
-    return { ...this.clubResumen_(x), equipos, porCategoria, serieSemanal: this.agrupaciones_(x.filas).serieSemanal,
+    const agrupaciones = this.agrupaciones_(x.filas);
+    return { ...this.clubResumen_(x), equipos, porCategoria, serieSemanal: agrupaciones.serieSemanal, serieMensual: agrupaciones.serieMensual,
       motivos: this.justificaciones_(x.filas).motivos, cancelaciones: this.cancelaciones_(x.canceladas),
-      contactabilidad: { jugadoresActivos: activos.size, conEmailFamiliar, conAvisosActivos }, alertas,
-      pendientes: x.pendientes.map(s => ({ sesionId: s.ID, equipoNombre: (x.equipos.get(s.ID_Equipo) || {}).Nombre || '', fecha: s.Fecha, hora: s.HoraInicio })) };
+      contactabilidad: { jugadoresActivos: activos.size, conEmailFamiliar, conAvisosActivos } };
   },
   logros_(jugador, mejor) {
     if (jugador.base < CONFIG.ESTADISTICAS.MIN_BASE_RANKING) return [];
@@ -578,7 +564,7 @@ const Estadisticas = {
       let posicion = null;
       const ranking = candidatos.map((j, i) => {
         if (j.id === id) posicion = i + 1;
-        return { nombre: j.nombre, apellidos: j.apellidos, asistenciaPct: j.asistenciaPct,
+        return { nombre: j.nombre, apellidos: j.apellidos, asistenciaPct: j.asistenciaPct, rachaActual: j.rachaActual,
           logros: this.logros_(j, mejor), esYo: j.id === id, posicion: i + 1 };
       });
       equipo = { id: principal, nombre: (x.equipos.get(principal) || {}).Nombre || '', asistenciaPct: e.asistenciaPct,

@@ -115,7 +115,7 @@ function installRunner(backend) {
 
 function driveViews() {
   const pause = () => new Promise(resolve => setTimeout(resolve, 50));
-  const result = { errores: window.__errors, llamadas: window.__calls, textos: {}, inmediatas: {} };
+  const result = { errores: window.__errors, llamadas: window.__calls, textos: {}, inmediatas: {}, info: {}, rachas: {}, interacciones: {} };
   function publish() {
     let pre = document.getElementById('smoke-result');
     if (!pre) { pre = document.createElement('pre'); pre.id = 'smoke-result'; pre.hidden = true; document.body.append(pre); }
@@ -127,6 +127,11 @@ function driveViews() {
     for (let turn = 0; turn < 80; turn++) {
       await pause();
       const loading = App.stats && Object.values(App.stats.detalles || {}).some(e => e.estado === 'cargando');
+      // dump-dom virtual time can suspend animation frames; flush the already-requested data render.
+      if (!window.__pending && !loading && App.stats._renderPending) {
+        App.stats._renderPending = false;
+        if (!App.state._formIsDirty) App.navigate(App.state.currentView, {}, false);
+      }
       const animating = [...document.querySelectorAll('.view.active .stats-ring')].some(element =>
         element.dataset.ringValue !== '' &&
         element.querySelector('.stats-ring-number').textContent !== Number(element.dataset.ringValue) + '%');
@@ -163,6 +168,17 @@ function driveViews() {
           if (!element || !element.classList.contains('active')) throw new Error('Vista no disponible: ' + view);
           result.textos[view] = element.innerText;
           if (!element.innerText.trim()) throw new Error('Vista vacía: ' + view);
+          result.info[view] = element.querySelectorAll('.stats-info-button').length;
+          result.rachas[view] = Boolean(element.querySelector('.stats-streak .stats-streak-count'));
+          if (/\bbase\b|\bpp\b|P\/A\/R|computables/i.test(element.textContent)) throw new Error('Texto técnico visible en estadísticas de ' + view);
+          if (window.__role === 'admin' && view === 'informes') {
+            const descargar = _csvDescargar;
+            result.csv = [];
+            try {
+              _csvDescargar = (nombre, filas) => result.csv.push({ nombre, filas });
+              App.views.informes.exportar();
+            } finally { _csvDescargar = descargar; }
+          }
           if (window.__role === 'admin' && view === 'informes') {
             const button = [...element.querySelectorAll('button[onclick]')].find(button =>
               button.getAttribute('onclick').includes("App.views['equipo-detalle'].cargar("));
@@ -184,7 +200,39 @@ function driveViews() {
         App.navigate(finalView, {}, false);
         await settle();
       }
-      window.scrollTo(0, 0);
+      const state = new URLSearchParams(location.search).get('state');
+      const active = document.querySelector('.view.active');
+      if (state === 'info') {
+        const button = active.querySelector('.stats-info-button');
+        if (!button) throw new Error('No hay botón de información');
+        button.click();
+        result.interacciones.info = Boolean(document.querySelector('#modal-overlay.open'));
+        if (!result.interacciones.info) throw new Error('No se abrió la ficha de información');
+      } else if (state === 'temporadas') {
+        const button = active.querySelector('.stats-season-pill');
+        if (!button) throw new Error('No hay selector de temporada');
+        button.click();
+        result.interacciones.temporadas = Boolean(document.querySelector('.stats-season-option'));
+        if (!result.interacciones.temporadas) throw new Error('No se abrió el selector de temporada');
+      } else if (state === 'tooltip') {
+        const point = active.querySelector('[data-stats-tip]');
+        if (!point) throw new Error('No hay punto de gráfico interactivo');
+        point.scrollIntoView({ block: 'center' });
+        point.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const tooltip = document.getElementById('stats-chart-tooltip');
+        result.interacciones.tooltip = Boolean(tooltip && !tooltip.hidden && tooltip.textContent.trim());
+        if (!result.interacciones.tooltip) throw new Error('No se abrió el detalle del gráfico');
+      } else if (state === 'contacto') {
+        active.querySelector('button[aria-label="Contacto del jugador"]').click();
+        if (!document.querySelector('.stats-contact-sheet')) throw new Error('No se abrió el contacto rápido');
+      } else if (['mensual','cobertura','pendientes'].includes(state)) {
+        const selectors = { mensual: '.stats-columns', cobertura: '.stats-coverage', pendientes: '.stats-pending-list, .stats-pending-clear' };
+        const section = active.querySelector(selectors[state]);
+        if (!section) throw new Error('No existe sección de ' + state);
+        section.closest('.stats-block').scrollIntoView({ block: 'start' });
+      }
+      if (!['tooltip','mensual','cobertura','pendientes'].includes(state)) window.scrollTo(0, 0);
+      if (state) await new Promise(resolve => setTimeout(resolve, 350));
     } catch (error) { result.errores.push(error.stack || error.message); }
     publish();
   }
@@ -249,6 +297,9 @@ async function captureMobile(browser, url, output, role, screenshot) {
       if (result.value) break;
       await delay();
     }
+    const { result: smoke } = await send('Runtime.evaluate', { expression: 'document.getElementById("smoke-result").textContent', returnByValue: true }, sessionId);
+    const report = JSON.parse(smoke.value);
+    if (report.errores.length) throw new Error(report.errores.join('\n'));
     const { result } = await send('Runtime.evaluate', { expression: 'JSON.stringify({width:innerWidth,height:innerHeight})', returnByValue: true }, sessionId);
     const viewport = JSON.parse(result.value);
     if (viewport.width !== 412 || viewport.height !== 915) throw new Error('Viewport móvil incorrecto: ' + result.value);
@@ -325,7 +376,7 @@ async function main() {
       for (const call of result.llamadas) console.log('  LLAMADA ' + role + ': ' + JSON.stringify(call));
       await access(screenshot);
       const mobileViews = role === 'admin'
-        ? ['equipos', 'equipo-detalle', 'jugador-detalle', 'informes']
+        ? ['equipos', 'equipos-admin', 'jugadores-admin', 'entrenadores-admin', 'equipo-detalle', 'jugador-detalle', 'entrenador-detalle', 'informes']
         : ['perfil-jugador', 'mis-stats', 'mi-equipo'];
       for (const view of mobileViews) {
         url.searchParams.set('final', view);
@@ -333,6 +384,17 @@ async function main() {
         await captureMobile(browser, url.href, output, role + '-' + view, mobileScreenshot);
         console.log('Captura ' + role + '/' + view + ' (412x915): ' + mobileScreenshot);
       }
+      const states = [['info', role === 'admin' ? 'informes' : 'mis-stats'], ['temporadas', role === 'admin' ? 'informes' : 'mis-stats'], ['tooltip', role === 'admin' ? 'equipo-detalle' : 'mis-stats'], ['mensual', role === 'admin' ? 'equipo-detalle' : 'mis-stats']];
+      if (role === 'admin') states.push(['contacto','jugador-detalle'],['cobertura','equipo-detalle'],['pendientes','equipo-detalle']);
+      for (const [state, view] of states) {
+        url.searchParams.set('final', view);
+        url.searchParams.set('state', state);
+        const screenshotState = join(output, role + '-' + state + '-412x915.png');
+        await captureMobile(browser, url.href, output, role + '-' + state, screenshotState);
+        check(role + ': interacción ' + state, true);
+        console.log('Captura ' + role + '/' + state + ' (412x915): ' + screenshotState);
+      }
+      url.searchParams.delete('state');
     } catch (error) {
       check(role + ': ejecución del harness', false);
       console.log('  ERROR ' + role + ': ' + error.message);
@@ -347,6 +409,16 @@ async function main() {
   check('informes: asistencia del club ' + expectedClub + '%', (admin.informes || '').includes(expectedClub + '%'));
   check('equipo-detalle: asistencia ' + expectedTeam + '%', (admin['equipo-detalle'] || '').includes(expectedTeam + '%'));
   check('equipo-detalle: Cancelada', /Cancelada/i.test(admin['equipo-detalle'] || ''));
+  check('informes: sin alertas de jugadores ni pendientes de registrar', Boolean(admin.informes) && !/Alertas de jugadores|pendientes de registrar/i.test(admin.informes));
+  const exports = results.admin?.csv || [];
+  check('informes: exportación sin CSV de alertas', exports.length === 1 && exports[0].nombre === 'club-equipos.csv' && !/alerta|pendiente/i.test(JSON.stringify(exports)));
+  for (const [role, result] of Object.entries(results)) {
+    for (const [view, text] of Object.entries(result.textos)) {
+      check(role + '/' + view + ': sin jerga técnica', !/\bbase\b|\bpp\b|P\/A\/R|computables/i.test(text));
+      check(role + '/' + view + ': información de indicadores', result.info[view] > 0);
+    }
+  }
+  for (const view of ['perfil-jugador', 'mis-stats']) check(view + ': racha protagonista', results.jugador?.rachas?.[view]);
   const ranking = player['mi-equipo'] || '';
   check('mi-equipo: Tu posición', ranking.includes('Tu posición'));
   check('mi-equipo: sin Ausente ni Mayores ausencias', ranking.trim() && !/Ausente|Mayores ausencias/i.test(ranking));

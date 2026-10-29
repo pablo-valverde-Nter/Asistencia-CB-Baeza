@@ -1135,7 +1135,7 @@ const App = {
             }
           }
           var resumenEquipo = App.stats.resumen && App.stats.resumen.datos.equipos && App.stats.resumen.datos.equipos[eq.ID];
-          statsHtml += resumenEquipo ? '<div class="stats-periodo">Asistencia ' + _esc(App.stats.resumen.filtro.temporadaNombre) + ': ' + _pctTexto(resumenEquipo.asistenciaPct) + ' ' + _htmlTendencia(resumenEquipo.tendenciaPp) + (resumenEquipo.pendientes ? ' <span class="alerta-chip">' + resumenEquipo.pendientes + ' sin registrar</span>' : '') + '</div>' : '';
+          statsHtml += resumenEquipo ? '<div class="stats-periodo">Asistencia ' + _esc(App.stats.resumen.filtro.temporadaNombre) + ': ' + _pctTexto(resumenEquipo.asistenciaPct) + ' ' + _statsInfoBoton('Asistencia') + ' ' + _htmlTendencia(resumenEquipo.tendenciaPp) + (resumenEquipo.pendientes ? ' <span class="alerta-chip">' + resumenEquipo.pendientes + ' sin registrar</span>' : '') + '</div>' : '';
           // Chip Visor: el equipo es de solo lectura
           var esVisor = !App.state.esAdmin && !mainEqIds.has(eq.ID);
           var visorHtml = esVisor ? '<span class="chip-visor">&#x1F441; Visor</span>' : '';
@@ -1385,7 +1385,7 @@ const App = {
       },
 
       _estadoAsistencia: function(registro) {
-        return App.cache.getEstadoRegistrado(registro);
+        return App.cache.getEstadoAsistencia(registro);
       },
 
       _estadoTarjeta: function(card) {
@@ -1416,7 +1416,7 @@ const App = {
           var estado = App.cache.getEstadoRegistrado(reg);
           return {
             jugador: j,
-            estado: estado,
+            estado: App.views.sesion._estadoAsistencia(reg),
             preaviso: tieneJustif && !estado ? App.views.sesion._estadoJustificacion(reg.TipoJustificacion) : null,
             minutosRetraso: reg ? reg.MinutosRetraso : null,
             esInvitado: !!reg && (reg.EsInvitado === true || reg.EsInvitado === 'TRUE'),
@@ -1463,15 +1463,11 @@ const App = {
           '<h2>' + f.dn + ', ' + f.d + ' de ' + f.ml + '</h2>' +
           '<div class="vh-sub">' + sesion.HoraInicio + '&ndash;' + sesion.HoraFin + extra + '</div>' +
           (sesion.Notas ? '<div class="vh-horario">' + sesion.Notas + '</div>' : '');
-        if (!document.getElementById('btn-marcar-avisos')) {
-          var cabecera = document.getElementById('sesion-jugs').previousElementSibling;
-          cabecera.insertAdjacentHTML('beforeend', '<button id="btn-marcar-avisos" class="btn btn-secondary" hidden onclick="App.views.sesion.marcarAvisos()">Marcar avisos (0)</button>');
-        }
 
         document.getElementById('sesion-jugs').innerHTML = jugadores.length
           ? jugadores.map(function(item) {
               var j = item.jugador;
-              var estado = item.estado || '';
+              var estado = item.estado || (item.tieneJustif ? App.views.sesion._estadoJustificacion(item.tipoJustif) : '') || '';
               var preaviso = item.preaviso || '';
               var inv = item.esInvitado;
               return '<div class="jug-card ' + estado + (preaviso ? ' has-preaviso' : '') + '" data-id="' + j.ID + '" data-estado="' + estado + '" data-preaviso="' + preaviso + '" data-min="' + (item.minutosRetraso || '') + '" data-inv="' + inv + '" data-justif="' + (item.tieneJustif ? 'true' : 'false') + '" data-tipo-justif="' + _esc(item.tipoJustif || '') + '" onclick="App.views.sesion.toggleEstado(this)">' +
@@ -1532,13 +1528,9 @@ const App = {
             card.dataset.min = saved.minutosRetraso || '';
             var minutos = card.querySelector('.retraso-min');
             if (minutos) minutos.value = card.dataset.min;
-            card.className = 'jug-card ' + (saved.estado || '') + (!saved.estado && card.dataset.preaviso ? ' has-preaviso' : '');
+            card.className = 'jug-card ' + (saved.estado || '') + (!saved.limpiarJustif && card.dataset.preaviso ? ' has-preaviso' : '');
             var chip = card.querySelector('.estado-chip');
             if (chip) chip.textContent = _iconEstado(saved.estado || '');
-            if (saved.estado) {
-              var preavisoTag = card.querySelector('.preaviso-tag');
-              if (preavisoTag) preavisoTag.remove();
-            }
             if (saved.limpiarJustif) {
               card.dataset.justif = 'false';
               card.dataset.justifCleared = 'true';
@@ -1559,7 +1551,6 @@ const App = {
         } else {
           App.state._formIsDirty = false;
         }
-        App.views.sesion._actualizarAvisos();
         var cancelar = document.getElementById('btn-cancelar-sesion');
         if (cancelar) cancelar.style.display = sesion.AsistenciaGuardada === true || sesion.AsistenciaGuardada === 'TRUE' ? 'none' : '';
         App.views.sesion._bindSwipeRows();
@@ -1567,7 +1558,7 @@ const App = {
       },
 
       toggleEstado: function(card) {
-        if (card.dataset.justif === 'true' && App.views.sesion._estadoTarjeta(card)) {
+        if (card.dataset.justif === 'true') {
           var tipoJustif = card.dataset.tipoJustif || 'incidencia';
           App.state._pendingConfirmSave = function() { App.views.sesion._doToggleEstado(card); };
           App.openModal('Asistencia justificada',
@@ -1585,7 +1576,6 @@ const App = {
 
       _doToggleEstado: function(card) {
         var ciclo = {'':'P','P':'A','A':'R','R':'P'};
-        var anterior = App.views.sesion._estadoTarjeta(card);
         var sig = ciclo[card.dataset.estado || ''];
         card.dataset.estado = sig;
         card.className = 'jug-card ' + sig;
@@ -1597,8 +1587,9 @@ const App = {
         }
         var tag = card.querySelector('.preaviso-tag');
         if (tag) tag.remove();
+        delete card.dataset.preaviso;
         // Reabrir la justificación para que el padre vuelva a justificar la nueva incidencia
-        if (anterior && card.dataset.justif === 'true') {
+        if (card.dataset.justif === 'true') {
           card.dataset.justif = 'false';
           card.dataset.justifCleared = 'true';
           var aviso = card.querySelector('.jug-justif-aviso');
@@ -1606,7 +1597,6 @@ const App = {
         }
         App.state._formIsDirty = true;
         App.state._sesionEditVersion++;
-        App.views.sesion._actualizarAvisos();
       },
 
       _htmlMinutos: function(valor) {
@@ -1620,36 +1610,6 @@ const App = {
         select.closest('.jug-card').dataset.min = select.value;
         App.state._formIsDirty = true;
         App.state._sesionEditVersion++;
-      },
-
-      _actualizarAvisos: function() {
-        var n = 0;
-        document.querySelectorAll('#sesion-jugs .jug-card').forEach(function(card) {
-          if (card.dataset.preaviso && !App.views.sesion._estadoTarjeta(card)) n++;
-        });
-        var boton = document.getElementById('btn-marcar-avisos');
-        if (boton) {
-          boton.hidden = !n;
-          boton.textContent = 'Marcar avisos (' + n + ')';
-        }
-      },
-
-      marcarAvisos: function() {
-        var cambio = false;
-        document.querySelectorAll('#sesion-jugs .jug-card').forEach(function(card) {
-          if (!card.dataset.preaviso || App.views.sesion._estadoTarjeta(card)) return;
-          card.dataset.estado = card.dataset.preaviso;
-          card.className = 'jug-card ' + card.dataset.estado;
-          card.querySelector('.estado-chip').textContent = _iconEstado(card.dataset.estado);
-          var tag = card.querySelector('.preaviso-tag');
-          if (tag) tag.remove();
-          cambio = true;
-        });
-        if (cambio) {
-          App.state._formIsDirty = true;
-          App.state._sesionEditVersion++;
-        }
-        App.views.sesion._actualizarAvisos();
       },
 
       _bindSwipeRows: function() {
@@ -2310,7 +2270,7 @@ const App = {
           var chipHtml = esMio ? '<span class="chip-mi-equipo">&#x2605; Mi equipo</span>' : '';
           var st = statsEq[eq.ID] || { jugadoresActivos: 0, sesiones: 0, asistenciaPct: null, puntualidadPct: null };
           var pctHtml = st.asistenciaPct != null
-            ? '<div class="eq-pct-bar-wrap"><div class="eq-pct-bar"><div class="eq-pct-fill" style="width:' + st.asistenciaPct + '%"></div></div><span class="eq-pct-label">' + _pctTexto(st.asistenciaPct) + '</span></div><div class="stats-periodo">Puntualidad ' + _pctTexto(st.puntualidadPct) + '</div>'
+            ? '<div class="eq-pct-bar-wrap"><div class="eq-pct-bar"><div class="eq-pct-fill" style="width:' + st.asistenciaPct + '%"></div></div><span class="eq-pct-label">' + _pctTexto(st.asistenciaPct) + '</span>' + _statsInfoBoton('Asistencia') + '</div><div class="stats-periodo">Puntualidad ' + _pctTexto(st.puntualidadPct) + ' ' + _statsInfoBoton('Puntualidad') + '</div>'
             : '<div class="stats-periodo">Sin sesiones registradas</div>';
           pctHtml += (st.canceladas ? '<span class="alerta-chip">' + st.canceladas + ' canceladas</span>' : '') + (st.pendientes ? '<span class="alerta-chip">' + st.pendientes + ' sin registrar</span>' : '');
           return '<div class="eq-card" onclick="App.views[\'equipo-detalle\'].cargar(\'' + eq.ID + '\')">' +
@@ -2817,11 +2777,11 @@ const App = {
           var ini = (j.Nombre ? j.Nombre[0] : '') + (j.Apellidos ? j.Apellidos[0] : '');
           var st = statsJug[j.ID] || { base: 0, asistenciaPct: null, alertas: [] };
           var colorClass = _nivelClase(st.asistenciaPct);
-          var statsHtml = '<div class="jug-list-stats"><span class="jls-big ' + colorClass + '">' + _pctTexto(st.asistenciaPct) + '</span><span class="jls-de">' + st.base + ' ses.</span>' + ((st.alertas || []).length ? _htmlAlerta(st.alertas[0]) : '') + '</div>';
+          var statsHtml = '<div class="jug-list-stats"><span class="jls-big ' + colorClass + '">' + _pctTexto(st.asistenciaPct) + '</span><span class="jls-de">' + st.base + ' ses.</span>' + _statsInfoBoton('Asistencia') + '</div>';
           return '<div class="list-item" onclick="App.views[\'jugador-detalle\'].cargar(\'' + j.ID + '\')">' +
             '<div class="li-avatar">' + ini + '</div>' +
             '<div style="flex:1"><div class="li-name">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
-            '<div class="li-sub">Dorsal ' + (j.Dorsal || '-') + '</div></div>' +
+            '<div class="li-sub">Dorsal ' + (j.Dorsal || '-') + '</div>' + ((st.alertas || []).length ? '<div class="jug-list-alertas">' + _htmlAlerta(st.alertas[0]) + '</div>' : '') + '</div>' +
             statsHtml +
             '<div class="li-arrow">&#x203A;</div></div>';
         }
@@ -3230,7 +3190,7 @@ const App = {
           var adminBadge = (e.EsAdmin === true || e.EsAdmin === 'TRUE') ? ' <span class="badge-admin">Admin</span>' : '';
           var isMeBadge = (App.state.usuario && e.ID === App.state.usuario.ID) ? ' <span style="font-size:0.7em; background:#2196F3; color:white; padding:2px 6px; border-radius:10px; margin-left:4px;">(T\u00fa)</span>' : '';
           var st = statsMap[e.ID] || { sesiones: 0, presenciaPct: null };
-          var statsHtml = '<div class="ent-mini-stats"><span class="ems-big">' + _pctTexto(st.presenciaPct) + '</span><span class="ems-de">' + st.sesiones + ' ses.</span></div>';
+          var statsHtml = '<div class="ent-mini-stats"><span class="ems-big">' + _pctTexto(st.presenciaPct) + '</span><span class="ems-de">' + st.sesiones + ' ses.</span>' + _statsInfoBoton('Presencia') + '</div>';
           return '<div class="list-item" onclick="App.views[\'entrenador-detalle\'].cargar(\'' + e.ID + '\')">' +
             '<div class="li-avatar">' + ini + '</div>' +
             '<div style="flex:1"><div class="li-name">' + e.Apellidos + ', ' + e.Nombre + adminBadge + isMeBadge + '</div>' +
@@ -3579,42 +3539,13 @@ const App = {
           '<div class="detalle-sub">Dorsal ' + (j.Dorsal || '-') + '</div>' +
           (j.FechaNac ? '<div class="detalle-meta">Nac. ' + j.FechaNac + '</div>' : '') +
           '</div>' +
+          '<button class="detalle-settings" type="button" aria-label="Contacto del jugador" title="Contacto" onclick="_statsContacto(\'jugador\',App.state.detalleJugadorId)">☎</button>' +
           (App.puedeEditarDetalle('jugador-detalle') ? '<button class="detalle-settings" type="button" aria-label="Ajustes del jugador" title="Ajustes" onclick="App.editarDetalle()">&#x2699;&#xFE0F;</button>' : '') +
           '</div>';
 
 
         html += entrada && entrada.estado === 'ok' ? _statsJugadorHtml(entrada.data.datos, true) : _htmlFiltroStats() + (App.stats.resumen ? _htmlEstadoStats(entrada) : _statsResumenEstado());
 
-        // Contacto jugador
-        var tieneContactoJug = j.Telefono || j.Email;
-        var tieneContactoFam = j.NombrePadre1 || j.ApellidosPadre1 || j.TelefonoPadre1 || j.EmailPadre1 ||
-          j.NombrePadre2 || j.ApellidosPadre2 || j.TelefonoPadre2 || j.EmailPadre2;
-        if (tieneContactoJug || tieneContactoFam) {
-          html += '<div class="stat-grid-1"><div class="stat-widget">';
-          if (tieneContactoJug) {
-            html += '<div class="stat-widget-title">Contacto</div>';
-            if (j.Telefono) html += '<div style="font-size:.82rem;padding:3px 0">\uD83D\uDCDE\uFE0F&nbsp;<a href="tel:' + _esc(j.Telefono) + '" style="color:var(--primary)">' + _esc(j.Telefono) + '</a></div>';
-            if (j.Email)    html += '<div style="font-size:.82rem;padding:3px 0">\u2709\uFE0F&nbsp;<a href="mailto:' + _esc(j.Email) + '" style="color:var(--primary)">' + _esc(j.Email) + '</a></div>';
-          }
-          if (tieneContactoFam) {
-            if (tieneContactoJug) html += '<div style="height:10px"></div>';
-            if (j.NombrePadre1 || j.ApellidosPadre1 || j.TelefonoPadre1 || j.EmailPadre1) {
-              html += '<div class="stat-widget-title">Familiar 1</div>';
-              var familiar1Nombre = [j.NombrePadre1, j.ApellidosPadre1].filter(Boolean).join(' ') || j.NombrePadre1Original || '';
-              if (familiar1Nombre) html += '<div style="font-size:.82rem;padding:2px 0;font-weight:600">' + _esc(familiar1Nombre) + '</div>';
-              if (j.TelefonoPadre1) html += '<div style="font-size:.82rem;padding:2px 0">\uD83D\uDCDE\uFE0F&nbsp;<a href="tel:' + _esc(j.TelefonoPadre1) + '" style="color:var(--primary)">' + _esc(j.TelefonoPadre1) + '</a></div>';
-              if (j.EmailPadre1)    html += '<div style="font-size:.82rem;padding:2px 0">\u2709\uFE0F&nbsp;<a href="mailto:' + _esc(j.EmailPadre1) + '" style="color:var(--primary)">' + _esc(j.EmailPadre1) + '</a></div>';
-            }
-            if (j.NombrePadre2 || j.ApellidosPadre2 || j.TelefonoPadre2 || j.EmailPadre2) {
-              html += '<div style="height:8px"></div><div class="stat-widget-title">Familiar 2</div>';
-              var familiar2Nombre = [j.NombrePadre2, j.ApellidosPadre2].filter(Boolean).join(' ') || j.NombrePadre2Original || '';
-              if (familiar2Nombre) html += '<div style="font-size:.82rem;padding:2px 0;font-weight:600">' + _esc(familiar2Nombre) + '</div>';
-              if (j.TelefonoPadre2) html += '<div style="font-size:.82rem;padding:2px 0">\uD83D\uDCDE\uFE0F&nbsp;<a href="tel:' + _esc(j.TelefonoPadre2) + '" style="color:var(--primary)">' + _esc(j.TelefonoPadre2) + '</a></div>';
-              if (j.EmailPadre2)    html += '<div style="font-size:.82rem;padding:2px 0">\u2709\uFE0F&nbsp;<a href="mailto:' + _esc(j.EmailPadre2) + '" style="color:var(--primary)">' + _esc(j.EmailPadre2) + '</a></div>';
-            }
-          }
-          html += '</div></div>';
-        }
 
         html += '<div style="padding-bottom:28px"></div>';
         document.getElementById('jugador-detalle-contenido').innerHTML = html;
@@ -3642,6 +3573,7 @@ const App = {
           '<div class="detalle-sub">' + (e.Email || '') + '</div>' +
           (e.Telefono ? '<div class="detalle-meta">' + e.Telefono + '</div>' : '') +
           '</div>' +
+          '<button class="detalle-settings" type="button" aria-label="Contacto del entrenador" title="Contacto" onclick="_statsContacto(\'entrenador\',App.state.detalleEntrenadorId)">☎</button>' +
           (App.puedeEditarDetalle('entrenador-detalle') ? '<button class="detalle-settings" type="button" aria-label="Ajustes del entrenador" title="Ajustes" onclick="App.editarDetalle()">&#x2699;&#xFE0F;</button>' : '') +
           '</div>';
 
@@ -3678,7 +3610,7 @@ const App = {
           '<div class="detalle-avatar" style="font-size:1.4rem">&#x1F3C0;</div>' +
           '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + eq.Nombre + '</div>' +
           '<div class="detalle-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div>' +
-          (d ? '<div class="detalle-meta">' + d.plantillaActiva + ' jugadores &middot; ' + d.sesiones.computables + ' sesiones computables</div>' : '') +
+          (d ? '<div class="detalle-meta">' + d.plantillaActiva + ' jugadores &middot; ' + d.sesiones.computables + ' entrenamientos con lista</div>' : '') +
           '</div>' +
           (App.puedeEditarDetalle('equipo-detalle') ? '<button class="detalle-settings" type="button" aria-label="Ajustes del equipo" title="Ajustes" onclick="App.editarDetalle()">&#x2699;&#xFE0F;</button>' : '') +
           '</div>';
@@ -3688,14 +3620,15 @@ const App = {
           var s = d.sesiones;
           html += _statsHero(d,d.comparativaClubPp) +
             '<div class="stat-grid-2">' + _htmlKpi('Asistentes medios',_datoTexto(d.asistentesMedia),d.plantillaActiva + (d.plantillaActiva === 1 ? ' jugador' : ' jugadores') + ' en plantilla activa') + _htmlKpi('Horas programadas',_datoTexto(s.horasProgramadas,' h'),'Duración de las sesiones') + _htmlKpi('Sesiones',s.computables,s.canceladas + (s.canceladas === 1 ? ' cancelada · ' : ' canceladas · ') + s.pendientes + (s.pendientes === 1 ? ' pendiente · ' : ' pendientes · ') + s.extra + ' extra · ' + s.bajaAsistencia + ' de baja asistencia') + '</div>' +
-            _statsBloque('Serie semanal',_svgSerie(d.serieSemanal,'Asistencia semanal del equipo')) +
+            _statsBloque('Asistencia mes a mes',_statsMensual(d.serieMensual)) +
+            _statsBloque('Evolución semanal',_svgSerie(d.serieSemanal,'Evolución semanal de la asistencia del equipo')) +
             _statsBloque('Distribución de la plantilla',_htmlDistribucion(d.distribucion)) +
-            _statsBloque('Jugadores',_statsOrdenSelect('equipo',App.views['equipo-detalle']._orden || 'asistenciaPct') + _statsTabla(['Jugador','Tipo','Base','Asistencia','Puntualidad','Faltas sin justificar','Tendencia','Racha','Logros y alertas'],_statsOrdenar(d.jugadores,App.views['equipo-detalle']._orden || 'asistenciaPct').map(function(j) { return [_statsJugadorBoton(j.id,j.apellidos + ', ' + j.nombre),_esc(j.tipo),j.base,_pctTexto(j.asistenciaPct),_pctTexto(j.puntualidadPct),j.injustificadasA,_htmlTendencia(j.tendenciaPp),j.rachaActual,_statsLogros(j,d.jugadores) + j.alertas.map(_htmlAlerta).join('')]; }))) +
+            _statsBloque('Jugadores',_statsOrdenSelect('equipo',App.views['equipo-detalle']._orden || 'asistenciaPct') + _statsTabla(['Jugador','Tipo','Sesiones registradas','Asistencia','Puntualidad','Faltas sin justificar','Tendencia','Racha','Logros y alertas'],_statsOrdenar(d.jugadores,App.views['equipo-detalle']._orden || 'asistenciaPct').map(function(j) { return [_statsJugadorBoton(j.id,j.apellidos + ', ' + j.nombre),_esc(j.tipo),j.base,_pctTexto(j.asistenciaPct),_pctTexto(j.puntualidadPct),j.injustificadasA,_htmlTendencia(j.tendenciaPp),_statsMiniRacha(j.rachaActual),_statsLogros(j,d.jugadores) + j.alertas.map(_htmlAlerta).join('')]; }))) +
             _statsBloque('Jugadores en riesgo',d.jugadores.filter(function(j) { return j.alertas.length; }).map(function(j) { return '<p>' + _statsJugadorBoton(j.id,j.apellidos + ', ' + j.nombre) + ' ' + j.alertas.map(_htmlAlerta).join('') + '</p>'; }).join('') || '<p>Sin alertas</p>') +
-            _statsBloque('Motivos y justificaciones','<p>Justificación: ' + _pctTexto(d.justificacionPct) + ' · Antelación mediana: ' + _datoTexto(d.antelacionMedianaHoras,' h') + '</p>' + _statsMotivos(d.motivos)) +
+            _statsBloque('Motivos y justificaciones',_statsJustificacion(d.justificacionPct) + '<p>Antelación mediana: ' + _datoTexto(d.antelacionMedianaHoras,' h') + ' ' + _statsInfoBoton('Antelación de avisos') + '</p>' + _statsMotivos(d.motivos)) +
             _statsBloque('Asistencia por día',_statsPorDia(d.porDia)) +
-            _statsBloque('Cobertura técnica y refuerzos','<p>Con entrenador: ' + _pctTexto(d.cobertura.conEntrenadorPct) + ' · Con sustituto: ' + _pctTexto(d.cobertura.sustitutoPct) + '</p><p>Presencias de refuerzos: ' + _pctTexto(d.refuerzosPct) + '</p>') +
-            _statsBloque('Registro','<p>Latencia mediana: ' + _datoTexto(d.latenciaMedianaHoras,' h') + '</p><h3>Sesiones pendientes de registrar</h3>' + (d.pendientesLista.map(function(p) { return '<p>' + _statsSesionBoton(Object.assign({equipoId:id},p)) + '</p>'; }).join('') || '<p>Ninguna pendiente</p>')) +
+            _statsBloque('Cobertura técnica y refuerzos',_statsCobertura(d)) +
+            _statsBloque('Registro','<p>Latencia mediana: ' + _datoTexto(d.latenciaMedianaHoras,' h') + ' ' + _statsInfoBoton('Latencia de registro') + '</p><h3>Sesiones pendientes de registrar</h3>' + _statsPendientes(d.pendientesLista,id)) +
             _statsBloque('Cancelaciones por motivo',_statsCancelaciones(d.cancelaciones));
         } else html += App.stats.resumen ? _htmlEstadoStats(entrada) : _statsResumenEstado();
         html += '<div class="p-16 stats-actions"><button class="btn btn-secondary btn-full" onclick="App.state.equipoSesionesId=App.state.detalleEquipoId;App.navigate(\'historial-equipo\')">Historial de sesiones</button>' + (d ? '<button class="btn btn-primary btn-full" onclick="App.views[\'equipo-detalle\'].exportar()">Exportar CSV</button>' : '') + '</div>';
@@ -3707,7 +3640,7 @@ const App = {
       exportar: function() {
         var entrada = App.stats.detalle('equipo',App.state.detalleEquipoId);
         if (entrada.estado !== 'ok') return;
-        _csvDescargar('jugadores-equipo.csv',[['Jugador','Tipo','Base','Asistencia %','Puntualidad %','Faltas sin justificar','Tendencia pp','Racha','Alertas']].concat(entrada.data.datos.jugadores.map(function(j) { return [j.apellidos + ', ' + j.nombre,j.tipo,j.base,j.asistenciaPct,j.puntualidadPct,j.injustificadasA,j.tendenciaPp,j.rachaActual,j.alertas.join(', ')]; })));
+        _csvDescargar('jugadores-equipo.csv',[['Jugador','Tipo','Sesiones registradas','Asistencia %','Puntualidad %','Faltas sin justificar','Tendencia en puntos','Racha','Alertas']].concat(entrada.data.datos.jugadores.map(function(j) { return [j.apellidos + ', ' + j.nombre,j.tipo,j.base,j.asistenciaPct,j.puntualidadPct,j.injustificadasA,j.tendenciaPp,j.rachaActual,j.alertas.join(', ')]; })));
       },
     },
 
@@ -3719,25 +3652,24 @@ const App = {
         var html = _htmlFiltroStats();
         if (!entrada || entrada.estado !== 'ok') { el.innerHTML = html + (App.stats.resumen ? _htmlEstadoStats(entrada) : _statsResumenEstado()); return; }
         var d = entrada.data.datos, c = d.contactabilidad;
-        html += _statsHero(d) + '<div class="stat-grid-2">' + _htmlKpi('Sesiones computables',d.sesiones,d.canceladas + (d.canceladas === 1 ? ' cancelada' : ' canceladas')) + _htmlKpi('Horas programadas',_datoTexto(d.horasProgramadas,' h'),'Duración de las sesiones') + _htmlKpi('Sesiones pendientes',d.pendientes.length,'Por registrar') + _htmlKpi('Jugadores con alerta',d.jugadoresConAlerta,'Requieren atención',d.jugadoresConAlerta > 0 ? 'stats-kpi-alert' : '') + '</div>' +
-          _statsBloque('Equipos',_statsOrdenSelect('club',this._orden || 'asistenciaPct') + _statsTabla(['Equipo','Categoría','Modalidad','Asistencia','Puntualidad','Sesiones','Pendientes','Canceladas','Con entrenador','Tendencia'],_statsOrdenar(d.equipos,this._orden || 'asistenciaPct').map(function(e) { return [_statsEquipoBoton(e.id,e.nombre),_esc(e.categoria),_esc(e.modalidad),_pctTexto(e.asistenciaPct),_pctTexto(e.puntualidadPct),e.sesiones,e.pendientes,e.canceladas,_pctTexto(e.conEntrenadorPct),_htmlTendencia(e.tendenciaPp)]; }))) +
-          _statsBloque('Asistencia por categoría',_statsTabla(['Categoría','Base','Asistencia'],d.porCategoria.map(function(c) { return [_esc(c.categoria),c.base,_pctTexto(c.asistenciaPct)]; }))) +
-          _statsBloque('Serie semanal',_svgSerie(d.serieSemanal,'Asistencia semanal del club')) +
-          _statsBloque('Alertas de jugadores',_statsTabla(['Jugador','Equipo','Alertas'],d.alertas.map(function(a) { return [_statsJugadorBoton(a.jugadorId,a.apellidos + ', ' + a.nombre),_esc(a.equipoNombre),a.alertas.map(_htmlAlerta).join('')]; }))) +
-          _statsBloque('Sesiones pendientes de registrar',_statsTabla(['Equipo','Sesión'],d.pendientes.map(function(p) { return [_esc(p.equipoNombre),_statsSesionBoton(p)]; }))) +
+        html += _statsHero(d) + '<div class="stat-grid-2">' + _htmlKpi('Entrenamientos con lista',d.sesiones,d.canceladas + (d.canceladas === 1 ? ' cancelada' : ' canceladas')) + _htmlKpi('Horas programadas',_datoTexto(d.horasProgramadas,' h'),'Duración de las sesiones') + '</div>' +
+          _statsBloque('Comparativa de equipos',_statsHorizontales(d.equipos.map(function(e) { return {nombre:e.nombre,base:e.sesiones,asistenciaPct:e.asistenciaPct}; }),'Asistencia por equipo')) +
+          _statsBloque('Equipos',_statsOrdenSelect('club',this._orden || 'asistenciaPct') + _statsTabla(['Equipo','Categoría','Modalidad','Asistencia','Puntualidad','Sesiones','Canceladas','Con entrenador','Tendencia'],_statsOrdenar(d.equipos,this._orden || 'asistenciaPct').map(function(e) { return [_statsEquipoBoton(e.id,e.nombre),_esc(e.categoria),_esc(e.modalidad),_pctTexto(e.asistenciaPct),_pctTexto(e.puntualidadPct),e.sesiones,e.canceladas,_pctTexto(e.conEntrenadorPct),_htmlTendencia(e.tendenciaPp)]; }))) +
+          _statsBloque('Asistencia por categoría',_statsHorizontales(d.porCategoria.map(function(c) { return {nombre:c.categoria,base:c.base,asistenciaPct:c.asistenciaPct}; }),'Asistencia por categoría')) +
+          _statsBloque('Asistencia mes a mes',_statsMensual(d.serieMensual)) +
           _statsBloque('Motivos',_statsMotivos(d.motivos)) + _statsBloque('Cancelaciones',_statsCancelaciones(d.cancelaciones)) +
           _statsBloque('Contactabilidad','<p>' + c.jugadoresActivos + ' jugadores activos</p><p>' + c.conEmailFamiliar + ' con email familiar · ' + c.conAvisosActivos + ' con avisos activos</p>') +
-          '<div class="p-16 stats-actions"><button class="btn btn-primary btn-full" onclick="App.views.informes.exportar(\'equipos\')">Exportar CSV de equipos</button><button class="btn btn-secondary btn-full" onclick="App.views.informes.exportar(\'alertas\')">Exportar CSV de alertas</button></div>';
+          '<div class="p-16 stats-actions"><button class="btn btn-primary btn-full" onclick="App.views.informes.exportar()">Exportar CSV de equipos</button></div>';
         el.innerHTML = html;
       },
       ordenar: function(campo) { this._orden = campo; this.render(); },
-      exportar: function(tipo) {
+      exportar: function() {
         if (!App.state.esAdmin) return;
         var entrada = App.stats.detalle('club');
         if (entrada.estado !== 'ok') return;
         var d = entrada.data.datos;
-        var filas = tipo === 'alertas' ? [['Jugador','Equipo','Alertas']].concat(d.alertas.map(function(a) { return [a.apellidos + ', ' + a.nombre,a.equipoNombre,a.alertas.join(', ')]; })) : [['Equipo','Categoría','Modalidad','Asistencia %','Puntualidad %','Sesiones','Pendientes','Canceladas','Con entrenador %','Tendencia pp']].concat(d.equipos.map(function(e) { return [e.nombre,e.categoria,e.modalidad,e.asistenciaPct,e.puntualidadPct,e.sesiones,e.pendientes,e.canceladas,e.conEntrenadorPct,e.tendenciaPp]; }));
-        _csvDescargar('club-' + tipo + '.csv',filas);
+        var filas = [['Equipo','Categoría','Modalidad','Asistencia %','Puntualidad %','Sesiones','Canceladas','Con entrenador %','Tendencia en puntos']].concat(d.equipos.map(function(e) { return [e.nombre,e.categoria,e.modalidad,e.asistenciaPct,e.puntualidadPct,e.sesiones,e.canceladas,e.conEntrenadorPct,e.tendenciaPp]; }));
+        _csvDescargar('club-equipos.csv',filas);
       },
     },
 
@@ -3828,7 +3760,8 @@ const App = {
         }
         var statsEl = document.getElementById('perfil-stats');
         var propio = App.stats.resumen && App.stats.resumen.datos.jugador;
-        statsEl.innerHTML = propio ? _statsHero(propio) + '<div class="stat-grid-1">' + _htmlKpi('Racha actual', propio.rachaActual, 'sesiones P o R') + '</div>' + _statsBloque('Últimas 12 sesiones', _htmlHeatmap(propio.sesiones.slice(0,12))) + '<div class="p-16"><button class="btn btn-primary btn-full" onclick="App.navigate(\'mis-stats\')">Ver mis estadísticas</button></div>' : _statsResumenEstado();
+        document.getElementById('perfil-racha').innerHTML = propio ? _statsRacha(propio) : '';
+        statsEl.innerHTML = propio ? _statsHero(propio) + _statsBloque('Últimas 12 sesiones', _htmlHeatmap(propio.sesiones.slice(0,12))) + '<div class="p-16"><button class="btn btn-primary btn-full" onclick="App.navigate(\'mis-stats\')">Ver mis estadísticas</button></div>' : _statsResumenEstado();
       },
     },
 
@@ -3928,12 +3861,12 @@ const App = {
         if (!eq) { el.innerHTML = '<div class="empty-state"><p>No asignado a ningún equipo</p></div>'; return; }
         var medals = ['🥇','🥈','🥉'];
         var podium = eq.ranking.slice(0,3).map(function(item,idx) {
-          return '<div class="ranking-podium-card podium-' + (idx+1) + (item.esYo ? ' ranking-yo' : '') + '"><span class="podium-medal" aria-label="Posición ' + item.posicion + '">' + medals[idx] + '</span><strong class="podium-name">' + _esc(item.nombre + ' ' + item.apellidos) + (item.esYo ? '<span class="ranking-you">Tú</span>' : '') + '</strong><span class="ranking-val">' + _pctTexto(item.asistenciaPct) + '</span><div class="podium-logros">' + item.logros.map(_htmlLogro).join('') + '</div></div>';
+          return '<div class="ranking-podium-card podium-' + (idx+1) + (item.esYo ? ' ranking-yo' : '') + '"><span class="podium-medal" aria-label="Posición ' + item.posicion + '">' + medals[idx] + '</span><strong class="podium-name">' + _statsRachaTexto(item.nombre + ' ' + item.apellidos) + (item.esYo ? '<span class="ranking-you">Tú</span>' : '') + '</strong><span class="ranking-val">' + _pctTexto(item.asistenciaPct) + '</span>' + _statsMiniRacha(item.rachaActual) + '<div class="podium-logros">' + item.logros.map(_htmlLogro).join('') + '</div></div>';
         }).join('');
         var rankingHtml = (podium ? '<div class="ranking-podium">' + podium + '</div>' : '') + eq.ranking.slice(3).map(function(item) {
-          return '<div class="ranking-row' + (item.esYo ? ' ranking-yo' : '') + '"><span class="ranking-pos">' + item.posicion + '</span><div class="ranking-person"><div class="ranking-name">' + _esc(item.apellidos + ', ' + item.nombre) + (item.esYo ? ' <span class="ranking-you">Tú</span>' : '') + '</div><div class="ranking-bar-wrap"><div class="ranking-bar-fill" style="width:' + item.asistenciaPct + '%"></div></div><div>' + item.logros.map(_htmlLogro).join('') + '</div></div><span class="ranking-val">' + _pctTexto(item.asistenciaPct) + '</span></div>';
+          return '<div class="ranking-row' + (item.esYo ? ' ranking-yo' : '') + '"><span class="ranking-pos">' + item.posicion + '</span><div class="ranking-person"><div class="ranking-name">' + _statsRachaTexto(item.apellidos + ', ' + item.nombre) + (item.esYo ? ' <span class="ranking-you">Tú</span>' : '') + '</div><div class="ranking-bar-wrap"><div class="ranking-bar-fill" style="width:' + item.asistenciaPct + '%"></div></div><div>' + _statsMiniRacha(item.rachaActual) + item.logros.map(_htmlLogro).join('') + '</div></div><span class="ranking-val">' + _pctTexto(item.asistenciaPct) + '</span></div>';
         }).join('');
-        el.innerHTML = _htmlFiltroStats() + _statsBloque(eq.nombre, _statsHero(eq) + '<p class="stats-position"><span aria-hidden="true">✦</span> Tu posición: <strong>' + _datoTexto(eq.posicion) + '</strong> de ' + eq.total + '</p><p class="stats-periodo">' + eq.sesiones + ' sesiones computables</p>') +
+        el.innerHTML = _htmlFiltroStats() + _statsBloque(eq.nombre, _statsHero(eq) + '<p class="stats-position"><span aria-hidden="true">✦</span> Tu posición: <strong>' + _datoTexto(eq.posicion) + '</strong> de ' + eq.total + '</p><p class="stats-periodo">' + eq.sesiones + ' entrenamientos con lista</p>') +
           _statsBloque('Ranking de asistencia',rankingHtml || '<p>Sin datos registrados aún</p>') +
           _statsBloque('Con pocas sesiones aún',eq.pocasSesiones.map(function(p) { return '<p>' + _esc(p.apellidos + ', ' + p.nombre) + (p.esYo ? ' (yo)' : '') + '</p>'; }).join('') || '<p>Ningún jugador</p>') +
           _statsBloque('Horario semanal','<div id="mi-equipo-horario"></div>');
@@ -5072,26 +5005,32 @@ function _updateUserBadge(nombre, rol) {
 function _pctTexto(p) { return p == null ? '—' : p + '%'; }
 function _nivelClase(p) { return p == null ? 'sec' : p >= 85 ? 'stats-high' : p >= 70 ? 'stats-mid' : 'stats-low'; }
 function _datoTexto(v, unidad) { return v == null ? '—' : _esc(String(v)) + (unidad || ''); }
-function _htmlTendencia(pp) { return pp == null ? '' : '<span class="tendencia ' + (pp > 0 ? 'up' : pp < 0 ? 'down' : 'flat') + '">' + (pp > 0 ? '▲ +' : pp < 0 ? '▼ ' : '▬ ') + pp + ' pp</span>'; }
+function _htmlTendencia(pp) { return pp == null ? '' : '<span class="tendencia ' + (pp > 0 ? 'up' : pp < 0 ? 'down' : 'flat') + '">' + (pp === 0 ? 'Estable' : (pp > 0 ? '▲ ' : '▼ ') + Math.abs(pp) + (Math.abs(pp) === 1 ? ' punto' : ' puntos')) + '</span>' + _statsInfoBoton('Tendencia','tendencia'); }
 function _htmlKpi(titulo, valorHtml, sub, clase) {
   _statsQueueMotion();
   var ring = String(clase || '').indexOf('kpi-hero') >= 0 && /^\d+(\.\d+)?%$/.test(String(valorHtml));
-  return '<div class="stat-widget ' + (clase || '') + '"><div class="stat-widget-title">' + _statsIcon(titulo) + _esc(titulo) + '</div>' + (ring ? _statsRing(parseFloat(valorHtml), titulo, false) : '<div class="stat-valor">' + valorHtml + '</div>') + (sub ? '<div class="stat-label">' + sub + '</div>' : '') + '</div>';
+  return '<div class="stat-widget ' + _statsTexto(clase || '') + '"><div class="stat-widget-title">' + _statsIcon(titulo) + _statsTexto(titulo) + _statsInfoBoton(titulo) + '</div>' + (ring ? _statsRing(parseFloat(valorHtml), titulo, false) : '<div class="stat-valor">' + valorHtml + '</div>') + (sub ? '<div class="stat-label">' + sub + '</div>' : '') + '</div>';
 }
 function _statsIcon(titulo) {
   var path = /racha|logro|ranking/i.test(titulo) ? 'M8 3h8v5a4 4 0 0 1-8 0V3Zm0 2H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4m-4 1v6m-4 3h8' : /hora|puntual|día|seman|sesion|sesión/i.test(titulo) ? 'M12 8v5l3 2M8 3h8M12 3v2M21 13a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' : 'M4 20V10m8 10V4m8 16v-7M2 20h20';
   return '<svg class="stats-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + path + '"/></svg>';
 }
-function _statsBloque(titulo, html) { _statsQueueMotion(); return '<div class="stat-grid-1 stats-block"><div class="stat-widget"><h2 class="stat-widget-title">' + _statsIcon(titulo) + _esc(titulo) + '</h2>' + html + '</div></div>'; }
-function _statsTabla(cabecera, filas) { return '<div class="stats-table-wrap" tabindex="0" role="region" aria-label="Tabla de ' + _esc(cabecera.join(', ')) + '"><table class="stats-table"><thead><tr>' + cabecera.map(function(c) { return '<th scope="col">' + _esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' + (filas.length ? filas.map(function(f) { return '<tr>' + f.map(function(c) { var pct = /^\d+(\.\d+)?%$/.test(String(c)); return '<td>' + (pct ? '<span class="stats-pct ' + _nivelClase(parseFloat(c)) + '">' + c + '</span>' : c) + '</td>'; }).join('') + '</tr>'; }).join('') : '<tr><td colspan="' + cabecera.length + '">Sin datos</td></tr>') + '</tbody></table></div>'; }
+function _statsBloque(titulo, html, subtitulo) { _statsQueueMotion(); return '<div class="stat-grid-1 stats-block"><div class="stat-widget"><h2 class="stat-widget-title">' + _statsIcon(titulo) + _statsTexto(titulo) + _statsInfoBoton(titulo) + '</h2>' + (subtitulo ? '<p class="stats-periodo">' + _statsTexto(subtitulo) + '</p>' : '') + html + '</div></div>'; }
+function _statsTabla(cabecera, filas) { return '<div class="stats-table-wrap" tabindex="0" role="region" aria-label="Tabla de ' + _statsTexto(cabecera.join(', ')) + '"><table class="stats-table"><thead><tr>' + cabecera.map(function(c) { return '<th scope="col">' + _statsTexto(c === 'Base' ? 'Registros' : c) + _statsInfoBoton(c) + '</th>'; }).join('') + '</tr></thead><tbody>' + (filas.length ? filas.map(function(f) { return '<tr>' + f.map(function(c) { var pct = /^\d+(\.\d+)?%$/.test(String(c)); return '<td>' + (pct ? '<span class="stats-pct ' + _nivelClase(parseFloat(c)) + '">' + c + '</span>' : c) + '</td>'; }).join('') + '</tr>'; }).join('') : '<tr><td colspan="' + cabecera.length + '">Sin datos</td></tr>') + '</tbody></table></div>'; }
 function _statsDatos(cabecera, filas) { return '<details><summary>Ver datos</summary>' + _statsTabla(cabecera, filas) + '</details>'; }
 function _htmlFiltroStats() {
-  var s = App.stats.resumen, f = s && s.filtro, temporadas = s ? s.temporadas : App.cache.temporadas;
-  var actual = App.stats.filtro || {}, periodos = f ? f.periodos : ['temporada'];
+  var s = App.stats.resumen, actual = App.stats.filtro || {};
   var consulta = {'equipo-detalle':['equipo',App.state.detalleEquipoId],'jugador-detalle':['jugador',App.state.detalleJugadorId],'entrenador-detalle':['entrenador',App.state.detalleEntrenadorId],informes:['club',null]}[App.state.currentView];
   var entrada = consulta && App.stats.detalles[App.stats._key(consulta[0],consulta[1])];
-  var updating = App.stats.refreshing || (entrada && entrada.refreshing && entrada.data);
-  return '<div class="stats-filtro"><label>Temporada<select onchange="App.stats.setFiltro({temporadaId:this.value})">' + temporadas.map(function(t) { return '<option value="' + _esc(t.ID) + '"' + (t.ID === actual.temporadaId ? ' selected' : '') + '>' + _esc(t.Nombre) + ((t.Activa === true || t.Activa === 'TRUE') ? ' (activa)' : '') + '</option>'; }).join('') + '</select></label><label>Periodo<select onchange="App.stats.setFiltro({periodo:this.value})">' + periodos.map(function(p) { return '<option value="' + p + '"' + (p === actual.periodo ? ' selected' : '') + '>' + ({temporada:'Temporada completa','4s':'Últimas 4 semanas',mes:'Este mes'})[p] + '</option>'; }).join('') + '</select></label></div>' + (f ? '<p class="stats-periodo">Datos de ' + _esc(f.desde) + ' a ' + _esc(f.hasta) + '</p>' : '') + (updating ? '<p class="stats-refresh" role="status"><span aria-hidden="true"></span>Actualizando…</p>' : '');
+  var f = entrada && entrada.data ? entrada.data.filtro : s && s.filtro;
+  var temporadas = s ? s.temporadas : App.cache.temporadas || [];
+  var elegida = temporadas.find(function(t) { return t.ID === (actual.temporadaId || (f && f.temporadaId)); });
+  var periodos = f ? f.periodos : ['temporada'], periodo = (f && f.periodo) || actual.periodo || 'temporada';
+  var posicion = Math.max(0,periodos.indexOf(periodo));
+  return '<div class="stats-filtro stats-filter-modern"><button type="button" class="stats-season-pill" aria-haspopup="dialog" onclick="_statsTemporadas()"><span class="stats-season-caption">Temporada</span><strong>' + _statsTexto(elegida ? elegida.Nombre : f && f.temporadaNombre || 'Elegir temporada') + '</strong><svg class="stats-season-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></button>' +
+    '<div class="stats-period-segments" role="group" aria-label="Periodo de estadísticas" style="--stats-segments:' + periodos.length + ';--stats-selected:' + posicion + '"><span class="stats-period-slider" aria-hidden="true"></span>' + periodos.map(function(p) { return '<button type="button" aria-pressed="' + (p === periodo) + '" onclick="_statsPeriodo(this,' + _statsArgumento(p) + ')">' + ({temporada:'Temporada','4s':'4 semanas',mes:'Este mes'})[p] + '</button>'; }).join('') + '</div></div>' +
+    (f ? '<p class="stats-date-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18"/></svg>' + _statsTexto(_statsFechaHumana(f.desde) + ' — ' + _statsFechaHumana(f.hasta)) + '</p>' : '') +
+    (App.stats.refreshing || (entrada && entrada.refreshing && entrada.data) ? '<p class="stats-refresh" role="status"><span aria-hidden="true"></span>Actualizando…</p>' : '');
 }
 function _htmlEstadoStats(entrada) {
   if (!entrada || entrada.estado === 'cargando') return '<div class="stat-grid-1"><div class="stat-skeleton" role="status" aria-label="Cargando estadísticas"><span class="sr-only">Cargando estadísticas</span></div></div>';
@@ -5142,29 +5081,24 @@ function _statsAnimate() {
 }
 
 function _svgSerie(serie, titulo) {
-  var validos = serie.filter(function(p) { return p.asistenciaPct != null; });
-  var media = validos.length ? Math.round(validos.reduce(function(n,p) { return n + p.asistenciaPct; },0) / validos.length) : null;
-  var resumen = titulo + ': primera ' + _pctTexto(validos.length ? validos[0].asistenciaPct : null) + ', última ' + _pctTexto(validos.length ? validos[validos.length - 1].asistenciaPct : null) + ', media ' + _pctTexto(media);
-  var segmentos = [], puntos = [], id = 'stats-area-' + (++_statsSvgId);
+  var segmentos = [], puntos = [], resumen = titulo + ': ' + serie.map(function(p) { return p.semana + ', ' + _pctTexto(p.asistenciaPct); }).join('; ');
   serie.forEach(function(p,i) {
     if (p.asistenciaPct == null) { if (puntos.length) segmentos.push(puntos); puntos = []; return; }
-    puntos.push({x:24 + (serie.length > 1 ? i * 272 / (serie.length - 1) : 136), y:110 - p.asistenciaPct * .8, valor:p.asistenciaPct});
+    puntos.push({x:34 + (serie.length > 1 ? i * 272 / (serie.length - 1) : 136), y:120 - p.asistenciaPct, dato:p});
   });
   if (puntos.length) segmentos.push(puntos);
-  var ultimo = segmentos.length ? segmentos[segmentos.length - 1].slice(-1)[0] : null;
-  return '<svg class="serie-svg" viewBox="0 0 320 136" role="img" aria-label="' + _esc(resumen) + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#9C27B0" stop-opacity=".3"/><stop offset="100%" stop-color="#9C27B0" stop-opacity=".02"/></linearGradient></defs>' + [30,70,110].map(function(y) { return '<path d="M24 ' + y + 'H296" stroke="#EDE5F4" stroke-dasharray="3 4"/>'; }).join('') + '<text x="0" y="33" font-size="9">100</text><text x="12" y="113" font-size="9">0</text>' + segmentos.map(function(s) {
-    var path = 'M' + s[0].x + ',' + s[0].y;
-    for (var i = 1; i < s.length; i++) { var a = s[i-1], b = s[i], mid = (a.x+b.x)/2; path += ' C' + mid + ',' + a.y + ' ' + mid + ',' + b.y + ' ' + b.x + ',' + b.y; }
-    return '<path d="' + path + ' L' + s[s.length-1].x + ',110 L' + s[0].x + ',110Z" fill="url(#' + id + ')"/><path class="serie-line" d="' + path + '" fill="none" stroke="#7B1FA2" stroke-width="3" stroke-linecap="round"/>' + s.map(function(p) { return '<circle cx="' + p.x + '" cy="' + p.y + '" r="3" fill="#7B1FA2"/>'; }).join('');
-  }).join('') + (ultimo ? '<circle cx="' + ultimo.x + '" cy="' + ultimo.y + '" r="7" fill="#7B1FA2" fill-opacity=".16"/><circle cx="' + ultimo.x + '" cy="' + ultimo.y + '" r="4" fill="#AB47BC" stroke="white" stroke-width="2"/><text class="serie-last" x="' + ultimo.x + '" y="' + (ultimo.y-12) + '" text-anchor="' + (ultimo.x > 260 ? 'end' : 'middle') + '" font-size="11" font-weight="800">' + ultimo.valor + '%</text>' : '') + '</svg>' + (!validos.length ? '<p>Sin datos</p>' : '') + _statsDatos(['Semana','Base','Asistencia','Puntualidad'], serie.map(function(p) { return [_esc(p.semana),p.base,_pctTexto(p.asistenciaPct),_pctTexto(p.puntualidadPct)]; }));
+  return '<div class="stats-chart"><p class="stats-chart-caption">Evolución semanal del equipo · asistencia (%)</p><svg class="serie-svg stats-weekly" viewBox="0 0 340 156" role="img" aria-label="' + _statsChartEsc(resumen) + '">' + [0,50,100].map(function(v) { return '<path d="M34 ' + (120-v) + 'H306" class="stats-chart-grid"/><text x="3" y="' + (124-v) + '" class="stats-axis">' + v + '%</text>'; }).join('') + segmentos.map(function(s) {
+    return '<polyline points="' + s.map(function(p) { return p.x + ',' + p.y; }).join(' ') + '" fill="none" stroke="var(--morado)" stroke-width="3" stroke-linejoin="round"/>' + s.map(function(p) { var d = p.dato, label = 'Semana del ' + d.semana + ': ' + _pctTexto(d.asistenciaPct) + ' de asistencia · ' + d.base + ' registros · ' + d.P + ' presentes, ' + d.R + ' retrasos, ' + d.A + ' ausencias'; return '<circle class="stats-line-point" cx="' + p.x + '" cy="' + p.y + '" r="6" fill="var(--morado)"' + _statsChartAttrs(label) + '><title>' + _statsChartEsc(label) + '</title></circle>'; }).join('');
+  }).join('') + (serie.length ? '<text x="34" y="148" class="stats-axis">' + _statsChartEsc(serie[0].semana) + '</text><text x="306" y="148" text-anchor="end" class="stats-axis">' + _statsChartEsc(serie[serie.length-1].semana) + '</text>' : '') + '</svg>' + (!segmentos.length ? '<p class="stats-empty">Sin datos</p>' : '') + _statsDatos(['Semana','Registros','Asistencia','Puntualidad'],serie.map(function(p) { return [_statsChartEsc(p.semana),p.base,_pctTexto(p.asistenciaPct),_pctTexto(p.puntualidadPct)]; })) + '</div>';
 }
 function _htmlHeatmap(sesiones) {
   var estados = {P:'Presente',A:'Ausente',R:'Retraso'};
-  return '<div class="heatmap">' + sesiones.map(function(s) { var d = _fmtFecha(s.fecha), label = d.dn + ' ' + d.d + ' ' + d.m + ' · ' + (estados[s.estado] || 'Sin registrar') + (s.justificada ? ' · justificada' : ''); return '<span class="heat-cell ' + (s.estado || 'none') + '" role="img" title="' + _esc(label) + '" aria-label="' + _esc(label) + '">' + (s.estado || '—') + '</span>'; }).join('') + '</div><p class="stats-periodo">P: Presente · A: Ausente · R: Retraso · —: Sin registrar</p>' + _statsDatos(['Fecha','Equipo','Estado','Justificada','Minutos retraso'], sesiones.map(function(s) { return [_esc(s.fecha + ' ' + s.hora),_esc(s.equipoNombre),estados[s.estado] || 'Sin registrar',s.justificada ? 'Sí' : 'No',_datoTexto(s.minutosRetraso)]; }));
+  return '<div class="stats-chart"><div class="heatmap" role="img" aria-label="Asistencia en las últimas sesiones">' + sesiones.map(function(s) { var label = s.fecha + ' · ' + (s.hora || '') + ' · ' + (s.equipoNombre || '') + ' · ' + (estados[s.estado] || 'Sin registrar') + (s.justificada ? ' · justificada' : '') + (s.minutosRetraso == null ? '' : ' · ' + s.minutosRetraso + ' minutos de retraso'); return '<button type="button" class="heat-cell ' + (estados[s.estado] ? s.estado : 'none') + '"' + _statsChartAttrs(label) + '>' + (estados[s.estado] ? s.estado : '—') + '</button>'; }).join('') + '</div><p class="stats-periodo">P: Presente · A: Ausente · R: Retraso · —: Sin registrar</p>' + (!sesiones.length ? '<p class="stats-empty">Sin sesiones en este periodo</p>' : '') + _statsDatos(['Fecha','Equipo','Estado','Justificada','Minutos retraso'],sesiones.map(function(s) { return [_statsChartEsc(s.fecha + ' ' + (s.hora || '')),_statsChartEsc(s.equipoNombre),estados[s.estado] || 'Sin registrar',s.justificada ? 'Sí' : 'No',_datoTexto(s.minutosRetraso)]; })) + '</div>';
 }
 function _htmlDistribucion(dist) {
-  var keys = ['alta','media','baja','pocasSesiones'], labels = ['Alta (≥85%)','Media (70–84%)','Baja (<70%)','Con pocas sesiones'], total = keys.reduce(function(n,k) { return n + dist[k]; },0);
-  return '<div class="dist-bar" role="img" aria-label="' + _esc(keys.map(function(k,i) { return labels[i] + ': ' + dist[k]; }).join(', ')) + '">' + keys.map(function(k) { return '<span class="dist-segment ' + k + '" style="width:' + (total ? dist[k] * 100 / total : 0) + '%"></span>'; }).join('') + '</div><div class="dist-legend">' + keys.map(function(k,i) { return '<div><span class="dist-dot ' + k + '" aria-hidden="true"></span><span>' + labels[i] + '</span><strong>' + dist[k] + '</strong></div>'; }).join('') + '</div>' + _statsDatos(['Nivel','Jugadores'], keys.map(function(k,i) { return [labels[i],dist[k]]; }));
+  var keys = ['alta','media','baja','pocasSesiones'], labels = ['Alta (≥85%)','Media (70–84%)','Baja (<70%)','Con pocas sesiones'];
+  var valores = keys.map(function(k) { return dist[k] || 0; }), total = valores.reduce(function(n,v) { return n+v; },0);
+  return _statsDonut(valores,labels,['var(--stats-positive)','var(--stats-gold)','var(--stats-coral)','#B9A8CC'],String(total),'jugadores','Distribución de asistencia de la plantilla') + _statsDatos(['Nivel','Jugadores'],labels.map(function(label,i) { return [label,valores[i]]; }));
 }
 function _htmlLogro(code) {
   var label = ({perfecta:'Asistencia perfecta',puntual:'Siempre puntual',racha10:'Racha de 10+',mejorRacha:'Mejor racha del equipo'})[code] || code;
@@ -5176,7 +5110,7 @@ function _statsJugadorBoton(id,nombre) { return '<button class="btn btn-secondar
 function _statsEquipoBoton(id,nombre) { return '<button class="btn btn-secondary btn-sm" onclick="App.views[\'equipo-detalle\'].cargar(' + _statsArgumento(id) + ')">' + _esc(nombre) + '</button>'; }
 function _statsOrdenar(filas,campo) { return filas.slice().sort(function(a,b) { var va = a[campo], vb = b[campo]; if (va == null || vb == null) return va == null ? (vb == null ? 0 : 1) : -1; return vb - va || String(a.apellidos || a.nombre || '').localeCompare(String(b.apellidos || b.nombre || ''),'es'); }); }
 function _statsOrdenSelect(entidad,campo) {
-  var opciones = entidad === 'equipo' ? [['asistenciaPct','Asistencia'],['puntualidadPct','Puntualidad'],['injustificadasA','Faltas sin justificar'],['tendenciaPp','Tendencia']] : [['asistenciaPct','Asistencia'],['puntualidadPct','Puntualidad'],['sesiones','Sesiones'],['pendientes','Pendientes'],['canceladas','Canceladas'],['conEntrenadorPct','Cobertura técnica'],['tendenciaPp','Tendencia']];
+  var opciones = entidad === 'equipo' ? [['asistenciaPct','Asistencia'],['puntualidadPct','Puntualidad'],['injustificadasA','Faltas sin justificar'],['tendenciaPp','Tendencia']] : [['asistenciaPct','Asistencia'],['puntualidadPct','Puntualidad'],['sesiones','Sesiones'],['canceladas','Canceladas'],['conEntrenadorPct','Cobertura técnica'],['tendenciaPp','Tendencia']];
   return '<label class="stats-filtro">Ordenar por<select onchange="App.views[\'' + (entidad === 'equipo' ? 'equipo-detalle' : 'informes') + '\'].ordenar(this.value)">' + opciones.map(function(o) { return '<option value="' + o[0] + '"' + (o[0] === campo ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>';
 }
 function _statsLogros(j,jugadores) {
@@ -5189,8 +5123,7 @@ function _statsLogros(j,jugadores) {
   return logros.map(_htmlLogro).join('');
 }
 function _statsSerieMensual(serie) {
-  var max = Math.max.apply(null,[1].concat(serie.map(function(p) { return p.sesiones; })));
-  return '<div role="img" aria-label="Presencia mensual: ' + _esc(serie.map(function(p) { return p.mes + ', ' + p.presentes + ' de ' + p.sesiones; }).join('; ')) + '">' + serie.map(function(p) { return _htmlBarRow(_esc(p.mes),p.presentes,max,'var(--morado)'); }).join('') + '</div>' + _statsDatos(['Mes','Sesiones','Presentes'],serie.map(function(p) { return [_esc(p.mes),p.sesiones,p.presentes]; }));
+  return _statsColumnas(serie.map(function(p) { return {nombre:_statsMes(p.mes),valores:[p.presentes,p.sesiones-p.presentes]}; }),['Presentes','Sin presencia'],['var(--morado)','#E5DCEC'],'Presencia mensual del entrenador') + _statsDatos(['Mes','Sesiones','Presentes'],serie.map(function(p) { return [_statsChartEsc(_statsMes(p.mes)),p.sesiones,p.presentes]; }));
 }
 
 function _csvDescargar(nombre, filas) {
@@ -5200,10 +5133,16 @@ function _csvDescargar(nombre, filas) {
 }
 function _statsHero(d, comparativa) {
   _statsQueueMotion();
-  return (App.state.currentView === 'perfil-jugador' && App.stats.refreshing ? '<div class="stat-grid-1"><p class="stats-refresh" role="status"><span aria-hidden="true"></span>Actualizando…</p></div>' : '') + '<div class="stat-grid-2 stats-hero-grid">' + _htmlKpi('Asistencia',_pctTexto(d.asistenciaPct),_htmlTendencia(d.tendenciaPp) + (comparativa == null ? '' : '<span class="stats-comparison">vs club ' + (comparativa > 0 ? '+' : '') + comparativa + ' pp</span>'),'kpi-hero') + '<div class="stat-widget kpi-punctual"><div class="stat-widget-title">' + _statsIcon('Puntualidad') + 'Puntualidad</div>' + _statsRing(d.puntualidadPct,'Puntualidad',true) + '<div class="stat-label">P / (P + R)</div><span class="stats-mini-pill">Cada minuto cuenta</span></div></div>';
+  return (App.state.currentView === 'perfil-jugador' && App.stats.refreshing ? '<div class="stat-grid-1"><p class="stats-refresh" role="status"><span aria-hidden="true"></span>Actualizando…</p></div>' : '') + '<div class="stat-grid-2 stats-hero-grid">' + _htmlKpi('Asistencia',_pctTexto(d.asistenciaPct),_htmlTendencia(d.tendenciaPp) + (comparativa == null ? '' : '<span class="stats-comparison">' + (comparativa === 0 ? 'Igual que el club' : Math.abs(comparativa) + (Math.abs(comparativa) === 1 ? ' punto' : ' puntos') + (comparativa > 0 ? ' sobre el club' : ' bajo el club')) + '</span>' + _statsInfoBoton('Comparativa con el club','comparativa')),'kpi-hero') + '<div class="stat-widget kpi-punctual"><div class="stat-widget-title">' + _statsIcon('Puntualidad') + 'Puntualidad' + _statsInfoBoton('Puntualidad') + '</div>' + _statsRing(d.puntualidadPct,'Puntualidad',true) + '<div class="stat-label">Llegadas a tiempo entre quienes asistieron</div><span class="stats-mini-pill">Cada minuto cuenta</span></div></div>';
 }
-function _statsPorDia(serie) { return _statsTabla(['Día','Base','Asistencia'],serie.map(function(p) { return [(['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'])[p.dia - 1],p.base,_pctTexto(p.asistenciaPct)]; })); }
-function _statsMotivos(motivos) { return _statsTabla(['Motivo','Ausencias','Retrasos'],motivos.map(function(m) { return [_esc(m.motivo),m.A,m.R]; })); }
+function _statsPorDia(serie) {
+  var dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  return _statsColumnas(serie.map(function(p) { return {nombre:dias[p.dia-1],valores:[p.asistenciaPct],extra:p.base + ' registros'}; }),['Asistencia'],['var(--morado)'],'Asistencia por día de la semana',true) + _statsDatos(['Día','Registros','Asistencia'],serie.map(function(p) { return [dias[p.dia-1],p.base,_pctTexto(p.asistenciaPct)]; }));
+}
+function _statsMotivos(motivos) {
+  var max = Math.max.apply(null,[1].concat(motivos.map(function(m) { return m.A+m.R; })));
+  return '<div class="stats-chart stats-horizontal" role="img" aria-label="Motivos de ausencias y retrasos">' + _statsLeyenda(['Ausencias','Retrasos'],['var(--stats-coral)','var(--stats-gold)']) + (motivos.length ? motivos.map(function(m) { return '<div class="stats-hrow"><div class="stats-hlabel"><span>' + _statsChartEsc(m.motivo) + '</span><strong>' + (m.A+m.R) + '</strong></div><div class="stats-htrack">' + [m.A,m.R].map(function(v,i) { return v ? '<span class="stats-hsegment" style="width:' + v/max*100 + '%;background:' + (i ? 'var(--stats-gold)' : 'var(--stats-coral)') + '"' + _statsChartAttrs(m.motivo + ': ' + v + (i ? ' retrasos' : ' ausencias') + ' · ' + (m.A+m.R) + ' incidencias en total') + '>' + v + '</span>' : ''; }).join('') + '</div></div>'; }).join('') : '<p class="stats-empty">Sin incidencias registradas</p>') + '</div>' + _statsDatos(['Motivo','Ausencias','Retrasos'],motivos.map(function(m) { return [_statsChartEsc(m.motivo),m.A,m.R]; }));
+}
 function _statsCancelaciones(lista) { return _statsTabla(['Cancelada: motivo','Sesiones'], lista.map(function(c) { return [_esc(c.motivo),c.n]; })); }
 function _statsSesionBoton(s) {
   var sesion = App.cache.sesiones.find(function(fila) { return fila.ID === s.sesionId; }), equipoId = s.equipoId || (sesion && sesion.ID_Equipo) || '', equipo = App.cache.getEquipoById(equipoId);
@@ -5211,46 +5150,89 @@ function _statsSesionBoton(s) {
 }
 function _statsJugadorHtml(d, personal) {
   var c = d.conteo, avisos = d.avisos;
-  return _htmlFiltroStats() + _statsHero(d) + (personal ? _statsBloque('Alertas',(d.alertas || []).map(_htmlAlerta).join('') || '<p>Sin alertas</p>') : '') +
-    _statsBloque('P/A/R · ' + c.base + ' sesiones registradas',_svgPie(c.P,c.A,c.R)) +
+  return _htmlFiltroStats() + _statsRacha(d) + _statsHero(d) + (personal ? _statsBloque('Alertas',(d.alertas || []).map(_htmlAlerta).join('') || '<p>Sin alertas</p>') : '') +
+    _statsBloque('Presentes, retrasos y ausencias',_svgPie(c.P,c.A,c.R),c.base + ' sesiones con lista') +
     _statsBloque('Últimas sesiones',_htmlHeatmap(d.sesiones)) +
-    '<div class="stat-grid-2">' + _htmlKpi('Racha actual',d.rachaActual,'sesiones P o R') + _htmlKpi('Mejor racha',d.mejorRacha,'sesiones P o R') + '</div>' +
-    _statsBloque('Serie semanal',_svgSerie(d.serieSemanal,'Asistencia semanal')) + _statsBloque('Asistencia por día',_statsPorDia(d.porDia)) +
+    _statsBloque('Asistencia mes a mes',_statsMensual(d.serieMensual)) + _statsBloque('Asistencia por día',_statsPorDia(d.porDia)) +
     '<div class="stat-grid-1">' + _htmlKpi('Retraso medio',_datoTexto(d.retrasoMedioMin,' min'),d.retrasosConMinutos + ' retrasos con minutos') + '</div>' +
-    _statsBloque('Avisos y motivos','<p>' + avisos.total + ' justificaciones · ' + avisos.previos + ' avisos previos · ' + avisos.programadas + ' programadas</p><p>Antelación mediana: ' + _datoTexto(avisos.antelacionMedianaHoras,' h') + '</p>' + _statsMotivos(d.motivos)) +
-    _statsBloque('Equipos',_statsTabla(['Equipo','Tipo','Base','Asistencia'],d.equipos.map(function(e) { return [_esc(e.nombre),_esc(e.tipo),e.base,_pctTexto(e.asistenciaPct)]; }))) +
-    '<div class="stat-grid-2">' + _htmlKpi('Carga semanal',_datoTexto(d.carga.sesionesSemanaMedia),'sesiones por semana') + _htmlKpi('Horas programadas asistidas',_datoTexto(d.carga.horasAsistidas,' h'),'No son horas de llegada') + '</div>' +
+    _statsBloque('Avisos y motivos',_statsJustificacion((c.A + c.R) ? Math.round((c.justificadasA + c.justificadasR) * 100 / (c.A + c.R)) : null) + '<p>' + avisos.total + ' justificaciones · ' + avisos.previos + ' avisos previos · ' + avisos.programadas + ' programadas</p><p>Antelación mediana: ' + _datoTexto(avisos.antelacionMedianaHoras,' h') + ' ' + _statsInfoBoton('Antelación de avisos') + '</p>' + _statsMotivos(d.motivos)) +
+    _statsBloque('Equipos',_statsTabla(['Equipo','Tipo','Sesiones registradas','Asistencia'],d.equipos.map(function(e) { return [_esc(e.nombre),_esc(e.tipo),e.base,_pctTexto(e.asistenciaPct)]; }))) +
+    '<div class="stat-grid-2">' + _htmlKpi('Carga semanal',_datoTexto(d.carga.sesionesSemanaMedia),'sesiones por semana') + _htmlKpi('Horas programadas asistidas',_datoTexto(d.carga.horasAsistidas,' h'),'Duración de los entrenamientos a los que vino') + '</div>' +
     _statsBloque('Sesiones extra','<p>' + d.extras.asistidas + ' asistidas / ' + d.extras.base + ' registradas</p>');
 }
 
 
 function _svgPie(cP, cA, cR) {
-  var total = cP + cA + cR;
-  if (!total) return '<div class="stats-empty">Sin datos</div>' + _statsDatos(['Presentes','Ausentes','Retrasos'],[[cP,cA,cR]]);
-  var sz=120, r=45, cx=60, cy=60;
-  var cols=['var(--stats-positive)','var(--stats-coral)','var(--stats-gold)'], vals=[cP,cA,cR], labs=['Presentes','Ausentes','Retrasos'];
-  var arcs='', angle=-Math.PI/2;
-  vals.forEach(function(v,i) {
-    if (!v) return;
-    if (v===total) { arcs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="'+cols[i]+'"/>'; return; }
-    var ea=angle+v/total*2*Math.PI, la=(ea-angle>Math.PI?1:0);
-    var x1=cx+r*Math.cos(angle),y1=cy+r*Math.sin(angle),x2=cx+r*Math.cos(ea),y2=cy+r*Math.sin(ea);
-    arcs+='<path d="M'+cx+','+cy+' L'+x1.toFixed(1)+','+y1.toFixed(1)+' A'+r+','+r+' 0 '+la+',1 '+x2.toFixed(1)+','+y2.toFixed(1)+' Z" fill="'+cols[i]+'"/>';
-    angle=ea;
-  });
-  var pct=Math.round((cP+cR)/total*100);
-  arcs+='<circle cx="'+cx+'" cy="'+cy+'" r="26" fill="#fff"/>'+
-        '<text x="'+cx+'" y="'+(cy-3)+'" text-anchor="middle" font-size="13" font-weight="800" fill="#1A1A1A">'+pct+'%</text>'+
-        '<text x="'+cx+'" y="'+(cy+10)+'" text-anchor="middle" font-size="7" fill="#6B6B6B">asist.</text>';
-  var leg='<div style="display:flex;justify-content:center;gap:14px;margin-top:10px;flex-wrap:wrap">';
-  vals.forEach(function(v,i){
-    if (!v) return;
-    leg+='<div style="display:flex;align-items:center;gap:5px;font-size:.7rem">'+
-         '<div style="width:9px;height:9px;border-radius:50%;background:'+cols[i]+'"></div>'+labs[i]+' ('+v+')</div>';
-  });
-  leg+='</div>';
-  return '<div style="display:flex;justify-content:center">'+
-         '<svg role="img" aria-label="'+cP+' presentes, '+cA+' ausentes, '+cR+' retrasos" width="'+sz+'" height="'+sz+'" viewBox="0 0 '+sz+' '+sz+'">'+arcs+'</svg></div>'+leg + _statsDatos(['Presentes','Ausentes','Retrasos'],[[cP,cA,cR]]);
+  var total = cP+cA+cR;
+  return _statsDonut([cP,cA,cR],['Presentes','Ausentes','Retrasos'],['var(--stats-positive)','var(--stats-coral)','var(--stats-gold)'],total ? Math.round((cP+cR)/total*100)+'%' : '—','asistencia','Estados de asistencia · ' + total + ' registros') + _statsDatos(['Presentes','Ausentes','Retrasos'],[[cP,cA,cR]]);
+}
+
+function _statsChartEsc(valor) { return String(valor == null ? '' : valor).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function _statsChartAttrs(texto) {
+  return ' tabindex="0" role="button" aria-pressed="false" aria-label="' + _statsChartEsc(texto) + '" data-stats-tip="' + _statsChartEsc(texto) + '" onmouseenter="_statsTooltip(this,this.dataset.statsTip,event)" onmouseleave="_statsTooltip(this,null,event)" onfocus="_statsTooltip(this,this.dataset.statsTip,event)" onblur="_statsTooltip(this,null,event)" onclick="_statsTooltip(this,this.dataset.statsTip,event)" onkeydown="_statsTooltip(this,this.dataset.statsTip,event)"';
+}
+function _statsTooltip(el,text,event) {
+  var type = event && event.type, key = event && event.key, tip = document.getElementById('stats-chart-tooltip');
+  if (type === 'keydown' && key !== 'Enter' && key !== ' ' && key !== 'Escape') return;
+  if (type === 'keydown') event.preventDefault();
+  if (key === 'Escape') { text = null; el.classList.remove('stats-selected'); el.setAttribute('aria-pressed','false'); }
+  if (text == null) { if (tip && tip._statsOwner === el) { tip.hidden = true; el.removeAttribute('aria-describedby'); } return; }
+  if (!tip) { tip = document.createElement('div'); tip.id = 'stats-chart-tooltip'; tip.className = 'stats-chart-tooltip'; tip.setAttribute('role','tooltip'); document.body.appendChild(tip); }
+  if (tip._statsOwner && tip._statsOwner !== el) tip._statsOwner.removeAttribute('aria-describedby');
+  tip._statsOwner = el;
+  if (type === 'click' || type === 'keydown') {
+    var chart = el.closest('.stats-chart') || el.parentElement;
+    chart.querySelectorAll('.stats-selected').forEach(function(selected) { selected.classList.remove('stats-selected'); selected.setAttribute('aria-pressed','false'); });
+    el.classList.add('stats-selected'); el.setAttribute('aria-pressed','true');
+  }
+  tip.textContent = text; tip.hidden = false; el.setAttribute('aria-describedby',tip.id);
+  var rect = el.getBoundingClientRect(), plot = (el.querySelector && el.querySelector('.stats-column-plot')) || el.closest('.stats-column-plot') || el.closest('svg') || el.closest('.stats-chart') || el;
+  var card = el.closest('.stat-widget') || plot, bounds = plot.getBoundingClientRect(), cardBounds = card.getBoundingClientRect();
+  tip.style.maxWidth = Math.max(100,Math.min(300,cardBounds.width - 24)) + 'px';
+  var box = tip.getBoundingClientRect(), width = document.documentElement.clientWidth, height = document.documentElement.clientHeight;
+  var left = Math.max(8,cardBounds.left + 8), right = Math.min(width - 8,cardBounds.right - 8);
+  var top = Math.max(8,bounds.top + 6), bottom = Math.min(height - 8,bounds.bottom - 6);
+  tip.style.left = Math.max(left,Math.min(right - box.width,rect.left + rect.width/2 - box.width/2)) + 'px';
+  tip.style.top = Math.max(top,Math.min(Math.max(top,bottom - box.height),rect.top - box.height - 10)) + 'px';
+}
+function _statsMes(mes) {
+  var partes = String(mes).split('-'), meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  return (meses[Number(partes[1])-1] || mes) + (partes.length > 1 ? ' ' + partes[0] : '');
+}
+function _statsLeyenda(labels,colores) {
+  return '<div class="stats-chart-legend">' + labels.map(function(label,i) { return '<span><i style="background:' + colores[i] + '" aria-hidden="true"></i>' + _statsChartEsc(label) + '</span>'; }).join('') + '</div>';
+}
+function _statsColumnas(filas,labels,colores,titulo,porcentaje) {
+  var max = porcentaje ? 100 : Math.max.apply(null,[1].concat(filas.map(function(f) { return f.valores.reduce(function(n,v) { return n+(v || 0); },0); })));
+  return '<div class="stats-chart">' + _statsLeyenda(labels,colores) + '<div class="stats-columns-scroll"><div class="stats-columns" role="img" aria-label="' + _statsChartEsc(titulo) + '" style="--stats-columns:' + Math.max(1,filas.length) + '"><div class="stats-yaxis"><span>' + max + (porcentaje ? '%' : '') + '</span><span>' + Math.round(max/2) + '</span><span>0</span></div>' + filas.map(function(f) {
+    var total = f.valores.reduce(function(n,v) { return n+(v || 0); },0), texto = f.nombre + ': ' + labels.map(function(label,i) { return label + ' ' + (f.valores[i] == null ? 'sin datos' : f.valores[i] + (porcentaje ? '%' : '')); }).join(' · ') + (f.extra ? ' · ' + f.extra : '');
+    var segmentos = f.valores.filter(function(v) { return v > 0; }).length;
+    return '<div class="stats-column"' + _statsChartAttrs(texto) + '><div class="stats-column-plot"><span class="stats-column-value">' + (porcentaje ? _pctTexto(f.valores[0]) : total) + '</span><div class="stats-column-stack" style="height:' + total/max*100 + '%">' + f.valores.map(function(v,i) { return v ? '<span style="height:' + v/total*100 + '%;background:' + colores[i] + ';color:' + (i === 0 ? '#fff' : '#29202F') + '">' + (!porcentaje && segmentos >= 2 && v/max*160 >= 22 ? v : '') + '</span>' : ''; }).join('') + '</div></div><span class="stats-column-label">' + _statsChartEsc(f.nombre) + '</span></div>';
+  }).join('') + '</div></div>' + (!filas.length ? '<p class="stats-empty">Sin datos en este periodo</p>' : '') + '</div>';
+}
+function _statsMensual(serie) {
+  return _statsColumnas(serie.map(function(p) { return {nombre:_statsMes(p.mes),valores:[p.P,p.R,p.A],extra:p.base + ' registros'}; }),['Presentes','Retrasos','Ausentes'],['var(--stats-positive)','var(--stats-gold)','var(--stats-coral)'],'Asistencia mensual: presentes, retrasos y ausentes') + _statsDatos(['Mes','Presentes','Retrasos','Ausentes','Registros'],serie.map(function(p) { return [_statsChartEsc(_statsMes(p.mes)),p.P,p.R,p.A,p.base]; }));
+}
+function _statsHorizontales(rows,title) {
+  return '<div class="stats-chart stats-horizontal" role="img" aria-label="' + _statsChartEsc(title) + '">' + (rows.length ? rows.map(function(row) { var label = row.nombre + ': ' + _pctTexto(row.asistenciaPct) + ' de asistencia' + (row.base == null ? '' : ' · ' + row.base + ' registros'); return '<div class="stats-hrow stats-percent-row"' + _statsChartAttrs(label) + '><div class="stats-hlabel"><span>' + _statsChartEsc(row.nombre) + '</span><strong>' + _pctTexto(row.asistenciaPct) + '</strong></div><div class="stats-htrack"><span class="stats-hsegment stats-hpercent" style="width:' + (row.asistenciaPct || 0) + '%"></span></div>' + (row.base == null ? '' : '<small>' + row.base + ' registros</small>') + '</div>'; }).join('') : '<p class="stats-empty">Sin datos en este periodo</p>') + '</div>' + _statsDatos(['Grupo','Registros','Asistencia'],rows.map(function(row) { return [_statsChartEsc(row.nombre),_datoTexto(row.base),_pctTexto(row.asistenciaPct)]; }));
+}
+function _statsDonut(valores,labels,colores,centro,caption,titulo,unidad) {
+  var total = valores.reduce(function(n,v) { return n+(v || 0); },0), offset = 0;
+  return '<div class="stats-chart stats-donut"><svg viewBox="0 0 160 160" role="img" aria-label="' + _statsChartEsc(titulo + ': ' + labels.map(function(label,i) { return label + ' ' + valores[i] + (unidad || ''); }).join(', ')) + '"><circle cx="80" cy="80" r="60" fill="none" stroke="#F0EAF5" stroke-width="18"/>' + valores.map(function(v,i) {
+    var largo = total ? v/total*100 : 0, inicio = offset; offset += largo;
+    return v ? '<circle class="stats-donut-segment" cx="80" cy="80" r="60" pathLength="100" fill="none" stroke="' + colores[i] + '" stroke-width="18" stroke-dasharray="' + largo + ' ' + (100-largo) + '" stroke-dashoffset="' + (-inicio) + '" transform="rotate(-90 80 80)"' + _statsChartAttrs(labels[i] + ': ' + v + (unidad || '') + (unidad ? '' : ' · ' + Math.round(largo) + '% del total')) + '/>' : '';
+  }).join('') + '<text class="stats-donut-number" x="80" y="78" text-anchor="middle">' + _statsChartEsc(centro) + '</text><text class="stats-donut-caption" x="80" y="96" text-anchor="middle">' + _statsChartEsc(caption) + '</text></svg><div class="stats-donut-legend">' + labels.map(function(label,i) { return '<button type="button"' + _statsChartAttrs(label + ': ' + valores[i] + (unidad || '')) + '><i style="background:' + colores[i] + '" aria-hidden="true"></i><span>' + _statsChartEsc(label) + '</span><strong>' + valores[i] + (unidad || '') + '</strong></button>'; }).join('') + '</div>' + (!total ? '<p class="stats-empty">Sin datos en este periodo</p>' : '') + '</div>';
+}
+function _statsJustificacion(pct) {
+  return '<div class="stats-justification"><p class="stats-chart-caption">Justificación de ausencias y retrasos ' + _statsInfoBoton('Justificación de incidencias','justificacion') + '</p>' + (pct == null ? '<p class="stats-empty">Sin ausencias ni retrasos registrados</p>' : _statsDonut([pct,100-pct],['Justificados','Sin justificar'],['var(--morado)','#E5DCEC'],_pctTexto(pct),'justificados','Justificación de ausencias y retrasos','%')) + _statsDatos(['Incidencias justificadas'],[[_pctTexto(pct)]]) + '</div>';
+}
+function _statsCobertura(d) {
+  var datos = [[d.cobertura.conEntrenadorPct,'Con entrenador','cobertura','Sesiones con un entrenador del equipo'],[d.cobertura.sustitutoPct,'Con sustituto','suplencias','Sesiones con un entrenador invitado'],[d.refuerzosPct,'Refuerzos','refuerzos','Presencias de jugadores de refuerzo']];
+  return '<div class="stats-coverage">' + datos.map(function(f) { var pct = f[0], label = f[1] + ': ' + _pctTexto(pct); return '<div class="stats-chart stats-gauge"><svg viewBox="0 0 140 140" role="img" aria-label="' + _statsChartEsc(label) + '"><g' + _statsChartAttrs(label + ' · ' + f[3]) + '><circle cx="70" cy="70" r="54" fill="none" stroke="#F0EAF5" stroke-width="12"/><circle cx="70" cy="70" r="54" fill="none" stroke="var(--morado)" stroke-width="12" stroke-linecap="round" pathLength="100" stroke-dasharray="' + (pct || 0) + ' 100" transform="rotate(-90 70 70)"/><text class="stats-donut-number" x="70" y="77" text-anchor="middle">' + _pctTexto(pct) + '</text></g></svg><p><strong>' + f[1] + '</strong> ' + _statsInfoBoton(f[1],f[2]) + '</p><small>' + f[3] + '</small></div>'; }).join('') + '</div>' + _statsDatos(['Con entrenador','Con sustituto','Presencias de refuerzos'],[datos.map(function(f) { return _pctTexto(f[0]); })]);
+}
+function _statsPendientes(lista,equipoId) {
+  if (!lista.length) return '<div class="stats-pending-clear"><span aria-hidden="true">✓</span><strong>Todo al día</strong><p>No hay sesiones pendientes de registrar en este periodo.</p></div>';
+  return '<div class="stats-pending-list">' + lista.map(function(s) { var fecha = _fmtFecha(s.fecha), boton = _statsSesionBoton(Object.assign({},s,{equipoId:s.equipoId || equipoId})); return '<article class="stats-pending-card"><div class="stats-pending-date"><strong>' + _statsChartEsc(fecha.d) + '</strong><span>' + _statsChartEsc(fecha.m) + '</span></div><div class="stats-pending-copy"><strong>' + _statsChartEsc(fecha.dn) + ' · ' + _statsChartEsc(s.hora) + '</strong><span>' + _statsChartEsc(s.equipoNombre || 'Entrenamiento pendiente') + '</span></div>' + boton.replace(/>[^<]*<\/button>$/, '>Registrar</button>') + '</article>'; }).join('') + '</div>';
 }
 
 function _htmlBarRow(name, val, max, color) {
@@ -5290,4 +5272,157 @@ document.addEventListener('DOMContentLoaded', function() {
   // Cerrar menú de usuario al hacer clic fuera
   document.addEventListener('click', function() { App.closeUserMenu(); });
 });
+function _statsRachaTexto(valor) {
+  return String(valor == null ? '' : valor).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function _statsRachaNivel(n) { return n >= 15 ? 5 : n >= 10 ? 4 : n >= 6 ? 3 : n >= 3 ? 2 : n >= 1 ? 1 : 0; }
+function _statsRachaFuego(n) {
+  var nivel = _statsRachaNivel(n);
+  return '<svg class="stats-streak-flame" viewBox="0 0 100 120" role="img" aria-label="' + (nivel ? 'Llama de racha, nivel ' + nivel + ' de 5' : 'Brasa de racha por encender') + '">' +
+    '<ellipse class="stats-streak-glow" cx="50" cy="105" rx="33" ry="8"/>' +
+    (nivel === 5 ? '<g class="stats-streak-sparks"><circle cx="20" cy="28" r="3"/><circle cx="75" cy="20" r="2"/><circle cx="86" cy="55" r="3"/><circle cx="33" cy="10" r="2"/></g>' : '') +
+    '<path class="stats-streak-outer" d="M51 7C61 31 82 40 84 68C88 92 70 109 50 110C26 110 11 94 15 73C17 58 26 48 30 33C30 48 36 53 40 55C46 39 42 23 51 7Z"/>' +
+    '<path class="stats-streak-inner" d="M52 51C55 67 70 73 66 89C64 99 57 104 48 103C37 102 30 94 33 83C35 75 43 70 43 61L48 72C52 66 50 59 52 51Z"/></svg>';
+}
+function _statsRacha(d) {
+  var n = d.rachaActual, mejor = d.mejorRacha, nivel = _statsRachaNivel(n);
+  var mensajes = ['Empieza tu racha','La chispa está encendida','Tu constancia prende','En plena llama','Una racha imparable','Modo inferno'];
+  return '<section class="stats-streak stats-streak-tier-' + nivel + '" aria-label="Racha de asistencia">' +
+    '<div class="stats-streak-art">' + _statsRachaFuego(n) + '</div><div class="stats-streak-copy">' +
+    '<div class="stats-streak-heading">Racha actual ' + _statsInfoBoton('Racha actual') + '</div>' +
+    '<div class="stats-streak-count">' + n + '<span>sesiones seguidas</span></div>' +
+    '<strong class="stats-streak-message">' + mensajes[nivel] + '</strong>' +
+    '<div class="stats-streak-best">Mejor racha: <strong>' + mejor + '</strong> sesiones ' + _statsInfoBoton('Mejor racha') + '</div></div>' +
+    '<details class="stats-streak-data"><summary>Ver datos de la racha</summary><dl><dt>Racha actual</dt><dd>' + n + ' sesiones seguidas</dd><dt>Mejor racha</dt><dd>' + mejor + ' sesiones</dd></dl></details></section>';
+}
+function _statsMiniRacha(n) {
+  return '<span class="stats-streak-mini stats-streak-tier-' + _statsRachaNivel(n) + '" aria-label="Racha actual: ' + n + ' sesiones seguidas">' + _statsRachaFuego(n) + '<strong>' + n + '</strong><span> seguidas</span></span>';
+}
+
+function _statsTexto(valor) {
+  return String(valor == null ? '' : valor).replace(/[&<>"']/g,function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+}
+var _statsMetricas = {
+  asistencia: ['Asistencia','Qué parte de las sesiones registradas corresponde a jugadores que asistieron, también si llegaron tarde.','Se suman presentes y retrasos y se divide entre presentes, ausentes y retrasos; después se multiplica por 100 y se redondea. Una ausencia justificada sigue contando como ausencia. Solo entran registros no excluidos en sesiones finalizadas, guardadas y no canceladas de la temporada y periodo elegidos. Sin registros se muestra —.'],
+  puntualidad: ['Puntualidad','De las veces que vino, llegó a su hora. Las ausencias no afectan a este porcentaje.','Se divide el número de llegadas a tiempo entre todas las veces que asistió (a tiempo o con retraso), se multiplica por 100 y se redondea. Si nadie asistió, se muestra —.'],
+  registros: ['Sesiones registradas','Registros válidos de asistencia de jugadores en el periodo elegido.','Se cuentan presentes, ausentes y retrasos no excluidos en sesiones computables. En un equipo o en el club, un entrenamiento puede aportar un registro por jugador; no es el número de entrenamientos distintos.'],
+  rachaActual: ['Racha actual','Secuencia más reciente de asistencias sin faltar. Llegar tarde mantiene la racha.','Se ordenan los registros por fecha y hora, del más reciente al más antiguo, y se cuentan presencias o retrasos hasta la primera ausencia. Los registros excluidos o sin registrar no participan.'],
+  mejorRacha: ['Mejor racha','La secuencia más larga de asistencias consecutivas dentro del periodo elegido.','Mayor número de presencias o retrasos seguidos al recorrer los registros por fecha y hora. Cada ausencia corta la secuencia.'],
+  tendencia: ['Tendencia','Compara la temporada con las últimas 4 semanas. Estable significa que el porcentaje no ha cambiado; una flecha indica cuántos puntos subió o bajó.','Porcentaje de asistencia de los últimos 28 días menos el porcentaje de la temporada. Solo se muestra para la temporada activa completa y con al menos 4 registros recientes válidos. La referencia «vs. últimas 4 semanas» no compara dos bloques consecutivos de 28 días.'],
+  computables: ['Sesiones computables','Entrenamientos que pueden entrar en los cálculos del periodo.','Sesiones de la temporada elegida cuya fecha está en el intervalo, ya han terminado, no están canceladas y tienen la asistencia guardada. Cada sesión se cuenta una vez.'],
+  canceladas: ['Sesiones canceladas','Entrenamientos marcados como cancelados en el periodo.','Se cuentan las sesiones canceladas de la temporada cuya fecha está entre el inicio y el fin del filtro. No entran en los porcentajes de asistencia.'],
+  pendientes: ['Sesiones pendientes','Entrenamientos ya terminados en los que aún no se ha guardado la asistencia.','Se cuentan sesiones no canceladas del intervalo cuya fecha y hora de fin ya han pasado y no tienen AsistenciaGuardada. No se convierten en ausencias ni entran en los porcentajes.'],
+  horasProgramadas: ['Horas programadas','Duración prevista de los entrenamientos computables, no tiempo real de llegada o salida.','Suma de los minutos entre HoraInicio y HoraFin de cada sesión computable, dividida entre 60 y redondeada a una décima. Una duración ausente o negativa aporta cero.'],
+  horasAsistidas: ['Horas programadas asistidas','Duración prevista de los entrenamientos a los que el jugador asistió.','Suma de la duración programada de los registros P o R, dividida entre 60 y redondeada a una décima. No se descuentan minutos de retraso.'],
+  mediaAsistentes: ['Asistentes medios','Promedio de jugadores presentes o con retraso por entrenamiento computable.','Total de P + R del equipo dividido entre sus sesiones computables, redondeado a una décima. Una sesión computable sin jugadores registrados sigue contando en el divisor.'],
+  plantilla: ['Plantilla activa','Jugadores con relación de equipo vigente al final del periodo.','Se cuenta cada jugador una vez por equipo si su intervalo de alta y baja incluye la fecha final del filtro. Incluye relaciones principales y secundarias.'],
+  distribucion: ['Distribución de la plantilla','Reparto de jugadores de la plantilla del periodo según su asistencia.','Con al menos 5 registros: alta ≥ 85 %, media entre 70 y 84 %, baja < 70 %. Con 1 a 4 registros se muestra Pocas sesiones. Quienes no tienen registros no se incluyen en estos grupos.'],
+  motivos: ['Motivos de ausencias y retrasos','Motivos asociados a incidencias justificadas, separados entre ausencias y retrasos.','Se agrupan únicamente registros A o R con TieneJustificacion por MotivoCategoria; si falta el motivo se usa Sin motivo. No se infieren motivos para incidencias sin justificar.'],
+  justificacion: ['Incidencias justificadas','Qué parte de las ausencias y retrasos tiene una justificación registrada.','Se suman ausencias y retrasos justificados, se divide entre todas las ausencias y retrasos y se multiplica por 100; se redondea al entero. Una justificación no transforma una ausencia en presencia. Sin incidencias se muestra —.'],
+  avisos: ['Avisos y justificaciones','Incidencias justificadas y forma en que se comunicaron.','Total: registros A o R justificados. Programadas: JustificadoPor es programacion. Previos: las demás justificaciones cuya fecha es anterior al inicio del entrenamiento. Una incidencia programada no vuelve a contarse como aviso previo.'],
+  antelacion: ['Antelación de avisos','Tiempo habitual con el que se avisó antes del entrenamiento.','Mediana de las horas entre FechaJustificacion y el inicio de la sesión, solo para A o R justificados previamente y no procedentes de programación. Se ordenan los valores y se toma el central, o la media de los dos centrales; se redondea a una décima. Sin avisos válidos se muestra —.'],
+  dia: ['Asistencia por día','Cómo varía la asistencia según el día de la semana.','Se agrupan los registros válidos por el día de la fecha de la sesión, de lunes a domingo. En cada grupo se calcula (P + R) / (P + A + R) × 100.'],
+  mes: ['Asistencia mes a mes','Cada barra cuenta cuántas veces estuvo presente, llegó tarde o faltó durante ese mes.','Los registros válidos se agrupan por el mes de la sesión y se cuentan por separado presentes, retrasos y ausentes. En entrenadores, la barra cuenta las veces que estuvo presente de sus sesiones registradas. Solo se incluyen meses con registros.'],
+  semana: ['Evolución semanal','Asistencia de jugadores agrupada en semanas que empiezan el lunes.','Se agrupan los registros por el lunes de la semana de la sesión y se calcula (P + R) / (P + A + R) × 100 en cada grupo. Solo se incluyen semanas con registros.'],
+  cobertura: ['Cobertura técnica','Porcentaje de entrenamientos con al menos un entrenador asignado presente.','Sesiones computables con algún entrenador presente cuya relación con el equipo estaba vigente ese día y no era Visor / sesiones computables × 100. Cada sesión cuenta una sola vez.'],
+  suplencias: ['Sesiones con sustituto','Entrenamientos en los que participó al menos un técnico invitado.','Sesiones computables con algún registro de entrenador con Asistio verdadero y EsInvitado verdadero / sesiones computables × 100. Puede coincidir con una sesión cubierta por un técnico asignado.'],
+  refuerzos: ['Presencias de refuerzos','Parte de las asistencias de jugadores que corresponde a secundarios o invitados.','Registros P o R de jugadores con relación Secundario vigente ese día o, sin relación, marcados como invitados / todos los P + R del equipo × 100.'],
+  latencia: ['Latencia de registro','Tiempo habitual transcurrido desde el fin de una sesión hasta su primer registro de asistencia.','Mediana de máximo(0, FechaPrimerRegistro − fecha y hora de fin), expresada en horas y redondeada a una décima. Solo sesiones computables con FechaPrimerRegistro; sin hora de fin se usa 23:59. No mide la última edición.'],
+  minutosRetraso: ['Retraso medio','Minutos de retraso medios entre los retrasos con duración informada.','Suma de MinutosRetraso / número de registros R con minutos enteros positivos, redondeado a una décima. Los retrasos sin minutos no se interpretan como cero.'],
+  carga: ['Carga semanal','Número medio de entrenamientos asistidos por semana del periodo.','Total de registros P + R dividido entre todas las semanas de lunes a domingo que toca el intervalo, incluidas semanas sin asistencia; redondeado a una décima.'],
+  extras: ['Sesiones extra','Participación en entrenamientos marcados como extra.','Para un jugador se cuentan sus registros válidos en sesiones EsExtra y cuántos son P o R. Para un equipo se cuentan sus sesiones computables EsExtra una sola vez.'],
+  presenciaEntrenador: ['Presencia del entrenador','Proporción de registros de asistencia del entrenador en los que estuvo presente.','Registros con Asistio verdadero / registros con Asistio booleano verdadero o falso, no excluidos, en sesiones computables × 100. Las sesiones sin registro del entrenador no se añaden al divisor.'],
+  sesionesEntrenador: ['Sesiones del entrenador','Sesiones computables con un registro válido de asistencia del entrenador.','Se cuentan sus registros no excluidos con Asistio verdadero o falso. No se cuentan todas las sesiones de sus equipos ni se suponen ausencias cuando falta un registro.'],
+  horasEntrenador: ['Horas dirigidas','Duración programada de las sesiones a las que asistió el entrenador.','Suma de minutos programados de sus registros con Asistio verdadero / 60, redondeado a una décima. No mide horas de llegada ni descuenta retrasos.'],
+  sustituciones: ['Sustituciones dadas','Sesiones en las que el entrenador asistió como invitado.','Se cuentan registros válidos con Asistio verdadero y EsInvitado verdadero en sesiones computables del periodo.'],
+  cubre: ['Coberturas recibidas','Sesiones de sus equipos en las que faltó y hubo otro entrenador presente.','Por cada sesión computable con relación vigente del entrenador distinta de Visor, se cuenta si no tiene presencia propia y sí hay otro técnico con Asistio verdadero. No es necesario que el otro técnico esté marcado como invitado.'],
+  contactabilidad: ['Contactabilidad','Disponibilidad de email familiar y de avisos para jugadores activos del club.','Se deduplican jugadores con alguna relación Activo verdadera en equipos de la temporada. Con email: al menos un email familiar no vacío. Con avisos: al menos uno de esos emails no tiene desactivado su indicador de notificación. No confirma entrega ni validez del email.'],
+  categorias: ['Asistencia por categoría','Asistencia conjunta de los equipos de una categoría.','Se reúnen todos los registros válidos de esos equipos y se calcula (P + R) / (P + A + R) × 100. No es una media simple de los porcentajes de cada equipo.'],
+  cancelaciones: ['Cancelaciones por motivo','Motivos registrados para cancelar entrenamientos.','Se agrupan las sesiones canceladas del periodo por MotivoCancelacion y se cuentan; si no hay motivo se usa Sin motivo.'],
+  recientes: ['Últimas sesiones','Histórico reciente de registros válidos del jugador dentro del filtro.','Se ordenan por fecha y hora de inicio, del más reciente al más antiguo. El detalle conserva hasta 60 registros y cada vista puede mostrar menos. Canceladas, pendientes y excluidas no aparecen como ausencias.'],
+  ranking: ['Ranking de asistencia','Orden de asistencia entre los jugadores de la plantilla principal del jugador.','Participan miembros vigentes al final del periodo con al menos 5 registros. Se ordenan por asistencia descendente, después por número de registros descendente y por apellidos. La posición es ordinal; con menos de 5 registros se muestran aparte.'],
+  logros: ['Logros','Reconocimientos de asistencia, puntualidad y continuidad.','Con al menos 5 registros: asistencia perfecta si es 100 %, puntualidad perfecta si es 100 %, racha de 10 si la actual es ≥ 10 y mejor racha si iguala la mayor racha actual de los candidatos del equipo y esta es ≥ 3. Pueden coincidir varios logros.'],
+  alertas: ['Alertas de asistencia','Señales para revisar un caso; no sanciones automáticas.','Tres últimas ausencias seguidas; tendencia de −20 pp o inferior; o al menos 3 ausencias sin justificar en los últimos 28 días. La tendencia necesita al menos 4 registros recientes y solo se calcula para la temporada activa completa.'],
+  injustificadas: ['Faltas sin justificar','Ausencias sin una justificación registrada.','Número de registros A válidos en el periodo cuyo indicador TieneJustificacion no es verdadero. No incluye retrasos.'],
+  comparativa: ['Comparativa con el club','Diferencia entre la asistencia del equipo y la del conjunto del club.','Porcentaje de asistencia del equipo menos porcentaje de asistencia del club, en puntos porcentuales. El club reúne todos los registros válidos del mismo filtro; no promedia porcentajes de equipos.'],
+  equipos: ['Participación por equipo','Asistencia de una persona desglosada por equipo.','Se agrupan sus registros válidos por equipo y se aplica la fórmula de asistencia o presencia correspondiente. El tipo refleja la relación vigente al final del periodo o, si no existe, la participación registrada.'],
+  bajaAsistencia: ['Sesiones de baja asistencia','Entrenamientos computables con asistencia de jugadores inferior al 60 %.','Se cuenta una sesión si tiene registros válidos de jugadores y (P + R) / (P + A + R) × 100, redondeado al entero, es menor que 60.']
+};
+function _statsMetricaTitulo(titulo) {
+  var t = String(titulo || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  var titulos = {
+    'asistencia':'asistencia','asistencia jugadores':'asistencia','puntualidad':'puntualidad','base':'registros','registros':'registros','sesiones registradas':'registros',
+    'sesiones con lista':'registros','entrenamientos con lista':'computables|canceladas','presentes, retrasos y ausencias':'registros|asistencia','evolucion semanal':'semana',
+    'racha actual':'rachaActual','racha':'rachaActual','mejor racha':'mejorRacha','tendencia':'tendencia','sesiones':'computables|canceladas|pendientes|extras|bajaAsistencia','sesiones computables':'computables|canceladas','sesion':'computables',
+    'sesiones pendientes':'pendientes','pendientes':'pendientes','sesiones pendientes de registrar':'pendientes','canceladas':'canceladas','cancelada: motivo':'cancelaciones',
+    'horas programadas':'horasProgramadas','horas programadas asistidas':'horasAsistidas','asistentes medios':'mediaAsistentes|plantilla','plantilla activa':'plantilla','jugadores activos':'plantilla',
+    'distribucion de la plantilla':'distribucion','distribucion':'distribucion','motivos':'motivos','motivo':'motivos','avisos y motivos':'avisos|motivos|antelacion',
+    'motivos y justificaciones':'motivos|justificacion|antelacion','justificacion':'justificacion','incidencias justificadas':'justificacion','antelacion de avisos':'antelacion','antelacion mediana':'antelacion',
+    'dia':'dia','asistencia por dia':'dia','mes':'mes','serie mensual':'mes','asistencia mes a mes':'mes','semana':'semana','serie semanal':'semana',
+    'con entrenador':'cobertura','cobertura tecnica':'cobertura','con sustituto':'suplencias','cobertura tecnica y refuerzos':'cobertura|suplencias|refuerzos','refuerzos':'refuerzos',
+    'registro':'latencia|pendientes','latencia mediana':'latencia','latencia de registro':'latencia','retraso medio':'minutosRetraso','minutos de retraso':'minutosRetraso',
+    'carga semanal':'carga','sesiones extra':'extras','extras':'extras','presencia':'presenciaEntrenador','horas dirigidas':'horasEntrenador',
+    'sustituciones dadas':'sustituciones','sustituciones':'sustituciones','coberturas recibidas':'cubre','contactabilidad':'contactabilidad','categoria':'categorias','asistencia por categoria':'categorias',
+    'cancelaciones':'cancelaciones','cancelaciones por motivo':'cancelaciones','ultimas sesiones':'recientes','sesiones recientes':'recientes','ranking de asistencia':'ranking','ranking':'ranking',
+    'logros':'logros','logros y alertas':'logros|alertas','alertas':'alertas','alertas de jugadores':'alertas','jugadores en riesgo':'alertas','jugadores con alerta':'alertas',
+    'comparativa de equipos':'asistencia|comparativa','comparativa con el club':'comparativa','faltas sin justificar':'injustificadas','ausencias':'registros|injustificadas','ausentes':'registros','presentes':'asistencia','retrasos':'puntualidad',
+    'equipos':'equipos','por equipo':'equipos','jugadores':'registros|asistencia','con pocas sesiones aun':'ranking','baja asistencia':'bajaAsistencia'
+  };
+  if (t === 'sesiones' && App.state.currentView === 'entrenador-detalle') return 'sesionesEntrenador';
+  if (Object.prototype.hasOwnProperty.call(titulos,t)) return titulos[t];
+  if (/^p\s*\/\s*a\s*\/\s*r(?:\s|·|$)/.test(t)) return 'registros|asistencia';
+  if (/^ultimas? \d+ sesiones$/.test(t)) return 'recientes';
+  if (/^(evolucion|asistencia) semanal(?: de| del|$)/.test(t)) return 'semana';
+  if (/^(evolucion|asistencia) mensual(?: de| del|$)/.test(t)) return 'mes';
+  return null;
+}
+function _statsInfoBoton(titulo, explicitMetric) {
+  var metric = explicitMetric || _statsMetricaTitulo(titulo);
+  if (!metric || !metric.split('|').every(function(k) { return Object.prototype.hasOwnProperty.call(_statsMetricas,k); })) return '';
+  return '<button type="button" class="stats-info-button" aria-label="Información sobre ' + _statsTexto(titulo) + '" aria-haspopup="dialog" onclick="event.stopPropagation();_statsInfo(' + _statsArgumento(metric) + ')"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5m0-8v1"/></svg></button>';
+}
+function _statsInfo(metric) {
+  var keys = String(metric || '').split('|').filter(function(k,i,a) { return Object.prototype.hasOwnProperty.call(_statsMetricas,k) && a.indexOf(k) === i; });
+  if (!keys.length) return;
+  App.openModal(keys.length === 1 ? _statsMetricas[keys[0]][0] : 'Cómo interpretar estos datos','<div class="stats-info-sheet">' + keys.map(function(k) { var m = _statsMetricas[k]; return '<section class="stats-info-entry">' + (keys.length > 1 ? '<h3>' + _statsTexto(m[0]) + '</h3>' : '') + '<h4>Qué significa</h4><p>' + _statsTexto(m[1]) + '</p><h4>Cómo se calcula</h4><p>' + _statsTexto(m[2]) + '</p></section>'; }).join('') + '<p class="stats-info-note">Los datos respetan la temporada y el periodo seleccionados. — significa que no hay datos suficientes; no equivale a cero.</p></div>');
+}
+function _statsFechaHumana(fecha) {
+  if (!fecha || fecha === '0000-00-00') return 'Inicio de temporada';
+  var p = String(fecha).split('-');
+  return Number(p[2]) + ' ' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(p[1])-1] + ' ' + p[0];
+}
+function _statsTemporadas() {
+  var resumen = App.stats.resumen, temporadas = resumen ? resumen.temporadas : App.cache.temporadas || [];
+  var actual = (App.stats.filtro || {}).temporadaId || (resumen && resumen.filtro.temporadaId);
+  App.openModal('Elegir temporada','<div class="stats-season-sheet"><p class="stats-sheet-intro">Elige qué temporada quieres explorar.</p><div role="group" aria-label="Temporadas disponibles">' + temporadas.map(function(t) { var activa = t.Activa === true || t.Activa === 'TRUE'; return '<button type="button" class="stats-season-option' + (t.ID === actual ? ' is-selected' : '') + '" aria-pressed="' + (t.ID === actual) + '" onclick="App.closeModal();App.stats.setFiltro({temporadaId:' + _statsArgumento(t.ID) + '})"><span><strong>' + _statsTexto(t.Nombre) + '</strong>' + (activa ? '<span class="stats-season-active">Activa</span>' : '<span class="stats-season-archive">Temporada anterior</span>') + '</span><span class="stats-season-check" aria-hidden="true">' + (t.ID === actual ? '✓' : '›') + '</span></button>'; }).join('') + '</div></div>');
+}
+function _statsPeriodo(boton, periodo) {
+  var grupo = boton.parentElement;
+  var botones = Array.prototype.slice.call(grupo.querySelectorAll('button'));
+  grupo.style.setProperty('--stats-selected',botones.indexOf(boton));
+  botones.forEach(function(b) { b.setAttribute('aria-pressed',String(b === boton)); });
+  App.stats.setFiltro({periodo:periodo});
+}
+function _statsTelefono(valor) {
+  var telefono = String(valor || '').trim().replace(/[\s().-]/g,'');
+  if (/^00\d+$/.test(telefono)) telefono = '+' + telefono.slice(2);
+  if (/^\d{9}$/.test(telefono)) telefono = '+34' + telefono;
+  if (/^34\d{9}$/.test(telefono)) telefono = '+' + telefono;
+  return /^\+\d{7,15}$/.test(telefono) ? telefono : '';
+}
+function _statsContacto(tipo,id) {
+  var jugador = tipo === 'jugador';
+  var persona = (jugador ? App.cache.jugadores : App.cache.entrenadores).find(function(p) { return p.ID === id; });
+  if (!persona) { showToast('No se encontró el contacto','error'); return; }
+  var nombre = [persona.Nombre,persona.Apellidos].filter(Boolean).join(' ');
+  var contactos = [{titulo:jugador ? 'Jugador' : 'Entrenador',nombre:nombre,tel:persona.Telefono,email:persona.Email}];
+  if (jugador) [1,2].forEach(function(n) { var familiar = {titulo:'Familiar ' + n,nombre:[persona['NombrePadre'+n],persona['ApellidosPadre'+n]].filter(Boolean).join(' '),tel:persona['TelefonoPadre'+n],email:persona['EmailPadre'+n]}; if (familiar.nombre || familiar.tel || familiar.email) contactos.push(familiar); });
+  App.openModal('Contactar · ' + nombre,'<div class="stats-contact-sheet">' + contactos.map(function(c) {
+    var tel = _statsTelefono(c.tel), email = String(c.email || '').trim();
+    var emailValido = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email);
+    if (!tel && !emailValido) return '<p class="stats-contact-muted">' + _statsTexto(c.titulo) + ': sin teléfono ni email disponible.</p>';
+    return '<section class="stats-contact-card"><span class="stats-contact-kind">' + _statsTexto(c.titulo) + '</span>' + (c.nombre ? '<h3>' + _statsTexto(c.nombre) + '</h3>' : '') + (c.tel ? '<p>' + _statsTexto(c.tel) + '</p>' : '') + (email ? '<p>' + _statsTexto(email) + '</p>' : '') + '<div class="stats-contact-actions">' + (tel ? '<a href="tel:' + _statsTexto(tel) + '" aria-label="Llamar a ' + _statsTexto(c.nombre || c.titulo) + '">Llamar</a><a class="stats-contact-whatsapp" href="https://wa.me/' + tel.slice(1) + '" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp de ' + _statsTexto(c.nombre || c.titulo) + '">WhatsApp</a>' : '') + (emailValido ? '<a href="mailto:' + _statsTexto(encodeURIComponent(email)) + '" aria-label="Enviar email a ' + _statsTexto(c.nombre || c.titulo) + '">Email</a>' : '') + '</div></section>';
+  }).join('') + '</div>');
+}
+
 </script>

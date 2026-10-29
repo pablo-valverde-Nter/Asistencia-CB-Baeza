@@ -177,18 +177,18 @@ test('club y resumen mantienen contratos, contactabilidad y privacidad por rol',
   const club = consultar('club').datos;
   assert.equal(club.sesiones, 7);
   assert.equal(club.canceladas, 1);
-  assert.equal(club.pendientes.length, 1);
+  assert.equal(club.pendientes, 1);
   assert.equal(club.horasProgramadas, 10.5);
-  assert.equal(club.jugadoresConAlerta, 1);
+  assert.equal(club.serieMensual.reduce((n, m) => n + m.base, 0), club.serieSemanal.reduce((n, s) => n + s.base, 0));
+  assert.ok(club.serieMensual.every(m => m.P + m.A + m.R === m.base));
   assert.equal(club.equipos.length, 2);
   assert.deepEqual(club.contactabilidad, { jugadoresActivos: 8, conEmailFamiliar: 3, conAvisosActivos: 2 });
-  assert.ok(club.alertas.some(a => a.nombre === 'Gonzalo'));
-  assert.equal(club.pendientes[0].equipoNombre, 'Cadete Baeza');
+  assert.ok(!('alertas' in club) && !('jugadoresConAlerta' in club));
   assert.equal(club.porCategoria.length, 2);
   const resumen = consultar('resumen').datos;
   assert.equal(resumen.jugadores['jugador-ana'].base, 4);
   assert.equal(resumen.entrenadores['entrenador-pablo'].sustitucionesDadas, 2);
-  assert.deepEqual(resumen.club, Object.fromEntries(Object.keys(resumen.club).map(k => [k, k === 'pendientes' ? club.pendientes.length : club[k]])));
+  assert.deepEqual(resumen.club, Object.fromEntries(Object.keys(resumen.club).map(k => [k, club[k]])));
   assert.ok(!('club' in consultar('resumen', null, {}, datos, 'entrenador').datos));
 });
 
@@ -218,7 +218,7 @@ test('el motor no muta filas ni consultas y limita las sesiones de detalle', () 
   assert.equal(consultar('jugador', 'jugador-bruno', {}, f).datos.sesiones.length, 60);
 });
 
-test('alertas del club agregan equipos por jugador una sola vez y muestran su principal', () => {
+test('las alertas de un jugador cruzan sus equipos', () => {
   const f = copia();
   f.asistJugadores = f.asistJugadores.filter(r => r.ID_Jugador !== 'jugador-david');
   for (const [sesionId, fecha, equipoId] of [
@@ -229,13 +229,8 @@ test('alertas del club agregan equipos por jugador una sola vez y muestran su pr
     f.sesiones.push({ ...f.sesiones[0], ID: sesionId, Fecha: fecha, ID_Equipo: equipoId });
     f.asistJugadores.push({ ID_Sesion: sesionId, ID_Jugador: 'jugador-david', Estado: 'A', TieneJustificacion: true });
   }
-  const club = consultar('club', null, {}, f).datos;
-  const avisos = club.alertas.filter(a => a.jugadorId === 'jugador-david');
-  assert.equal(avisos.length, 1);
-  assert.deepEqual(avisos[0].alertas, ['seguidas']);
-  assert.equal(avisos[0].equipoNombre, 'Junior Baeza');
-  assert.equal(club.alertas.length, club.jugadoresConAlerta);
-  assert.equal(club.alertas.length, new Set(club.alertas.map(a => a.jugadorId)).size);
+  const resumen = consultar('resumen', null, {}, f).datos;
+  assert.deepEqual(Array.from(resumen.jugadores['jugador-david'].alertas), ['seguidas']);
 });
 
 test('alerta de injustificadas cruza el mes dentro de la ventana móvil de 28 días', () => {
