@@ -4684,6 +4684,31 @@ App.operation = {
   },
 };
 
+// Salvaguarda de escritura: mientras un campo de texto tiene el foco ningún re-render global
+// (realtime, estadísticas) repinta la vista; reemplazar el DOM quitaría el foco y cerraría el teclado del móvil.
+// Lo aplazado se ejecuta al salir del campo.
+App.escritura = {
+  _aplazados: {},
+  activa: function() {
+    var el = document.activeElement;
+    if (!el || !el.tagName) return false;
+    var tag = el.tagName.toUpperCase();
+    var texto = tag === 'TEXTAREA' || el.isContentEditable === true ||
+      (tag === 'INPUT' && !/^(button|submit|reset|checkbox|radio|range|color|file|image|hidden)$/i.test(el.type || 'text'));
+    // Un campo que ya no se ve (la vista cambió sin blur, como en iOS) no retiene los repintados.
+    return texto && (!el.getClientRects || el.getClientRects().length > 0);
+  },
+  alTerminar: function(clave, fn) { this._aplazados[clave] = fn; },
+  _reanudar: function() {
+    if (this.activa()) return;
+    var aplazados = this._aplazados;
+    this._aplazados = {};
+    Object.keys(aplazados).forEach(function(clave) { aplazados[clave](); });
+    App.realtime.flushPending();
+  },
+};
+document.addEventListener('focusout', function() { setTimeout(function() { App.escritura._reanudar(); }, 0); });
+
 var STATS_VIEWS = ['equipos','equipos-admin','jugadores-admin','entrenadores-admin','equipo-detalle','jugador-detalle','entrenador-detalle','perfil-jugador','mis-stats','mi-equipo','informes'];
 App.stats = {
   filtro: null, resumen: null, error: null, detalles: {}, refreshing: false, _version: 0, _renderPending: false,
@@ -4693,6 +4718,7 @@ App.stats = {
     var self = this, schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(fn) { return setTimeout(fn, 0); };
     schedule(function() {
       self._renderPending = false;
+      if (App.escritura.activa()) { App.escritura.alTerminar('stats', function() { self._render(); }); return; }
       if (STATS_VIEWS.indexOf(App.state.currentView) >= 0 && !App.state._formIsDirty) App.navigate(App.state.currentView, {}, false);
     });
   },
@@ -4868,7 +4894,7 @@ App.realtime = {
 
   canRefreshNow: function() {
     if (!App.state.auth || !this.safeViews.has(App.state.currentView) || App.state._formIsDirty) return false;
-    if (document.visibilityState === 'hidden') return false;
+    if (document.visibilityState === 'hidden' || App.escritura.activa()) return false;
     var modal = document.getElementById('modal-overlay');
     if (modal && modal.classList.contains('open')) return false;
     var justificationModal = document.getElementById('modal-justificacion');
