@@ -3984,61 +3984,154 @@ const App = {
     },
 
     // Asistente de justificación: una pregunta por paso; al contestar avanza solo.
+    // Contexto 'sesion' justifica un entrenamiento concreto; 'programacion' crea o edita avisos semanales con un paso previo de días.
     justificacion: {
       MINUTOS_RAPIDOS: [5, 10, 15, 30],
+      DIAS: ['Lunes', 'Martes', 'Mi\u00e9rcoles', 'Jueves', 'Viernes', 'S\u00e1bado', 'Domingo'],
+      _contexto: 'sesion', // 'sesion' | 'programacion'
       _sesionId: null,
+      _programacionId: null,
+      _horarios: [],       // programación: entrenamientos semanales disponibles
       _estadoInicial: null,
       _modo: 'nuevo',      // 'nuevo' | 'edicion' | 'eliminar'
-      _datos: null,        // { tipo, minutos, motivo, detalle }
+      _datos: null,        // { dias, tipo, minutos, motivo, detalle }
       _paso: 'tipo',
       _otrosMinutos: false,
 
       abrir: function(sesionId, estado, borrador, soloEliminar) {
+        this._contexto = 'sesion';
         this._sesionId = sesionId;
+        this._programacionId = null;
+        this._horarios = [];
         this._estadoInicial = estado;
         var jugador = App.state.jugador;
         var registro = App.cache.asistJugadores.find(function(r) { return jugador && r.ID_Sesion === sesionId && r.ID_Jugador === jugador.ID; });
         var esEdicion = !!registro && (registro.TieneJustificacion === true || registro.TieneJustificacion === 'TRUE');
         this._modo = soloEliminar ? 'eliminar' : esEdicion ? 'edicion' : 'nuevo';
         if (borrador) {
-          this._datos = { tipo: borrador.tipo, minutos: borrador.minutos || null, motivo: borrador.motivo || '', detalle: borrador.detalle || '' };
+          this._datos = { dias: [], tipo: borrador.tipo, minutos: borrador.minutos || null, motivo: borrador.motivo || '', detalle: borrador.detalle || '' };
         } else if (esEdicion) {
           var retraso = registro.TipoJustificacion === 'Retraso';
-          this._datos = { tipo: retraso ? 'Retraso' : 'Ausencia', minutos: retraso && registro.MinutosRetraso ? Number(registro.MinutosRetraso) : null,
+          this._datos = { dias: [], tipo: retraso ? 'Retraso' : 'Ausencia', minutos: retraso && registro.MinutosRetraso ? Number(registro.MinutosRetraso) : null,
             motivo: registro.MotivoCategoria || '', detalle: registro.MotivoDetalle || '' };
         } else {
-          this._datos = { tipo: estado === 'R' ? 'Retraso' : estado === 'A' ? 'Ausencia' : null, minutos: null, motivo: '', detalle: '' };
+          this._datos = { dias: [], tipo: estado === 'R' ? 'Retraso' : estado === 'A' ? 'Ausencia' : null, minutos: null, motivo: '', detalle: '' };
         }
+        this._mostrar(soloEliminar || borrador ? 'codigo' : 'tipo', borrador ? borrador.codigo || '' : '');
+      },
+
+      // actual: programación a editar o null; horarios: entrenamientos semanales que se pueden elegir.
+      abrirProgramacion: function(actual, horarios, borrador) {
+        this._contexto = 'programacion';
+        this._sesionId = null;
+        this._programacionId = actual ? actual.ID : null;
+        this._horarios = horarios;
+        this._estadoInicial = null;
+        this._modo = actual ? 'edicion' : 'nuevo';
+        var original = actual && horarios.find(function(h) { return h.ID === actual.ID_Horario; });
+        if (borrador) {
+          this._datos = { dias: borrador.dias.slice(), tipo: borrador.tipo, minutos: borrador.minutos || null, motivo: borrador.motivo || '', detalle: borrador.detalle || '' };
+        } else if (actual) {
+          var retraso = actual.TipoIncidencia === 'Retraso';
+          this._datos = { dias: original ? [Number(original.DiaSemana)] : [], tipo: retraso ? 'Retraso' : 'Ausencia',
+            minutos: retraso && original ? _minutosEntre(original.HoraInicio, actual.HoraIncorporacion) : null,
+            motivo: actual.MotivoCategoria || '', detalle: actual.MotivoDetalle || '' };
+        } else {
+          this._datos = { dias: [], tipo: null, minutos: null, motivo: '', detalle: '' };
+        }
+        this._mostrar(borrador ? 'codigo' : 'dias', borrador ? borrador.codigo || '' : '');
+      },
+
+      _mostrar: function(pasoInicial, codigo) {
+        var programacion = this._contexto === 'programacion', modo = this._modo;
         this._otrosMinutos = !!this._datos.minutos && this.MINUTOS_RAPIDOS.indexOf(this._datos.minutos) < 0;
         var motivos = App.state.motivosJustificacion.length ? App.state.motivosJustificacion.slice() : ['Motivo personal'];
         if (this._datos.motivo && motivos.indexOf(this._datos.motivo) < 0) motivos.push(this._datos.motivo);
         document.getElementById('justif-motivos').innerHTML = motivos.map(function(m) {
           return '<button type="button" class="justif-chip" data-motivo="' + _statsTexto(m) + '" aria-pressed="false" onclick="App.views.justificacion.elegirMotivo(this.dataset.motivo)">' + _statsTexto(m) + '</button>';
         }).join('');
+        document.getElementById('justif-dias').innerHTML = programacion ? this._htmlDias() : '';
         document.getElementById('justif-detalle').value = this._datos.detalle;
         document.getElementById('justif-minutos').value = this._otrosMinutos ? String(this._datos.minutos) : '';
-        document.getElementById('justif-codigo').value = borrador ? borrador.codigo || '' : '';
-        document.getElementById('justif-submit').textContent = esEdicion ? 'Guardar cambios' : 'Enviar';
+        document.getElementById('justif-codigo').value = codigo;
+        document.getElementById('justif-preview-label').textContent = programacion ? 'Aviso que recibir\u00e1 el entrenador cada semana' : 'Mensaje que recibir\u00e1 el entrenador';
+        document.getElementById('justif-submit').textContent = programacion ? 'Guardar' : modo === 'edicion' ? 'Guardar cambios' : 'Enviar';
+        document.getElementById('justif-eliminar-prog').classList.toggle('hidden', !(programacion && modo === 'edicion'));
         var confirmarBtn = document.getElementById('justif-enviar');
-        confirmarBtn.textContent = soloEliminar ? 'Eliminar justificaci\u00f3n' : esEdicion ? 'Confirmar cambios' : 'Confirmar y enviar';
-        confirmarBtn.classList.toggle('btn-danger', !!soloEliminar);
-        confirmarBtn.classList.toggle('btn-primary', !soloEliminar);
+        confirmarBtn.textContent = modo === 'eliminar' ? 'Eliminar justificaci\u00f3n' : programacion ? 'Confirmar y guardar'
+          : modo === 'edicion' ? 'Confirmar cambios' : 'Confirmar y enviar';
+        confirmarBtn.classList.toggle('btn-danger', modo === 'eliminar');
+        confirmarBtn.classList.toggle('btn-primary', modo !== 'eliminar');
         this._actualizarTitulo();
-        this._irA(soloEliminar || borrador ? 'codigo' : 'tipo', 0);
+        this._irA(pasoInicial, 0);
         document.getElementById('modal-justificacion').classList.remove('hidden');
+        this._ajustarAltura();
+      },
+
+      // Fija la altura del panel a la del paso más alto (con tope en CSS) para que no salte al avanzar.
+      _ajustarAltura: function() {
+        var hoja = document.querySelector('#modal-justificacion .justif-wizard');
+        var cuerpo = document.getElementById('justif-steps');
+        if (!hoja || !cuerpo || !cuerpo.querySelectorAll) return;
+        var pasos = this._modo === 'eliminar' ? ['codigo']
+          : (this._contexto === 'programacion' ? ['dias'] : []).concat(['tipo', 'minutos', 'motivo', 'resumen', 'codigo']);
+        var otros = document.getElementById('justif-otros'), otrosOculto = otros.classList.contains('hidden');
+        var preview = document.getElementById('justif-preview'), previewTexto = preview.textContent;
+        var steps = Array.prototype.slice.call(cuerpo.querySelectorAll('.justif-step'));
+        var ocultos = steps.map(function(s) { return s.hidden; });
+        hoja.style.setProperty('--justif-h', '0px');
+        otros.classList.remove('hidden');
+        if (!previewTexto) this.actualizarPreview();
+        var fijo = hoja.offsetHeight - cuerpo.clientHeight, maximo = 0;
+        pasos.forEach(function(paso) {
+          steps.forEach(function(s) { s.hidden = s.dataset.step !== paso; });
+          maximo = Math.max(maximo, cuerpo.scrollHeight);
+        });
+        steps.forEach(function(s, i) { s.hidden = ocultos[i]; });
+        otros.classList.toggle('hidden', otrosOculto);
+        preview.textContent = previewTexto;
+        hoja.style.setProperty('--justif-h', Math.ceil(fijo + maximo) + 'px');
       },
 
       _pasos: function() {
         if (this._modo === 'eliminar') return ['codigo'];
-        return this._datos.tipo === 'Retraso' ? ['tipo', 'minutos', 'motivo', 'resumen', 'codigo'] : ['tipo', 'motivo', 'resumen', 'codigo'];
+        var pasos = this._contexto === 'programacion' ? ['dias', 'tipo'] : ['tipo'];
+        if (this._datos.tipo === 'Retraso') pasos.push('minutos');
+        return pasos.concat(['motivo', 'resumen', 'codigo']);
       },
 
       _actualizarTitulo: function() {
-        var titulo = this._modo === 'eliminar' ? 'Eliminar justificaci\u00f3n'
+        var titulo = this._contexto === 'programacion'
+          ? (this._modo === 'edicion' ? 'Editar programaci\u00f3n' : 'Programar justificaci\u00f3n')
+          : this._modo === 'eliminar' ? 'Eliminar justificaci\u00f3n'
           : this._modo === 'edicion' ? 'Editar justificaci\u00f3n'
           : this._datos.tipo === 'Retraso' ? 'Justificar retraso'
           : this._datos.tipo === 'Ausencia' ? 'Justificar ausencia' : 'Avisar al entrenador';
         document.getElementById('justif-titulo').textContent = titulo;
+      },
+
+      // Un chip por día con entrenamiento; cada día agrupa sus horarios (varios equipos o turnos).
+      _htmlDias: function() {
+        var porDia = {}, equipos = {}, self = this;
+        this._horarios.forEach(function(h) {
+          var dia = Number(h.DiaSemana);
+          (porDia[dia] = porDia[dia] || []).push(h);
+          equipos[h.ID_Equipo] = true;
+        });
+        var variosEquipos = Object.keys(equipos).length > 1;
+        return Object.keys(porDia).map(Number).sort(function(a, b) { return a - b; }).map(function(dia) {
+          var horas = porDia[dia].map(function(h) {
+            var eq = variosEquipos && App.cache.getEquipoById(h.ID_Equipo);
+            return h.HoraInicio + (eq ? ' \u00b7 ' + eq.Nombre : '');
+          }).join(' / ');
+          return '<button type="button" class="justif-chip justif-dia" data-dia="' + dia + '" aria-pressed="false" onclick="App.views.justificacion.elegirDia(' + dia + ')">' +
+            '<strong>' + _statsTexto(self.DIAS[dia - 1] || 'D\u00eda') + '</strong><small data-no-i18n>' + _statsTexto(horas) + '</small></button>';
+        }).join('');
+      },
+
+      _horariosElegidos: function() {
+        var dias = this._datos.dias;
+        return this._horarios.filter(function(h) { return dias.indexOf(Number(h.DiaSemana)) >= 0; });
       },
 
       _sinMovimiento: function() {
@@ -4061,6 +4154,8 @@ const App = {
           }
         });
         document.querySelectorAll('#justif-steps [data-tipo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.tipo === datos.tipo)); });
+        document.querySelectorAll('#justif-steps [data-dia]').forEach(function(b) { b.setAttribute('aria-pressed', String(datos.dias.indexOf(Number(b.dataset.dia)) >= 0)); });
+        document.getElementById('justif-dias-next').disabled = !datos.dias.length;
         document.querySelectorAll('#justif-steps [data-minutos]').forEach(function(b) {
           var marcado = b.dataset.minutos === 'otro' ? self._otrosMinutos : !self._otrosMinutos && Number(b.dataset.minutos) === datos.minutos;
           b.setAttribute('aria-pressed', String(marcado));
@@ -4089,6 +4184,19 @@ const App = {
       atras: function() {
         var pasos = this._pasos(), indice = pasos.indexOf(this._paso);
         if (indice > 0) this._irA(pasos[indice - 1], -1);
+      },
+
+      elegirDia: function(dia) {
+        var dias = this._datos.dias, i = dias.indexOf(dia);
+        if (i >= 0) dias.splice(i, 1);
+        else dias.push(dia);
+        dias.sort(function(a, b) { return a - b; });
+        document.querySelectorAll('#justif-steps [data-dia]').forEach(function(b) { b.setAttribute('aria-pressed', String(dias.indexOf(Number(b.dataset.dia)) >= 0)); });
+        document.getElementById('justif-dias-next').disabled = !dias.length;
+      },
+
+      continuarDias: function() {
+        if (this._datos.dias.length) this.siguiente();
       },
 
       elegirTipo: function(tipo) {
@@ -4149,12 +4257,31 @@ const App = {
           (detalle ? ' Informaci\u00f3n adicional: "' + detalle + '".' : '');
       },
 
+      // Resumen de una programación: el mismo estilo de mensaje, aplicado a cada día elegido.
+      mensajeProgramacion: function(jugador, horarios, tipo, motivo, detalle, minutos) {
+        var plurales = ['lunes', 'martes', 'mi\u00e9rcoles', 'jueves', 'viernes', 's\u00e1bados', 'domingos'], porDia = {};
+        horarios.forEach(function(h) { (porDia[h.DiaSemana] = porDia[h.DiaSemana] || []).push(h.HoraInicio); });
+        var dias = Object.keys(porDia).map(Number).sort(function(a, b) { return a - b; }).map(function(dia) {
+          return 'los ' + plurales[dia - 1] + ' a las ' + _listaTexto(porDia[dia]);
+        });
+        return 'Los padres/tutores de ' + jugador.Nombre + ' ' + jugador.Apellidos + ' avisan de ' +
+          (tipo === 'Ausencia' ? 'una ausencia' : 'una llegada con retraso') + ' en los entrenamientos de ' + _listaTexto(dias) + '. ' +
+          'Motivo: ' + motivo + '.' +
+          (minutos ? ' Llegar\u00e1 con unos ' + minutos + ' minutos de retraso.' : '') +
+          (detalle ? ' Informaci\u00f3n adicional: "' + detalle + '".' : '');
+      },
+
       actualizarPreview: function() {
         var j = App.state.jugador, d = this._datos, id = this._sesionId;
-        var s = App.cache.sesiones.find(function(x) { return x.ID === id; });
         var prev = document.getElementById('justif-preview');
-        if (!j || !s || !prev) return;
-        prev.textContent = this.mensaje(j, s, App.cache.getEquipoById(s.ID_Equipo), d.tipo, d.motivo, d.detalle, d.tipo === 'Retraso' ? d.minutos : null);
+        if (!j || !prev) return;
+        var minutos = d.tipo === 'Retraso' ? d.minutos : null;
+        if (this._contexto === 'programacion') {
+          prev.textContent = this.mensajeProgramacion(j, this._horariosElegidos(), d.tipo, d.motivo, d.detalle, minutos);
+          return;
+        }
+        var s = App.cache.sesiones.find(function(x) { return x.ID === id; });
+        if (s) prev.textContent = this.mensaje(j, s, App.cache.getEquipoById(s.ID_Equipo), d.tipo, d.motivo, d.detalle, minutos);
       },
 
       _codigo: function() {
@@ -4168,7 +4295,24 @@ const App = {
 
       confirmar: function() {
         if (this._modo === 'eliminar') this.eliminar();
+        else if (this._contexto === 'programacion') this.guardarProgramacion();
         else this.enviar();
+      },
+
+      guardarProgramacion: function() {
+        var d = this._datos, horarios = this._horariosElegidos(), codigo = this._codigo();
+        if (!horarios.length || !d.tipo || !d.motivo) return;
+        if (codigo.length !== 6) { showToast('Introduce el c\u00f3digo de autorizaci\u00f3n de 6 caracteres', 'error'); return; }
+        App.views.programaciones.guardar(this._programacionId, horarios, {
+          dias: d.dias.slice(), tipo: d.tipo, minutos: d.tipo === 'Retraso' ? d.minutos : null, motivo: d.motivo, detalle: d.detalle, codigo: codigo,
+        });
+      },
+
+      eliminarProgramacion: function() {
+        var id = this._programacionId;
+        if (!id) return;
+        App.closeModalJustif();
+        App.views.programaciones.eliminar(id);
       },
 
       enviar: function() {
@@ -4246,76 +4390,26 @@ const App = {
     },
 
     programaciones: {
-      _id: null,
       _pendingAction: null,
       _busy: false,
       _busyId: null,
-      abrir: function(id) {
+      // Abre el asistente de justificación con el paso previo de días; borrador: datos de un intento fallido.
+      abrir: function(id, borrador) {
         if (this._busy) return;
         var j = App.state.jugador;
         if (!j) return;
-        this._id = id || null;
         var actual = id ? App.cache.programacionesJustificaciones.find(function(p) { return p.ID === id; }) : null;
-        var horarios = App.cache.jugadoresEquipos.filter(function(r) {
+        if (id && !actual) return;
+        var equipos = App.cache.jugadoresEquipos.filter(function(r) {
           return r.ID_Jugador === j.ID && (r.Activo === true || r.Activo === 'TRUE');
-        }).reduce(function(result, rel) {
-          return result.concat(App.cache.horarios.filter(function(h) { return h.ID_Equipo === rel.ID_Equipo; }));
-        }, []);
-        var dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-        var select = document.getElementById('programacion-horario');
-        select.innerHTML = horarios.map(function(h) {
-          var eq = App.cache.getEquipoById(h.ID_Equipo);
-          return '<option value="' + _esc(h.ID) + '">' + _esc(eq ? eq.Nombre + ' · ' : '') + _esc(dias[Number(h.DiaSemana) - 1] || 'Día') + ' · ' + _esc(h.HoraInicio) + '–' + _esc(h.HoraFin) + '</option>';
-        }).join('');
-        var motivoSelect = document.getElementById('programacion-motivo');
-        motivoSelect.innerHTML = '<option value="">-- Selecciona un motivo --</option>' +
-          App.state.motivosJustificacion.map(function(motivo) {
-            return '<option value="' + _esc(motivo) + '">' + _esc(motivo) + '</option>';
-          }).join('');
-        if (actual) {
-          select.value = actual.ID_Horario;
-          document.querySelectorAll('#modal-programacion input[name="programacion-tipo"]').forEach(function(input) { input.checked = input.value === actual.TipoIncidencia; });
-          motivoSelect.value = actual.MotivoCategoria || '';
-          document.getElementById('programacion-detalle').value = actual.MotivoDetalle || '';
-          document.getElementById('programacion-hora').value = actual.HoraIncorporacion || '';
-        } else {
-          motivoSelect.value = '';
-          document.getElementById('programacion-detalle').value = '';
-          document.getElementById('programacion-hora').value = '';
-        }
-        document.getElementById('programacion-codigo').value = '';
-        var deleteButton = document.getElementById('programacion-delete-btn');
-        if (deleteButton) deleteButton.classList.toggle('hidden', !actual);
-        document.getElementById('programacion-titulo').textContent = actual ? 'Editar programación' : 'Programar justificación';
-        this.actualizar();
-        this.actualizarPreview();
-        document.getElementById('modal-programacion').classList.remove('hidden');
-      },
-      cerrar: function(event) {
-        if (!event || event.target.id === 'modal-programacion') document.getElementById('modal-programacion').classList.add('hidden');
-      },
-      actualizar: function() {
-        var input = document.querySelector('#modal-programacion input[name="programacion-tipo"]:checked');
-        document.getElementById('programacion-hora-wrap').classList.toggle('hidden', !input || input.value !== 'Retraso');
-        this.actualizarPreview();
-      },
-      actualizarPreview: function() {
-        var j = App.state.jugador;
-        var horarioId = document.getElementById('programacion-horario').value;
-        var horario = App.cache.horarios.find(function(item) { return item.ID === horarioId; });
-        var tipoInput = document.querySelector('#modal-programacion input[name="programacion-tipo"]:checked');
-        var tipo = tipoInput ? tipoInput.value : 'Ausencia';
-        var motivo = document.getElementById('programacion-motivo').value || 'Motivo personal';
-        var detalle = document.getElementById('programacion-detalle').value.trim();
-        var hora = document.getElementById('programacion-hora').value;
-        var dias = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
-        var dia = horario ? (dias[Number(horario.DiaSemana) - 1] || 'día') : 'el entrenamiento semanal';
-        var preview = j ? j.Nombre + ' ' + j.Apellidos + ' ' : '';
-        preview += tipo === 'Retraso'
-          ? 'se incorporará con retraso' + (hora ? ' a las ' + hora : '') + ' todos los ' + dia + '.'
-          : 'no podrá asistir a los entrenamientos de todos los ' + dia + '.';
-        preview += ' Motivo: ' + motivo + (detalle ? '. ' + detalle : '') + '.';
-        document.getElementById('programacion-preview').textContent = preview;
+        }).map(function(r) { return r.ID_Equipo; });
+        // Cada entrenamiento semanal admite una programación: los ya programados no se ofrecen de nuevo.
+        var ocupados = App.cache.programacionesJustificaciones.filter(function(p) { return p.ID !== id; }).map(function(p) { return p.ID_Horario; });
+        var horarios = App.cache.horarios.filter(function(h) {
+          return equipos.indexOf(h.ID_Equipo) >= 0 && ocupados.indexOf(h.ID) < 0;
+        }).sort(function(a, b) { return Number(a.DiaSemana) - Number(b.DiaSemana) || String(a.HoraInicio).localeCompare(String(b.HoraInicio)); });
+        if (!actual && !horarios.length) { showToast('No quedan entrenamientos semanales por programar', 'info'); return; }
+        App.views.justificacion.abrirProgramacion(actual, horarios, borrador);
       },
       render: function() {
         var el = document.getElementById('programaciones-lista');
@@ -4341,64 +4435,57 @@ const App = {
             '<button class="scheduled-action-btn ' + (activa ? 'pause' : 'play') + '" title="' + (activa ? 'Pausar' : 'Activar') + '" aria-label="' + (activa ? 'Pausar programación' : 'Activar programación') + '" ' + (busy ? 'disabled' : '') + ' onclick="event.stopPropagation();App.views.programaciones.toggle(\'' + p.ID + '\')">' + icono + '</button></div>';
         }).join('') : '<p class="schedule-empty">No tienes programaciones. Pulsa Programar para añadir una.</p>';
       },
-      eliminarDesdeFormulario: function() {
-        if (this._busy || !this._id) return;
-        var codigoEl = document.getElementById('programacion-codigo');
-        var codigo = codigoEl ? codigoEl.value.trim().toUpperCase() : '';
-        if (codigo.length !== 6) {
-          showToast('Introduce el código de autorización de 6 caracteres', 'error');
-          return;
-        }
-        var id = this._id;
-        var jugadorId = App.state.jugador.ID;
-        var self = this;
-        var token = App.operation.begin('programacion:delete:' + id, { pending: 'Eliminando\u2026', success: 'Eliminado correctamente' });
+      // Guarda lo elegido en el asistente con el contrato existente (una programación por entrenamiento semanal):
+      // al editar, la programación conserva su entrenamiento si sigue elegido y el resto de días se crean.
+      guardar: function(id, horarios, borrador) {
+        var j = App.state.jugador;
+        if (this._busy || !j || !horarios.length) return;
+        var actual = id ? App.cache.programacionesJustificaciones.find(function(p) { return p.ID === id; }) : null;
+        var principal = actual ? (horarios.find(function(h) { return h.ID === actual.ID_Horario; }) || horarios[0]) : null;
+        var nuevos = horarios.filter(function(h) { return h !== principal; });
+        var datos = function(h) {
+          return { idHorario: h.ID, tipoIncidencia: borrador.tipo, motivo: borrador.motivo, detalle: borrador.detalle,
+            horaIncorporacion: borrador.tipo === 'Retraso' && borrador.minutos ? _sumarMinutos(h.HoraInicio, borrador.minutos) : '' };
+        };
+        var comprobar = function(res) {
+          if (!res || res.success === false) throw new Error(res && res.error || 'No se pudo guardar la programaci\u00f3n');
+          guardadas++;
+          return res.programacion;
+        };
+        var token = App.operation.begin('programacion:' + (id || 'nueva'));
         if (!token) return;
-        this.cerrar();
+        App.closeModalJustif();
+        var self = this, guardadas = 0;
         this._busy = true;
-        this._busyId = id;
+        this._busyId = id || null;
         this.render();
         App.sync.start();
-        server('eliminarProgramacionJustificacion', id, jugadorId, codigo).then(function(res) {
-          if (!res || res.success === false) throw new Error(res && res.error || 'No se pudo eliminar la programación');
-          App.cache.remove('programacionesJustificaciones', id);
-          self._busy = false;
-          self._busyId = null;
-          self.render();
-          App.sync.done();
-          App.operation.succeed(token);
-        }).catch(function(error) {
-          self._busy = false;
-          self._busyId = null;
-          App.sync.done();
-          App.operation.fail(token, error.message || 'Error de conexión');
-          self.render();
+        // En serie: la primera llamada valida el código antes de crear el resto.
+        var cadena = principal
+          ? server('actualizarProgramacionJustificacion', id, j.ID, borrador.codigo, datos(principal)).then(function(res) {
+            App.cache.upsert('programacionesJustificaciones', comprobar(res));
+          })
+          : Promise.resolve();
+        nuevos.forEach(function(h) {
+          cadena = cadena.then(function() {
+            return server('crearProgramacionJustificacion', j.ID, borrador.codigo, datos(h));
+          }).then(function(res) {
+            App.cache.programacionesJustificaciones.push(comprobar(res));
+          });
         });
-      },
-      guardar: function() {
-        var j = App.state.jugador;
-        var codigo = document.getElementById('programacion-codigo').value.trim().toUpperCase();
-        var tipo = document.querySelector('#modal-programacion input[name="programacion-tipo"]:checked').value;
-        var datos = { idHorario: document.getElementById('programacion-horario').value, tipoIncidencia: tipo, motivo: document.getElementById('programacion-motivo').value, detalle: document.getElementById('programacion-detalle').value.trim(), horaIncorporacion: tipo === 'Retraso' ? document.getElementById('programacion-hora').value : '' };
-        if (!codigo || codigo.length !== 6) { showToast('Introduce el código de autorización de 6 caracteres', 'error'); return; }
-        var fn = this._id ? 'actualizarProgramacionJustificacion' : 'crearProgramacionJustificacion';
-        var args = this._id ? [this._id, j.ID, codigo, datos] : [j.ID, codigo, datos];
-        var self = this;
-        var token = App.operation.begin('programacion:' + (this._id || 'nueva'));
-        if (!token) return;
-        App.sync.start();
-        this.cerrar();
-        server.apply(null, [fn].concat(args)).then(function(res) {
-          if (!res || res.success === false) throw new Error(res && res.error || 'No se pudo guardar la programación');
-          if (self._id) App.cache.upsert('programacionesJustificaciones', res.programacion);
-          else App.cache.programacionesJustificaciones.push(res.programacion);
+        cadena.then(function() {
+          self._busy = false;
+          self._busyId = null;
           self.render();
           App.sync.done();
           App.operation.succeed(token);
         }).catch(function(error) {
-          App.sync.done();
-          App.operation.fail(token, error.message || 'Error de conexión');
+          self._busy = false;
+          self._busyId = null;
           self.render();
+          App.sync.done();
+          App.operation.fail(token, (error && error.message) || 'Error de conexi\u00f3n');
+          if (!guardadas) self.abrir(id, borrador);
         });
       },
       toggle: function(id) {
@@ -5132,6 +5219,24 @@ function _iconEstado(e) {
 
 function _esc(s) {
   return (s == null ? '' : String(s)).replace(/'/g, "\\'");
+}
+
+// Horas HH:MM ↔ minutos de retraso de una programación (se guarda la hora de incorporación prevista).
+function _sumarMinutos(hora, minutos) {
+  var partes = String(hora || '').split(':').map(Number);
+  var total = ((partes[0] * 60 + partes[1] + Number(minutos)) % 1440 + 1440) % 1440;
+  return ('0' + Math.floor(total / 60)).slice(-2) + ':' + ('0' + total % 60).slice(-2);
+}
+
+function _minutosEntre(inicio, fin) {
+  var a = String(inicio || '').split(':').map(Number), b = String(fin || '').split(':').map(Number);
+  var minutos = (b[0] * 60 + b[1]) - (a[0] * 60 + a[1]);
+  return Number.isInteger(minutos) && minutos >= 1 && minutos <= 180 ? minutos : null;
+}
+
+// «a», «a y b», «a, b y c».
+function _listaTexto(items) {
+  return items.length < 2 ? items.join('') : items.slice(0, -1).join(', ') + ' y ' + items[items.length - 1];
 }
 
 App.account = {
@@ -5922,7 +6027,6 @@ App.i18n = {
 "4-6 dígitos":"4–6 digits",
 "4 dígitos":"4 digits",
 "6 caracteres":"6 characters",
-"Añade información adicional si lo deseas…":"Add any additional information…",
 "Introduce tu usuario y el PIN":"Enter your username and PIN",
 "Introduce tu email y el PIN":"Enter your email and PIN",
 "No hay otros equipos en el club":"There are no other teams in the club",
@@ -6064,14 +6168,8 @@ App.i18n = {
 "Justificaciones programadas":"Scheduled explanations",
 "Se aplican automáticamente a tus entrenamientos semanales":"Automatically applied to your weekly training",
 "Programar":"Schedule",
-"Tipo de incidencia":"Incident type",
 "Ausencia":"Absence",
-"Hora de incorporación prevista":"Expected arrival time",
-"Detalle adicional":"Additional details",
 "(opcional)":"(optional)",
-"(proporcionado por el club)":"(provided by the club)",
-"Entrenamiento semanal":"Weekly training",
-"Guardar programación":"Save scheduled notice",
 "Guardado correctamente":"Saved successfully",
 "No se pudo guardar":"Could not save",
 "Entrenos":"Training",
@@ -6382,7 +6480,6 @@ App.i18n = {
 "Ningún jugador":"No players",
 "Sin horario configurado":"No schedule configured",
 "Motivo personal":"Personal reason",
-"-- Selecciona un motivo --":"-- Select a reason --",
 "No tienes programaciones. Pulsa Programar para añadir una.":"You have no scheduled notices. Tap Schedule to add one.",
 "Introduce el código de autorización para confirmar.":"Enter the authorization code to confirm.",
 "Código de autorización":"Authorization code",
@@ -6435,6 +6532,11 @@ App.i18n = {
 "No se pudo enviar la justificación":"The explanation could not be sent",
 "Editar programación":"Edit scheduled notice",
 "Programar justificación":"Schedule explanation",
+"¿Qué días quieres programar?":"Which days do you want to schedule?",
+"Días con entrenamiento de tu equipo. Puedes elegir varios.":"Your team's training days. You can choose several.",
+"Aviso que recibirá el entrenador cada semana":"Notice the coach will receive every week",
+"Confirmar y guardar":"Confirm and save",
+"No quedan entrenamientos semanales por programar":"There are no weekly training sessions left to schedule",
 "Pausar programación":"Pause scheduled notice",
 "Activar programación":"Activate scheduled notice",
 "Introduce el código de autorización de 6 caracteres":"Enter the 6-character authorization code",

@@ -250,10 +250,11 @@ function wizardClient() {
     return elements.get(id);
   };
   const button = (key, value) => ({ dataset: { [key]: value }, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
-  const steps = ['tipo', 'minutos', 'motivo', 'resumen', 'codigo'].map(step => ({ dataset: { step }, hidden: false, classList: classList() }));
+  const steps = ['dias', 'tipo', 'minutos', 'motivo', 'resumen', 'codigo'].map(step => ({ dataset: { step }, hidden: false, classList: classList() }));
   const tipos = ['Ausencia', 'Retraso'].map(v => button('tipo', v));
   const minutos = ['5', '10', '15', '30', 'otro'].map(v => button('minutos', v));
   let motivos = { html: null, list: [] };
+  let dias = { html: null, list: [] };
   const document = {
     addEventListener() {}, getElementById: element, querySelector: () => null,
     querySelectorAll(selector) {
@@ -264,6 +265,11 @@ function wizardClient() {
         const html = element('justif-motivos').innerHTML;
         if (motivos.html !== html) motivos = { html, list: Array.from(html.matchAll(/data-motivo="([^"]+)"/g), m => button('motivo', m[1])) };
         return motivos.list;
+      }
+      if (selector.includes('[data-dia]')) {
+        const html = element('justif-dias').innerHTML;
+        if (dias.html !== html) dias = { html, list: Array.from(html.matchAll(/data-dia="([^"]+)"/g), m => button('dia', m[1])) };
+        return dias.list;
       }
       return [];
     },
@@ -284,7 +290,8 @@ function wizardClient() {
   context.server = (fn, ...args) => { sent.push({ fn, args }); return Promise.resolve({ success: true, registro: { ID_Sesion: 's1', ID_Jugador: 'member' } }); };
   const visible = () => steps.find(s => !s.hidden).dataset.step;
   const pressed = list => list.filter(b => b.attrs['aria-pressed'] === 'true').map(b => Object.values(b.dataset)[0]);
-  return { app, element, visible, pressed, tipos, minutos, motivos: () => document.querySelectorAll('[data-motivo]'), sent };
+  return { app, context, element, visible, pressed, tipos, minutos, motivos: () => document.querySelectorAll('[data-motivo]'),
+    dias: () => document.querySelectorAll('[data-dia]'), sent };
 }
 
 test('el asistente de retraso avanza solo, pide minutos y envia los mismos datos al servidor', async () => {
@@ -395,6 +402,62 @@ test('el resumen del cliente coincide con el mensaje que guarda el servidor', ()
     assert.equal(app.views.justificacion.mensaje(jugador, sesion, equipo, tipo, 'Consulta', detalle, minutos),
       notificaciones.generarMensajeJustificacion(jugador, sesion, equipo, tipo, 'Consulta', detalle, '', minutos));
   }
+});
+
+test('la programación usa el mismo asistente con un paso previo de días y guarda un aviso por entrenamiento', async () => {
+  const { app, context, element, visible, pressed, dias, sent } = wizardClient();
+  app.cache.jugadoresEquipos = [{ ID_Jugador: 'member', ID_Equipo: 'team', Activo: true }];
+  app.cache.horarios = [
+    { ID: 'h-lun', ID_Equipo: 'team', DiaSemana: 1, HoraInicio: '18:00', HoraFin: '19:30' },
+    { ID: 'h-mie', ID_Equipo: 'team', DiaSemana: 3, HoraInicio: '19:00', HoraFin: '20:30' },
+    { ID: 'h-vie', ID_Equipo: 'team', DiaSemana: 5, HoraInicio: '17:00', HoraFin: '18:30' },
+    { ID: 'ajeno', ID_Equipo: 'other', DiaSemana: 2, HoraInicio: '18:00', HoraFin: '19:00' },
+  ];
+  app.cache.programacionesJustificaciones = [
+    { ID: 'p1', ID_Jugador: 'member', ID_Equipo: 'team', ID_Horario: 'h-lun', TipoIncidencia: 'Ausencia', MotivoCategoria: 'Estudios', MotivoDetalle: '', HoraIncorporacion: '', Activo: true },
+    { ID: 'p2', ID_Jugador: 'member', ID_Equipo: 'team', ID_Horario: 'h-vie', TipoIncidencia: 'Ausencia', MotivoCategoria: 'Estudios', MotivoDetalle: '', HoraIncorporacion: '', Activo: true },
+  ];
+  let id = 0;
+  context.server = (fn, ...args) => {
+    sent.push({ fn, args });
+    const datos = args[args.length - 1];
+    return Promise.resolve({ success: true, programacion: { ID: fn === 'actualizarProgramacionJustificacion' ? args[0] : 'nueva-' + ++id, ID_Horario: datos.idHorario } });
+  };
+  app.views.programaciones.abrir('p1');
+  assert.equal(visible(), 'dias');
+  assert.equal(element('justif-titulo').textContent, 'Editar programación');
+  assert.deepEqual(dias().map(b => b.dataset.dia), ['1', '3'], 'solo días con entreno propio y sin otra programación');
+  assert.deepEqual(pressed(dias()), ['1']);
+  assert.equal(element('justif-progress-text').textContent, 'Paso 1 de 5');
+  app.views.justificacion.elegirDia(3);
+  app.views.justificacion.continuarDias();
+  assert.equal(visible(), 'tipo');
+  app.views.justificacion.elegirTipo('Retraso');
+  assert.equal(element('justif-progress-text').textContent, 'Paso 3 de 6');
+  app.views.justificacion.elegirMinutos(15);
+  app.views.justificacion.elegirMotivo('Consulta');
+  app.views.justificacion.continuarMotivo();
+  assert.equal(visible(), 'resumen');
+  assert.equal(element('justif-preview').textContent,
+    'Los padres/tutores de Ana Baeza avisan de una llegada con retraso en los entrenamientos de los lunes a las 18:00 y los miércoles a las 19:00. Motivo: Consulta. Llegará con unos 15 minutos de retraso.');
+  assert.equal(element('justif-eliminar-prog').classList.contains('hidden'), false);
+  app.views.justificacion.siguiente();
+  assert.equal(visible(), 'codigo');
+  assert.equal(element('justif-enviar').textContent, 'Confirmar y guardar');
+  element('justif-codigo').value = 'abc123';
+  app.views.justificacion.confirmar();
+  await new Promise(resolve => setImmediate(resolve));
+  const datos = { tipoIncidencia: 'Retraso', motivo: 'Consulta', detalle: '' };
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [
+    { fn: 'actualizarProgramacionJustificacion', args: ['p1', 'member', 'ABC123', { idHorario: 'h-lun', ...datos, horaIncorporacion: '18:15' }] },
+    { fn: 'crearProgramacionJustificacion', args: ['member', 'ABC123', { idHorario: 'h-mie', ...datos, horaIncorporacion: '19:15' }] },
+  ]);
+  assert.deepEqual(app.cache.programacionesJustificaciones.map(p => p.ID_Horario), ['h-lun', 'h-vie', 'h-mie']);
+  // Al reabrir, los minutos se recuperan de la hora de incorporación guardada.
+  app.cache.programacionesJustificaciones[0].HoraIncorporacion = '18:15';
+  app.cache.programacionesJustificaciones[0].TipoIncidencia = 'Retraso';
+  app.views.programaciones.abrir('p1');
+  assert.equal(app.views.justificacion._datos.minutos, 15);
 });
 
 test('los minutos del aviso se guardan sin sustituir los que registro el entrenador', () => {

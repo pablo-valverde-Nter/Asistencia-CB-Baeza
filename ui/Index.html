@@ -514,7 +514,7 @@
 
   </main>
 
-  <!-- Asistente paso a paso de justificación de ausencia/retraso -->
+  <!-- Asistente paso a paso de justificación de ausencia/retraso (sesión concreta o programación semanal) -->
   <div id="modal-justificacion" class="modal-justif-overlay hidden" onclick="App.closeModalJustif(event)">
     <div class="modal-justif-sheet justif-wizard" role="dialog" aria-modal="true" aria-labelledby="justif-titulo">
       <div class="modal-handle"></div>
@@ -528,6 +528,15 @@
         <span id="justif-progress-text" aria-live="polite">Paso 1 de 4</span>
       </div>
       <div id="justif-steps" class="modal-body justif-steps">
+
+        <section class="justif-step" data-step="dias" hidden>
+          <h4 class="justif-question" tabindex="-1">&iquest;Qu&eacute; d&iacute;as quieres programar?</h4>
+          <p class="justif-hint">D&iacute;as con entrenamiento de tu equipo. Puedes elegir varios.</p>
+          <div id="justif-dias" class="justif-dias" role="group" aria-label="D&iacute;as de entrenamiento"></div>
+          <div class="justif-actions">
+            <button type="button" id="justif-dias-next" class="btn btn-primary btn-full" disabled onclick="App.views.justificacion.continuarDias()">Continuar</button>
+          </div>
+        </section>
 
         <section class="justif-step" data-step="tipo">
           <h4 class="justif-question" tabindex="-1">&iquest;Qu&eacute; quieres avisar?</h4>
@@ -547,7 +556,7 @@
 
         <section class="justif-step" data-step="minutos" hidden>
           <h4 class="justif-question" tabindex="-1">&iquest;Cu&aacute;ntos minutos de retraso?</h4>
-          <div class="justif-chips" role="group" aria-label="Minutos de retraso">
+          <div class="justif-chips justif-minutos" role="group" aria-label="Minutos de retraso">
             <button type="button" class="justif-chip" data-minutos="5" aria-pressed="false" onclick="App.views.justificacion.elegirMinutos(5)">5 min</button>
             <button type="button" class="justif-chip" data-minutos="10" aria-pressed="false" onclick="App.views.justificacion.elegirMinutos(10)">10 min</button>
             <button type="button" class="justif-chip" data-minutos="15" aria-pressed="false" onclick="App.views.justificacion.elegirMinutos(15)">15 min</button>
@@ -565,80 +574,41 @@
 
         <section class="justif-step" data-step="motivo" hidden>
           <h4 class="justif-question" tabindex="-1">&iquest;Cu&aacute;l es el motivo?</h4>
-          <div id="justif-motivos" class="justif-chips" role="group" aria-label="Motivo"></div>
+          <div id="justif-motivos" class="justif-chips justif-motivos" role="group" aria-label="Motivo"></div>
           <div class="form-group justif-detalle">
             <label for="justif-detalle">Detalles <span class="justif-optional">(opcional)</span></label>
             <textarea id="justif-detalle" rows="2" maxlength="300" placeholder="A&ntilde;ade informaci&oacute;n si lo necesitas&hellip;"></textarea>
           </div>
-          <button type="button" id="justif-motivo-next" class="btn btn-primary btn-full" disabled onclick="App.views.justificacion.continuarMotivo()">Continuar</button>
+          <div class="justif-actions">
+            <button type="button" id="justif-motivo-next" class="btn btn-primary btn-full" disabled onclick="App.views.justificacion.continuarMotivo()">Continuar</button>
+          </div>
         </section>
 
         <section class="justif-step" data-step="resumen" hidden>
           <h4 class="justif-question" tabindex="-1">Revisa el aviso</h4>
           <div class="justif-preview-wrap">
-            <div class="justif-preview-label">Mensaje que recibir&aacute; el entrenador</div>
+            <div id="justif-preview-label" class="justif-preview-label">Mensaje que recibir&aacute; el entrenador</div>
             <div id="justif-preview" class="justif-preview" data-no-i18n></div>
           </div>
-          <button type="button" id="justif-submit" class="btn btn-primary btn-full" onclick="App.views.justificacion.siguiente()">Enviar</button>
+          <div class="justif-actions">
+            <button type="button" id="justif-submit" class="btn btn-primary btn-full" onclick="App.views.justificacion.siguiente()">Enviar</button>
+            <button type="button" id="justif-eliminar-prog" class="btn btn-danger btn-full hidden" onclick="App.views.justificacion.eliminarProgramacion()">Eliminar programaci&oacute;n</button>
+          </div>
         </section>
 
         <section class="justif-step" data-step="codigo" hidden>
           <h4 class="justif-question" tabindex="-1">C&oacute;digo de autorizaci&oacute;n</h4>
           <p class="justif-hint">Escribe el c&oacute;digo de 6 caracteres que te dio el club para confirmar.</p>
-          <form onsubmit="event.preventDefault();App.views.justificacion.confirmar()">
+          <form class="justif-form" onsubmit="event.preventDefault();App.views.justificacion.confirmar()">
             <label class="sr-only" for="justif-codigo">C&oacute;digo de autorizaci&oacute;n</label>
             <input type="text" id="justif-codigo" class="justif-codigo" placeholder="6 caracteres" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false"
               oninput="this.value=this.value.toUpperCase();App.views.justificacion.actualizarCodigo()">
-            <button type="submit" id="justif-enviar" class="btn btn-primary btn-full" disabled>Confirmar y enviar</button>
+            <div class="justif-actions">
+              <button type="submit" id="justif-enviar" class="btn btn-primary btn-full" disabled>Confirmar y enviar</button>
+            </div>
           </form>
         </section>
 
-      </div>
-    </div>
-  </div>
-
-  <div id="modal-programacion" class="modal-justif-overlay hidden" onclick="App.views.programaciones.cerrar(event)">
-    <div class="modal-justif-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-hdr">
-        <h3 id="programacion-titulo">Programar justificación</h3>
-        <div class="modal-x" onclick="App.views.programaciones.cerrar()">&#x2715;</div>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Entrenamiento semanal</label>
-          <select id="programacion-horario"></select>
-        </div>
-        <div class="form-group">
-          <label>Tipo de incidencia</label>
-          <div class="radio-group">
-            <label class="radio-opt"><input type="radio" name="programacion-tipo" value="Ausencia" checked onchange="App.views.programaciones.actualizar()"><span>Ausencia</span></label>
-            <label class="radio-opt"><input type="radio" name="programacion-tipo" value="Retraso" onchange="App.views.programaciones.actualizar()"><span>Retraso</span></label>
-          </div>
-        </div>
-        <div class="form-group hidden" id="programacion-hora-wrap"><label>Hora de incorporación prevista</label><input type="time" id="programacion-hora"></div>
-        <div class="form-group">
-          <label>Motivo</label>
-          <select id="programacion-motivo" onchange="App.views.programaciones.actualizarPreview()">
-            <option value="">-- Selecciona un motivo --</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Detalle adicional <span style="color:var(--texto-sec);font-size:.8rem">(opcional)</span></label>
-          <textarea id="programacion-detalle" rows="2" placeholder="A&ntilde;ade información adicional si lo deseas&hellip;" oninput="App.views.programaciones.actualizarPreview()"></textarea>
-        </div>
-        <div class="justif-preview-wrap">
-          <div class="justif-preview-label">Mensaje que ver&aacute;n los entrenadores:</div>
-          <div id="programacion-preview" class="justif-preview"></div>
-        </div>
-        <div class="form-group">
-          <label>C&oacute;digo de autorizaci&oacute;n <small style="color:var(--texto-sec)">(proporcionado por el club)</small></label>
-          <input type="text" id="programacion-codigo" placeholder="6 caracteres" maxlength="6"
-            style="text-align:center;letter-spacing:4px;text-transform:uppercase;font-size:1.1rem"
-            oninput="this.value=this.value.toUpperCase()">
-        </div>
-        <button class="btn btn-primary btn-full" onclick="App.views.programaciones.guardar()">Guardar programación</button>
-        <button id="programacion-delete-btn" class="btn btn-danger btn-full mt-8 hidden" type="button" onclick="App.views.programaciones.eliminarDesdeFormulario()">Eliminar programación</button>
       </div>
     </div>
   </div>

@@ -1527,14 +1527,6 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 }
 .modal-justif-overlay:not(.hidden) .modal-justif-sheet { transform: translateY(0); }
 .modal-justif-sheet .modal-body { padding: 12px 16px 32px; overflow-y: auto; }
-.radio-group { display: flex; gap: 10px; margin-top: 6px; }
-.radio-opt {
-  flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer;
-  padding: 10px 12px; border: 1.5px solid var(--borde); border-radius: 10px;
-  font-size: .85rem; font-weight: 600; transition: all .15s;
-}
-.radio-opt:has(input:checked) { border-color: var(--morado); background: var(--morado-s); color: var(--morado); }
-.radio-opt input { accent-color: var(--morado); }
 .justif-preview-wrap {
   background: var(--fondo); border-radius: 10px; padding: 12px;
   margin: 4px 0 14px; border-left: 3px solid var(--morado);
@@ -1543,7 +1535,8 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 .justif-preview { font-size: .82rem; color: var(--texto); line-height: 1.5; min-height: 36px; white-space: pre-wrap; }
 
 /* ── Asistente paso a paso de justificación ── */
-.justif-wizard { max-height: min(92vh, 680px); }
+/* Altura casi fija: --justif-h es la del paso más alto (App.views.justificacion._ajustarAltura), con tope de 74vh. */
+.justif-wizard { max-height: min(74vh, 680px); min-height: min(var(--justif-h, 0px), 74vh, 680px); }
 .justif-wizard-hdr { gap: 6px; padding: 8px 10px 8px 6px; }
 .justif-wizard-hdr h3 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .justif-back {
@@ -1555,24 +1548,28 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 .justif-progress-track { flex: 1; height: 6px; border-radius: 3px; background: var(--borde); overflow: hidden; }
 #justif-progress-fill { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--morado); transition: width .25s ease; }
 #justif-progress-text { flex-shrink: 0; font-size: .74rem; font-weight: 700; color: var(--texto-sec); }
-.justif-steps { padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px)); overflow-x: hidden; }
+.justif-wizard .justif-steps { display: flex; flex-direction: column; padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 0px)); overflow-x: hidden; }
+.justif-step { display: flex; flex-direction: column; flex: 1 0 auto; }
 .justif-step[hidden] { display: none; }
+/* Los botones de cada paso quedan siempre abajo, a la misma altura. */
+.justif-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 16px; }
+.justif-form { display: flex; flex-direction: column; flex: 1 0 auto; }
 .justif-step.enter-forward { animation: justif-enter-forward .24s cubic-bezier(.2,.8,.3,1) both; }
 .justif-step.enter-back { animation: justif-enter-back .24s cubic-bezier(.2,.8,.3,1) both; }
 @keyframes justif-enter-forward { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
 @keyframes justif-enter-back { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
-.justif-question { margin: 2px 0 14px; font-size: 1.08rem; font-weight: 800; line-height: 1.3; color: var(--texto); outline: none; }
-.justif-hint { margin: -6px 0 14px; font-size: .84rem; line-height: 1.45; color: var(--texto-sec); }
-.justif-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.justif-question { margin: 2px 0 16px; font-size: 1.08rem; font-weight: 800; line-height: 1.3; color: var(--texto); outline: none; }
+.justif-hint { margin: -8px 0 16px; font-size: .84rem; line-height: 1.45; color: var(--texto-sec); }
+.justif-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .justif-choice {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-  min-height: 132px; padding: 16px 10px; border: 2px solid var(--borde); border-radius: var(--r-lg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  min-height: 168px; padding: 18px 10px; border: 2px solid var(--borde); border-radius: var(--r-lg);
   background: var(--blanco); color: var(--texto); text-align: center; cursor: pointer;
   transition: border-color .15s, background .15s, transform .1s;
 }
 .justif-choice strong { font-size: 1rem; }
 .justif-choice small { font-size: .76rem; line-height: 1.3; color: var(--texto-sec); }
-.justif-choice-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; font-size: 1.25rem; font-weight: 800; }
+.justif-choice-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; font-size: 1.35rem; font-weight: 800; }
 .justif-choice[data-tipo="Ausencia"] .justif-choice-icon { background: var(--rojo-s); color: var(--rojo); }
 .justif-choice[data-tipo="Retraso"] .justif-choice-icon { background: var(--ambar-s); color: var(--ambar); }
 .justif-chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -1581,7 +1578,20 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
   background: var(--blanco); color: var(--texto); font-size: .9rem; font-weight: 700; cursor: pointer;
   transition: border-color .15s, background .15s, transform .1s;
 }
-.justif-chip[data-minutos="otro"] { font-size: 1.2rem; line-height: 1; }
+.justif-chip[data-minutos="otro"] { font-size: 1.3rem; line-height: 1; }
+/* Minutos: rejilla amplia para un paso corto. */
+.justif-minutos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.justif-minutos .justif-chip { min-width: 0; min-height: 56px; border-radius: 14px; font-size: 1rem; }
+/* Motivos: rejilla compacta de 2 columnas (3 en pantallas anchas). */
+.justif-motivos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.justif-motivos .justif-chip { min-width: 0; min-height: 44px; padding: 6px 8px; border-radius: 12px; font-size: .8rem; font-weight: 600; line-height: 1.2; }
+@media (min-width: 460px) { .justif-motivos { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Días de la programación: un chip por día con entrenamiento. */
+.justif-dias { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.justif-dia { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; min-height: 68px; padding: 8px 10px; border-radius: 14px; }
+.justif-dia strong { font-size: .95rem; }
+.justif-dia small { font-size: .74rem; font-weight: 600; line-height: 1.25; color: var(--texto-sec); }
+.justif-dia[aria-pressed="true"] small { color: var(--morado); }
 .justif-choice[aria-pressed="true"], .justif-chip[aria-pressed="true"] { border-color: var(--morado); background: var(--morado-s); color: var(--morado); }
 .justif-choice[aria-pressed="true"] small { color: var(--morado); }
 .justif-choice:active, .justif-chip:active { transform: scale(.97); }
@@ -1593,18 +1603,23 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
   flex: 1; min-width: 0; padding: 10px 12px; border: 1.5px solid var(--borde); border-radius: 8px;
   background: var(--fondo); color: var(--texto); font-size: 1rem;
 }
-.justif-detalle { margin-top: 18px; }
+.justif-detalle { margin: 12px 0 0; }
+.justif-detalle label { margin-bottom: 4px; }
+.justif-detalle textarea { min-height: 60px; font-size: .88rem; }
+.justif-step .justif-preview-wrap { margin: 0; padding: 16px; }
+.justif-step .justif-preview { font-size: .9rem; line-height: 1.6; }
 .justif-optional { font-weight: 500; }
 .justif-codigo {
-  width: 100%; margin-bottom: 14px; padding: 12px; border: 1.5px solid var(--borde); border-radius: 10px;
+  width: 100%; padding: 16px 12px; border: 1.5px solid var(--borde); border-radius: 10px;
   background: var(--fondo); color: var(--texto); text-align: center; text-transform: uppercase;
   letter-spacing: 6px; font-size: 1.25rem; font-weight: 700;
 }
 .justif-codigo:focus, .justif-otros-row input:focus { outline: none; border-color: var(--morado); background: var(--blanco); }
 .justif-wizard .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 @media (max-width: 360px) {
-  .justif-choice { min-height: 116px; padding: 12px 8px; }
+  .justif-choice { min-height: 148px; padding: 14px 8px; }
   .justif-chip { min-width: 56px; padding: 8px 12px; }
+  .justif-motivos .justif-chip { padding: 6px; font-size: .76rem; }
   .justif-back { padding: 0 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
