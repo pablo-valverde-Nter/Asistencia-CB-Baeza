@@ -339,9 +339,15 @@ function makeOperations({ config, environment, urls, buildDirectories, expectedC
       return result.versionNumber;
     },
     async verifyImmutableVersion(version, description, build) {
-      const versions = claspJson(['list-versions', SCRIPT_ID], 'list-versions');
-      if (!Array.isArray(versions)) throw new Error('clasp list-versions devolvió una respuesta inesperada.');
-      const record = versions.find(entry => Number(entry.versionNumber) === version);
+      // La API de versiones puede tardar unos segundos en reflejar la versión recién creada.
+      let record;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        if (attempt) await new Promise(resolve => setTimeout(resolve, 5000));
+        const versions = claspJson(['list-versions', SCRIPT_ID], 'list-versions');
+        if (!Array.isArray(versions)) throw new Error('clasp list-versions devolvió una respuesta inesperada.');
+        record = versions.find(entry => Number(entry.versionNumber) === version);
+        if (record && record.description === description) break;
+      }
       if (!record || record.description !== description) throw new Error(`La versión ${version} no conserva la descripción esperada.`);
       const clone = await cloneFiles(version);
       try {
