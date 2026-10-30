@@ -5481,14 +5481,30 @@ Object.assign(App.account, {
     }
     var relaciones = jugador ? App.cache.jugadoresEquipos : App.cache.entrenadoresEquipos;
     var clave = jugador ? 'ID_Jugador' : 'ID_Entrenador';
-    html += '<h3>Equipos</h3><p class="account-hint">Gestiona las asignaciones y su tipo desde el formulario del equipo.</p>';
+    var propios = [], otros = [];
     App.cache.equipos.forEach(function(equipo) {
       var relacion = relaciones.find(function(r) { return r[clave] === persona.ID && r.ID_Equipo === equipo.ID && r.Activo !== false && r.Activo !== 'FALSE'; });
       var editable = App.state.esAdmin || (jugador && App.state.equipos.some(function(e) { return e.ID === equipo.ID; }));
-      if (!relacion && !editable) return;
-      var rol = !jugador && relacion && editable ? '<label>Rol en el equipo<select aria-label="Rol en el equipo" onchange="App.account.guardarStaffRolEquipo(\'' + _esc(equipo.ID) + '\',this.value)"><option value="Entrenador"' + (relacion.TipoRol !== 'Visor' ? ' selected' : '') + '>Entrenador</option><option value="Visor"' + (relacion.TipoRol === 'Visor' ? ' selected' : '') + '>Visor</option></select></label>' : '';
-      html += '<div class="account-staff-team"><span>' + _statsTexto(equipo.Nombre || '') + (relacion ? ' · ' + _statsTexto(relacion.Tipo || relacion.TipoRol || '') : '') + '</span>' + rol + (editable ? '<button class="btn btn-secondary btn-sm" type="button" onclick="App.views[\'equipo-form\'].cargar(\'' + _esc(equipo.ID) + '\')">Gestionar equipo</button>' : '') + '</div>';
+      if (relacion) propios.push({equipo:equipo,relacion:relacion,editable:editable});
+      else if (editable) otros.push(equipo);
     });
+    if (jugador) propios.sort(function(a,b) { return (a.relacion.Tipo === 'Principal' ? 0 : 1) - (b.relacion.Tipo === 'Principal' ? 0 : 1); });
+    function abrir(equipo) { return 'App.views[\'equipo-form\'].cargar(\'' + _esc(equipo.ID) + '\')'; }
+    function nombre(equipo) { var n = _statsTexto(equipo.Nombre || ''); return '<span class="account-team-name" title="' + n + '">' + n + '</span>'; }
+    html += '<h3>Equipos</h3><p class="account-hint">Gestiona las asignaciones y su tipo desde el formulario del equipo.</p>';
+    html += propios.length ? '<ul class="account-team-list">' + propios.map(function(p) {
+      var tipo = jugador ? p.relacion.Tipo || '' : p.relacion.TipoRol === 'Visor' ? 'Visor' : 'Entrenador';
+      var principal = tipo === 'Principal' || tipo === 'Entrenador';
+      var rol = !jugador && p.editable
+        ? '<span class="account-team-role"><select class="account-team-chip" aria-label="Rol en el equipo" onchange="App.account.guardarStaffRolEquipo(\'' + _esc(p.equipo.ID) + '\',this.value)"><option value="Entrenador"' + (tipo === 'Entrenador' ? ' selected' : '') + '>Entrenador</option><option value="Visor"' + (tipo === 'Visor' ? ' selected' : '') + '>Visor</option></select></span>'
+        : tipo ? '<span class="account-team-chip' + (principal ? ' is-main' : '') + '">' + _statsTexto(tipo) + '</span>' : '';
+      return '<li class="account-team-row">' + nombre(p.equipo) + rol + (p.editable ? '<button class="account-team-action" type="button" aria-label="Gestionar equipo" title="Gestionar equipo" onclick="' + abrir(p.equipo) + '">' + App.account.icon('ajustes') + '</button>' : '') + '</li>';
+    }).join('') + '</ul>' : '<p class="account-team-empty">Sin equipos asignados.</p>';
+    if (otros.length) {
+      html += '<details class="account-team-more"><summary class="btn btn-secondary btn-full">Gestionar en otro equipo<span class="account-team-more-icon" aria-hidden="true"></span></summary><p class="account-hint">' + (jugador ? 'Abre el equipo y añádelo a la plantilla.' : 'Abre el equipo y añádelo a sus entrenadores.') + '</p><ul class="account-team-list account-team-list-compact">' + otros.map(function(equipo) {
+        return '<li><button class="account-team-pick" type="button" onclick="' + abrir(equipo) + '">' + nombre(equipo) + '<span class="account-team-chevron" aria-hidden="true">›</span></button></li>';
+      }).join('') + '</ul></details>';
+    }
     return html + '<div class="account-danger-zone"><button class="btn btn-danger btn-full" type="button" onclick="App.account.eliminarStaff()">' + (jugador ? 'Eliminar jugador' : 'Eliminar entrenador') + '</button></div>';
   },
   guardarStaffPerfil: function(datos, force, emailWarningConfirmed, emailChangeConfirmed) {
@@ -6757,6 +6773,10 @@ App.i18n = {
 Object.assign(App.i18n.diccionario, {
   'Gestiona las asignaciones y su tipo desde el formulario del equipo.':'Manage assignments and their type from the team form.',
   'Gestionar equipo':'Manage team',
+  'Sin equipos asignados.':'No teams assigned.',
+  'Gestionar en otro equipo':'Manage in another team',
+  'Abre el equipo y añádelo a la plantilla.':'Open the team and add them to the roster.',
+  'Abre el equipo y añádelo a sus entrenadores.':'Open the team and add them to its coaches.',
   'PIN para conceder permisos':'PIN to grant permissions',
   'Solo es necesario al conceder permisos de administrador.':'Only required when granting administrator permissions.',
   'Cámbialo solo si el entrenador cambió de cuenta de Google. El cambio afectará a su próximo inicio de sesión.':'Change it only if the coach changed Google accounts. This will affect their next sign-in.',

@@ -60,6 +60,22 @@ test('perfil staff jugador conserva todos los campos, avisos y equipos sin edici
   assert.doesNotMatch(html,/guardarFoto|FotoURL|data-perfil="PIN"|recuper/);
 });
 
+test('perfil staff muestra solo los equipos propios y ofrece el resto tras «Gestionar en otro equipo»', () => {
+  const {app} = client(true); app.account.open('jugador','j');
+  app.cache.equipos = [{ID:'sec',Nombre:'Junior'},{ID:'team',Nombre:'Cadete'},{ID:'free',Nombre:'Senior'}];
+  app.cache.jugadoresEquipos.push({ID:'rel2',ID_Jugador:'j',ID_Equipo:'sec',Tipo:'Secundario'},{ID:'old',ID_Jugador:'j',ID_Equipo:'free',Tipo:'Principal',Activo:false});
+  const [propios, otros = ''] = app.account.perfilStaffHtml(app.account.persona()).split('<details');
+  assert.ok(propios.indexOf('Cadete') < propios.indexOf('Junior'), 'Principal primero');
+  assert.match(propios,/>Principal</); assert.match(propios,/>Secundario</);
+  assert.doesNotMatch(propios,/Senior|'free'/);
+  assert.match(otros,/Gestionar en otro equipo/); assert.match(otros,/equipo-form'\]\.cargar\('free'\)/);
+  assert.doesNotMatch(otros,/'team'|'sec'/);
+  const coach = client(); coach.app.account.open('jugador','j');
+  coach.app.cache.equipos.push({ID:'free',Nombre:'Senior'});
+  const html = coach.app.account.perfilStaffHtml(coach.app.account.persona());
+  assert.doesNotMatch(html,/<details|Senior/, 'sin equipos editables fuera de los propios no hay listado');
+});
+
 test('staff guarda jugador con endpoint general y conserva cero y preferencias familiares', async () => {
   const {app,calls} = client(); app.account.open('jugador','j'); app.state._formIsDirty=true;
   await app.account.guardarStaffPerfil({...playerData});
