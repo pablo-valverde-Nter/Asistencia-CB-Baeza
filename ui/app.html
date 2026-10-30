@@ -882,6 +882,7 @@ const App = {
           _clientLog('init_navigate_current', { view: App.state.currentView });
           App.navigate(App.state.currentView);
         }
+        App.views.bienvenida.comprobar();
       })
       .catch(function(err) { 
         if (reqSeq !== App.state._authReqSeq) {
@@ -990,6 +991,7 @@ const App = {
           if (campoPin.type !== 'password') App.alternarPinLogin();
           _clientLog('login_navigate_home', { rol: App.state.rol });
           App.navigate(App.state.rol === 'jugador' ? 'perfil-jugador' : 'equipos');
+          App.views.bienvenida.comprobar();
         } else {
           _clientLog('login_fail', { stage: res && res.stage ? res.stage : null, traceId: res && res.traceId ? res.traceId : null, error: res && res.error ? res.error : null });
           // Credenciales rechazadas: mensaje limpio. Fallo técnico: se añade el diagnóstico para soporte.
@@ -3333,6 +3335,207 @@ const App = {
       },
     },
 
+    // -- Bienvenida (primera entrada de jugador/familia): asistente paso a paso ---
+    // Mismos componentes que altaJugador. Se abre mientras Jugadores.BienvenidaVista es NULL y se marca con
+    // marcarBienvenidaVista al guardar, al terminar sin cambios o al cerrar con la X. Guarda con actualizarMiPerfil:
+    // mismas validaciones y código de seguridad que «Editar perfil»; los avisos por correo solo se muestran.
+    bienvenida: {
+      PASOS: ['inicio', 'fecha', 'tutor1', 'tutor2', 'resumen'],
+      CAMPOS_PASO: {
+        fecha: ['FechaNac'],
+        tutor1: ['NombrePadre1', 'ApellidosPadre1', 'TelefonoPadre1', 'EmailPadre1'],
+        tutor2: ['NombrePadre2', 'ApellidosPadre2', 'TelefonoPadre2', 'EmailPadre2'],
+      },
+      _paso: 'inicio',
+      _omitidos: {},   // paso → true: sus campos vuelven al valor guardado y no se envían
+      _original: {},   // valores del jugador al abrir (prerrelleno)
+
+      debeMostrarse: function() {
+        var j = App.state.jugador;
+        return App.state.rol === 'jugador' && !!(j && j.ID) && !j.BienvenidaVista;
+      },
+
+      // Tras iniciar sesión o recargar: solo la primera vez de cada jugador.
+      comprobar: function() {
+        if (!this.debeMostrarse()) return false;
+        this.abrir(false);
+        return true;
+      },
+
+      _campos: function() {
+        var c = this.CAMPOS_PASO;
+        return c.fecha.concat(c.tutor1, c.tutor2);
+      },
+
+      _valor: function(campo) {
+        var el = document.getElementById('bienvenida-' + campo);
+        return el ? String(el.value == null ? '' : el.value).trim() : '';
+      },
+
+      _poner: function(campo, valor) {
+        var el = document.getElementById('bienvenida-' + campo);
+        if (el) el.value = valor;
+      },
+
+      // desdePerfil: reabierto desde Perfil > «Completar datos»; empieza en la fecha.
+      abrir: function(desdePerfil) {
+        var j = App.state.jugador || {}, self = this;
+        this._omitidos = {};
+        this._original = {};
+        this._campos().forEach(function(c) {
+          self._original[c] = String(j[c] == null ? '' : j[c]).trim();
+          self._poner(c, self._original[c]);
+        });
+        this._poner('codigo', '');
+        [1, 2].forEach(function(n) {
+          var avisos = document.getElementById('bienvenida-avisos-' + n);
+          if (avisos) avisos.innerHTML = App.account.avisosHtml(j, n, 'bienvenida');
+        });
+        var logo = document.getElementById('bienvenida-logo'), escudo = document.getElementById('hdr-logo');
+        if (logo && escudo && escudo.src && logo.src !== escudo.src) logo.src = escudo.src;
+        var saludo = document.getElementById('bienvenida-saludo');
+        if (saludo) saludo.textContent = j.Nombre ? 'Hola, ' + j.Nombre + ' y familia' : '';
+        this._irA(desdePerfil ? 'fecha' : 'inicio', 0);
+        document.getElementById('modal-bienvenida').classList.remove('hidden');
+      },
+
+      // La X descarta el asistente: cuenta como vista.
+      cerrar: function() {
+        this._marcarVista();
+        App.account.cerrarAvisosInfo();
+        document.getElementById('modal-bienvenida').classList.add('hidden');
+      },
+
+      // Silencioso: si falla, la bienvenida vuelve a salir en la próxima entrada.
+      _marcarVista: function() {
+        var j = App.state.jugador;
+        if (!j || j.BienvenidaVista || App.state.rol !== 'jugador') return Promise.resolve(false);
+        j.BienvenidaVista = new Date().toISOString();
+        return server('marcarBienvenidaVista').then(function(res) {
+          if (res && res.success && res.bienvenidaVista) j.BienvenidaVista = res.bienvenidaVista;
+          return !!(res && res.success);
+        }).catch(function() { return false; });
+      },
+
+      _leer: function() {
+        var d = {}, self = this;
+        this._campos().forEach(function(c) { d[c] = self._valor(c); });
+        return d;
+      },
+
+      // Solo lo cambiado en pasos no omitidos: un dato ya guardado no se reescribe ni se borra al omitir.
+      _cambios: function() {
+        var d = this._leer(), cambios = {}, self = this;
+        Object.keys(this.CAMPOS_PASO).forEach(function(paso) {
+          if (self._omitidos[paso]) return;
+          self.CAMPOS_PASO[paso].forEach(function(c) { if (d[c] !== self._original[c]) cambios[c] = d[c]; });
+        });
+        return cambios;
+      },
+
+      // Mensaje del primer dato no válido del paso, o null (mismas reglas que «Editar perfil»).
+      _errorPaso: function(paso, d) {
+        if (paso === 'fecha' && d.FechaNac && (!/^\d{4}-\d{2}-\d{2}$/.test(d.FechaNac) || d.FechaNac > _hoy())) return 'La fecha de nacimiento no puede ser futura';
+        var n = paso === 'tutor1' ? 1 : paso === 'tutor2' ? 2 : 0;
+        if (n && d['TelefonoPadre' + n] && !_validarTel(d['TelefonoPadre' + n])) return 'El tel\u00e9fono del tutor ' + n + ' no es v\u00e1lido';
+        if (n && d['EmailPadre' + n] && !_validarEmail(d['EmailPadre' + n])) return 'El email del tutor ' + n + ' no es v\u00e1lido';
+        return null;
+      },
+
+      continuar: function() {
+        var error = this._errorPaso(this._paso, this._leer());
+        if (error) { showToast(error, 'error'); return false; }
+        delete this._omitidos[this._paso];
+        this._mover(1);
+        return true;
+      },
+
+      omitir: function() {
+        var campos = this.CAMPOS_PASO[this._paso], self = this;
+        if (!campos) return;
+        campos.forEach(function(c) { self._poner(c, self._original[c]); });
+        this._omitidos[this._paso] = true;
+        this._mover(1);
+      },
+
+      atras: function() {
+        this._mover(-1);
+      },
+
+      _mover: function(direccion) {
+        var destino = this.PASOS[this.PASOS.indexOf(this._paso) + direccion];
+        if (destino) this._irA(destino, direccion);
+      },
+
+      // Muestra el paso indicado. direccion: 1 avanza, -1 retrocede, 0 sin animación. La portada no cuenta como paso.
+      _irA: function(paso, direccion) {
+        this._paso = paso;
+        var indice = this.PASOS.indexOf(paso), total = this.PASOS.length - 1;
+        if (paso === 'resumen') this._pintarResumen();
+        App.account.cerrarAvisosInfo();
+        document.querySelectorAll('#bienvenida-steps .justif-step').forEach(function(step) {
+          var activo = step.dataset.step === paso;
+          step.hidden = !activo;
+          step.classList.remove('enter-forward', 'enter-back');
+          if (activo && direccion) {
+            void step.offsetWidth;
+            step.classList.add(direccion > 0 ? 'enter-forward' : 'enter-back');
+          }
+        });
+        document.getElementById('bienvenida-progress').classList.toggle('hidden', indice === 0);
+        document.getElementById('bienvenida-progress-text').textContent = 'Paso ' + indice + ' de ' + total;
+        document.getElementById('bienvenida-progress-fill').style.width = Math.round(indice * 100 / total) + '%';
+        document.getElementById('bienvenida-atras').style.visibility = indice > 0 ? 'visible' : 'hidden';
+        var contenedor = document.getElementById('bienvenida-steps');
+        contenedor.scrollTop = 0;
+        if (!direccion || !contenedor.querySelector) return;
+        var foco = contenedor.querySelector('.justif-step[data-step="' + paso + '"] .justif-question');
+        if (foco) foco.focus({ preventScroll: true });
+      },
+
+      _pintarResumen: function() {
+        var cambios = this._cambios(), d = this._leer(), filas = [];
+        if ('FechaNac' in cambios) filas.push(['Fecha de nacimiento', d.FechaNac ? d.FechaNac.split('-').reverse().join('/') : 'Sin fecha']);
+        [1, 2].forEach(function(n) {
+          var cambiado = this.CAMPOS_PASO['tutor' + n].some(function(c) { return c in cambios; });
+          if (!cambiado) return;
+          var partes = [(d['NombrePadre' + n] + ' ' + d['ApellidosPadre' + n]).trim(), d['TelefonoPadre' + n], d['EmailPadre' + n]].filter(Boolean);
+          filas.push(['Tutor ' + n, partes.length ? partes.join(' \u00b7 ') : 'Sin datos']);
+        }, this);
+        document.getElementById('bienvenida-resumen').innerHTML = filas.length
+          ? '<dl>' + filas.map(function(f) { return '<dt>' + _esc(f[0]) + '</dt><dd>' + _esc(f[1]) + '</dd>'; }).join('') + '</dl>'
+          : '<p class="justif-hint">No has a\u00f1adido datos nuevos. Puedes completarlos cuando quieras desde Perfil &gt; Completar datos.</p>';
+        document.getElementById('bienvenida-codigo-grupo').hidden = !filas.length;
+        document.getElementById('bienvenida-guardar').textContent = filas.length ? 'Guardar' : 'Terminar';
+      },
+
+      // Sin cambios solo se marca como vista; con cambios guarda y, al confirmarse, la marca.
+      guardar: function() {
+        var cambios = this._cambios(), d = this._leer(), self = this;
+        if (!Object.keys(cambios).length) { this._terminar(); return Promise.resolve(true); }
+        for (var i = 1; i < this.PASOS.length - 1; i++) {
+          var error = !this._omitidos[this.PASOS[i]] && this._errorPaso(this.PASOS[i], d);
+          if (error) { this._irA(this.PASOS[i], -1); showToast(error, 'error'); return Promise.resolve(false); }
+        }
+        var codigo = this._valor('codigo').toUpperCase();
+        if (!/^[A-Z0-9]{6}$/.test(codigo)) { showToast('Introduce el c\u00f3digo de seguridad de 6 caracteres', 'error'); return Promise.resolve(false); }
+        var boton = document.getElementById('bienvenida-guardar');
+        if (boton) boton.disabled = true;
+        return App.operation.run('welcome-profile', 'actualizarMiPerfil', [cambios, codigo], function() {
+          App.views['perfil-usuario']._actualizar(cambios);
+          self._terminar();
+          return true;
+        }).catch(function() { return false; /* App.operation ya muestra el error y el asistente sigue abierto */ })
+          .then(function(ok) { if (boton) boton.disabled = false; return ok; });
+      },
+
+      _terminar: function() {
+        this.cerrar();
+        var vista = App.state.currentView;
+        if ((vista === 'perfil-jugador' || vista === 'perfil-usuario') && App.views[vista] && App.views[vista].render) App.views[vista].render();
+      },
+    },
+
     // -- Lista entrenadores (admin) -------------------------
     'entrenadores-admin': {
       render: function() {
@@ -3861,7 +4064,7 @@ const App = {
         if (!App.account.allowed()) { host.innerHTML = '<div class="account-card">Sin permiso</div>'; return; }
         if (!persona || !persona.ID) { host.innerHTML = '<div class="account-card"><h2>Tu perfil</h2><p>Tu cuenta de administración no tiene ficha de entrenador.</p></div>'; return; }
         var row = function(label,value) { return '<div class="account-summary-row"><dt>' + _statsTexto(label) + '</dt><dd translate="no">' + _statsTexto(value || '—') + '</dd></div>'; };
-        var html = '<div class="account-profile-hero"><div id="perfil-avatar">' + App.avatarHtml(persona.FotoURL,persona.Nombre+' '+persona.Apellidos,88) + '</div><h2 translate="no">' + _statsTexto(persona.Nombre+' '+persona.Apellidos) + '</h2><div class="account-hero-actions"><button class="btn btn-primary" onclick="App.navigate(\'perfil-editar\')">Editar perfil</button>' + (!App.account.isStaff() ? '<button class="btn btn-secondary" onclick="App.views[\'perfil-usuario\'].elegirFoto()">Cambiar foto</button>' : '') + '</div></div><div class="account-card"><h2>Datos personales</h2><dl class="account-summary">' + row('Nombre',persona.Nombre) + row('Apellidos',persona.Apellidos) + (jugador ? row('Fecha de nacimiento',persona.FechaNac) + row('Dorsal',persona.Dorsal) : '') + '</dl></div><div class="account-card"><h2>Contacto</h2><dl class="account-summary">' + row('Teléfono',persona.Telefono) + row('Email',persona.Email) + '</dl></div>';
+        var html = '<div class="account-profile-hero"><div id="perfil-avatar">' + App.avatarHtml(persona.FotoURL,persona.Nombre+' '+persona.Apellidos,88) + '</div><h2 translate="no">' + _statsTexto(persona.Nombre+' '+persona.Apellidos) + '</h2><div class="account-hero-actions"><button class="btn btn-primary" onclick="App.navigate(\'perfil-editar\')">Editar perfil</button>' + (!App.account.isStaff() ? '<button class="btn btn-secondary" onclick="App.views[\'perfil-usuario\'].elegirFoto()">Cambiar foto</button>' : '') + (jugador && !App.account.isStaff() ? '<button class="btn btn-secondary" onclick="App.views.bienvenida.abrir(true)">Completar datos</button>' : '') + '</div></div><div class="account-card"><h2>Datos personales</h2><dl class="account-summary">' + row('Nombre',persona.Nombre) + row('Apellidos',persona.Apellidos) + (jugador ? row('Fecha de nacimiento',persona.FechaNac) + row('Dorsal',persona.Dorsal) : '') + '</dl></div><div class="account-card"><h2>Contacto</h2><dl class="account-summary">' + row('Teléfono',persona.Telefono) + row('Email',persona.Email) + '</dl></div>';
         if (jugador) [1,2].forEach(function(n) { html += '<div class="account-card"><h2>' + (n === 1 ? 'Familiar 1' : 'Familiar 2') + '</h2><dl class="account-summary">' + row('Nombre',[persona['NombrePadre'+n],persona['ApellidosPadre'+n]].filter(Boolean).join(' ')) + row('Teléfono',persona['TelefonoPadre'+n]) + row('Email',persona['EmailPadre'+n]) + '</dl><p class="account-avisos">' + App.account.avisosHtml(persona, n, 'perfil') + '</p></div>'; });
         host.innerHTML = html;
         App.state._formIsDirty = false;
@@ -7754,6 +7957,29 @@ Object.assign(App.i18n.diccionario, {
   'Código enviado':'Code sent',
   'Comprobando código…':'Checking code…',
   'Código verificado':'Code verified',
+  'Bienvenida':'Welcome',
+  '¡Bienvenido/a a la app del CB Baeza!':'Welcome to the CB Baeza app!',
+  'Escudo del CB Baeza':'CB Baeza crest',
+  'Consulta los entrenamientos y la asistencia':'Check training sessions and attendance',
+  'Justifica las faltas en un momento':'Explain absences in a moment',
+  'Sigue las estadísticas y la racha':'Follow your stats and streak',
+  'Antes de empezar, completa unos datos de contacto. Puedes omitir cualquier paso.':'Before you start, fill in some contact details. You can skip any step.',
+  'Empezar':'Get started',
+  'Terminar':'Finish',
+  '¿Cuándo nació el jugador?':'When was the player born?',
+  'Ayuda al club a organizar las categorías.':'It helps the club organise age groups.',
+  'Tutor 1':'Guardian 1',
+  'Tutor 2':'Guardian 2',
+  'Familiar 1: con quien contactará el club.':'Family member 1: who the club will contact.',
+  'Familiar 2, si hay otra persona de contacto.':'Family member 2, if there is another contact person.',
+  'El Código familias que te dio el club, el mismo que usas para justificar ausencias.':'The family code the club gave you, the same one you use to explain absences.',
+  'No has añadido datos nuevos. Puedes completarlos cuando quieras desde Perfil > Completar datos.':'You have not added new details. You can complete them any time from Profile > Complete details.',
+  'Completar datos':'Complete details',
+  'Sin fecha':'No date',
+  'El teléfono del tutor 1 no es válido':'Guardian 1 phone number is not valid',
+  'El teléfono del tutor 2 no es válido':'Guardian 2 phone number is not valid',
+  'El email del tutor 1 no es válido':'Guardian 1 email is not valid',
+  'El email del tutor 2 no es válido':'Guardian 2 email is not valid',
 });
 App.i18n.patrones.push(
   [/^Alertas de ausencias de (.+?)(?:: (\d+) jugador(?:es)?)?$/, function(all,equipo,n) { return 'Absence alerts for ' + equipo + (n ? ': ' + n + (n === '1' ? ' player' : ' players') : ''); }],
@@ -7776,6 +8002,7 @@ App.i18n.patrones.push(
   [/^(\d+) de (\d+) sesiones$/, '$1 of $2 sessions'],
   [/^de (\d+) jugadores$/, 'of $1 players'],
   [/^Paso (\d+) de (\d+)$/, 'Step $1 of $2'],
+  [/^Hola, (.+) y familia$/, 'Hi, $1 and family'],
   [/^Te faltan (\d+) datos$/, '$1 details missing']
 );
 document.addEventListener('DOMContentLoaded',function() { App.i18n.iniciar(); });

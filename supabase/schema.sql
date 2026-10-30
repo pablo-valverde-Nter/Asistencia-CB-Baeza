@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS public."Jugadores" (
   "TelefonoPadre1" text,
   "TelefonoPadre2" text,
   "NotificarAusenciasPadre1" boolean NOT NULL DEFAULT true,
-  "NotificarAusenciasPadre2" boolean NOT NULL DEFAULT true
+  "NotificarAusenciasPadre2" boolean NOT NULL DEFAULT true,
+  "BienvenidaVista" timestamptz
 );
 
 CREATE TABLE IF NOT EXISTS public."Jugadores_Equipos" (

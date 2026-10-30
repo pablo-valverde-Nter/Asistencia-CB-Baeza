@@ -281,3 +281,16 @@ test('todos los endpoints de cuenta rechazan credenciales falsas antes de escrib
   assert.equal(s.writes.length, 0);
   assert.equal(s.mails.length, 0);
 });
+
+test('marcarBienvenidaVista: solo la cuenta de jugador marca su propia ficha con la hora del servidor', () => {
+  const s = servidor();
+  const res = s.call('marcarBienvenidaVista', s.jugador);
+  assert.equal(res.success, true);
+  assert.deepEqual(Object.keys(s.writes.at(-1).fields), ['BienvenidaVista']);
+  assert.equal(s.writes.at(-1).id, 'j1');
+  assert.match(s.rows.Jugadores[0].BienvenidaVista, /^\d{4}-\d{2}-\d{2}T/);
+  const escrituras = s.writes.length;
+  assert.equal(s.call('marcarBienvenidaVista', s.entrenador).success, false);
+  assert.equal(s.call('marcarBienvenidaVista', s.admin).success, false);
+  assert.equal(s.writes.length, escrituras);
+});

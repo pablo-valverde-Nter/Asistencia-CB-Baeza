@@ -16,7 +16,7 @@ const SCHEMA = {
     'Usuario', 'PIN', 'CodigoPadres', 'EmailPadre1', 'EmailPadre2', 'NombrePadre1', 'ApellidosPadre1', 'NombrePadre2', 'ApellidosPadre2',
     'NombrePadre1Original', 'NombrePadre2Original',
     'TelefonoPadre1', 'TelefonoPadre2',
-    'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2'
+    'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2', 'BienvenidaVista'
   ],
   Jugadores_Equipos: [
     'ID', 'ID_Jugador', 'ID_Equipo', 'Tipo', 'Activo', 'FechaAlta', 'FechaBaja'

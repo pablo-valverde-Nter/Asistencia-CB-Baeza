@@ -521,6 +521,18 @@ function actualizarMiPerfil(auth, datos, codigoSeguridad) {
   } catch (e) { return { success: false, error: e.message }; }
 }
 
+// Asistente de bienvenida: se marca al terminarlo, omitirlo o cerrarlo. Solo la cuenta de jugador/familia
+// marca su propia ficha y la hora la pone el servidor; no admite otros campos ni código de seguridad.
+function marcarBienvenidaVista(auth) {
+  try {
+    const cuenta = Auth.getCuentaActual_(auth);
+    if (!cuenta.jugador) throw new Error('Solo las cuentas de jugador tienen asistente de bienvenida.');
+    const vista = new Date().toISOString();
+    if (!updateRow(CONFIG.SHEETS.JUGADORES, cuenta.jugador.ID, { BienvenidaVista: vista })) throw new Error('No se pudo guardar.');
+    return { success: true, bienvenidaVista: vista };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
 function cambiarCredenciales(auth, cambios) {
   try {
     const cuenta = Auth.getCuentaActual_(auth);

@@ -691,6 +691,88 @@
     </div>
   </div>
 
+  <!-- Asistente de bienvenida (primera entrada de jugador/familia): mismos componentes que el alta de jugador -->
+  <div id="modal-bienvenida" class="modal-justif-overlay hidden">
+    <div class="modal-justif-sheet justif-wizard alta-wizard bienvenida-wizard" role="dialog" aria-modal="true" aria-labelledby="bienvenida-titulo">
+      <div class="modal-handle"></div>
+      <div class="modal-hdr justif-wizard-hdr">
+        <button type="button" id="bienvenida-atras" class="justif-back" onclick="App.views.bienvenida.atras()" aria-label="Paso anterior">&#8249; Atr&aacute;s</button>
+        <h3 id="bienvenida-titulo">Bienvenida</h3>
+        <button type="button" class="modal-x" onclick="App.views.bienvenida.cerrar()" aria-label="Cerrar">&#x2715;</button>
+      </div>
+      <div id="bienvenida-progress" class="justif-progress">
+        <div class="justif-progress-track" aria-hidden="true"><span id="bienvenida-progress-fill" class="justif-progress-fill"></span></div>
+        <span id="bienvenida-progress-text" class="justif-progress-text" aria-live="polite">Paso 1 de 4</span>
+      </div>
+      <div id="bienvenida-steps" class="modal-body justif-steps">
+
+        <section class="justif-step bienvenida-inicio" data-step="inicio">
+          <div class="bienvenida-hero">
+            <span class="bienvenida-escudo"><img id="bienvenida-logo" alt="Escudo del CB Baeza"></span>
+            <h4 class="justif-question" tabindex="-1">&iexcl;Bienvenido/a a la app del CB Baeza!</h4>
+            <p id="bienvenida-saludo" class="bienvenida-saludo"></p>
+          </div>
+          <ul class="bienvenida-lista">
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4m8-4v4"/></svg>Consulta los entrenamientos y la asistencia</li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="m4 7 8 6 8-6"/></svg>Justifica las faltas en un momento</li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11m7 9V5m7 15v-6"/></svg>Sigue las estad&iacute;sticas y la racha</li>
+          </ul>
+          <p class="justif-hint">Antes de empezar, completa unos datos de contacto. Puedes omitir cualquier paso.</p>
+          <div class="justif-actions">
+            <button type="button" class="btn btn-primary btn-full" onclick="App.views.bienvenida.continuar()">Empezar</button>
+          </div>
+        </section>
+
+        <section class="justif-step" data-step="fecha" hidden>
+          <h4 class="justif-question" tabindex="-1">&iquest;Cu&aacute;ndo naci&oacute; el jugador?</h4>
+          <p class="justif-hint">Ayuda al club a organizar las categor&iacute;as.</p>
+          <div class="form-group"><label for="bienvenida-FechaNac">Fecha de nacimiento</label><input type="date" id="bienvenida-FechaNac"></div>
+          <div class="justif-actions">
+            <button type="button" class="btn btn-primary btn-full" onclick="App.views.bienvenida.continuar()">Continuar</button>
+            <button type="button" class="btn btn-secondary btn-full" onclick="App.views.bienvenida.omitir()">Omitir</button>
+          </div>
+        </section>
+
+        <section class="justif-step" data-step="tutor1" hidden>
+          <h4 class="justif-question" tabindex="-1">Tutor 1</h4>
+          <p class="justif-hint">Familiar 1: con quien contactar&aacute; el club.</p>
+          <div class="form-group"><label for="bienvenida-NombrePadre1">Nombre</label><input type="text" id="bienvenida-NombrePadre1" placeholder="Nombre" autocomplete="given-name"></div>
+          <div class="form-group"><label for="bienvenida-ApellidosPadre1">Apellidos</label><input type="text" id="bienvenida-ApellidosPadre1" placeholder="Apellidos" autocomplete="family-name"></div>
+          <div class="form-group"><label for="bienvenida-TelefonoPadre1">Tel&eacute;fono</label><input type="tel" id="bienvenida-TelefonoPadre1" placeholder="+34 600 000 000" autocomplete="tel"></div>
+          <div class="form-group"><label for="bienvenida-EmailPadre1">Email</label><input type="email" id="bienvenida-EmailPadre1" placeholder="familia@ejemplo.com" autocomplete="email"></div>
+          <p id="bienvenida-avisos-1" class="account-hint account-avisos"></p>
+          <div class="justif-actions">
+            <button type="button" class="btn btn-primary btn-full" onclick="App.views.bienvenida.continuar()">Continuar</button>
+            <button type="button" class="btn btn-secondary btn-full" onclick="App.views.bienvenida.omitir()">Omitir</button>
+          </div>
+        </section>
+
+        <section class="justif-step" data-step="tutor2" hidden>
+          <h4 class="justif-question" tabindex="-1">Tutor 2</h4>
+          <p class="justif-hint">Familiar 2, si hay otra persona de contacto.</p>
+          <div class="form-group"><label for="bienvenida-NombrePadre2">Nombre</label><input type="text" id="bienvenida-NombrePadre2" placeholder="Nombre" autocomplete="off"></div>
+          <div class="form-group"><label for="bienvenida-ApellidosPadre2">Apellidos</label><input type="text" id="bienvenida-ApellidosPadre2" placeholder="Apellidos" autocomplete="off"></div>
+          <div class="form-group"><label for="bienvenida-TelefonoPadre2">Tel&eacute;fono</label><input type="tel" id="bienvenida-TelefonoPadre2" placeholder="+34 600 000 000" autocomplete="off"></div>
+          <div class="form-group"><label for="bienvenida-EmailPadre2">Email</label><input type="email" id="bienvenida-EmailPadre2" placeholder="familia@ejemplo.com" autocomplete="off"></div>
+          <p id="bienvenida-avisos-2" class="account-hint account-avisos"></p>
+          <div class="justif-actions">
+            <button type="button" class="btn btn-primary btn-full" onclick="App.views.bienvenida.continuar()">Continuar</button>
+            <button type="button" class="btn btn-secondary btn-full" onclick="App.views.bienvenida.omitir()">Omitir</button>
+          </div>
+        </section>
+
+        <section class="justif-step" data-step="resumen" hidden>
+          <h4 class="justif-question" tabindex="-1">Revisa y guarda</h4>
+          <div id="bienvenida-resumen" class="alta-resumen"></div>
+          <div id="bienvenida-codigo-grupo" class="form-group bienvenida-codigo"><label for="bienvenida-codigo">C&oacute;digo de seguridad</label><input id="bienvenida-codigo" type="password" maxlength="6" autocomplete="off" placeholder="6 caracteres"><small class="form-hint">El C&oacute;digo familias que te dio el club, el mismo que usas para justificar ausencias.</small></div>
+          <div class="justif-actions">
+            <button type="button" id="bienvenida-guardar" class="btn btn-primary btn-full" onclick="App.views.bienvenida.guardar()">Guardar</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
   <div id="operation-status" class="operation-status hidden" role="status" aria-live="polite" aria-atomic="true">
     <img id="operation-logo" class="operation-logo" alt="">
     <span id="operation-pending-text" class="operation-message operation-message-pending">Guardando&hellip;</span>

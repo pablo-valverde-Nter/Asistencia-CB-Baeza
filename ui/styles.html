@@ -1723,6 +1723,19 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 .alta-compartir .btn { min-height: 44px; padding: 10px 12px; }
 .btn-whatsapp { background: var(--verde); color: var(--button-ink); }
 .alta-wizard .btn:focus-visible { outline: 2px solid var(--morado); outline-offset: 2px; }
+/* ── Asistente de bienvenida (jugador/familia): portada con los colores de marca del tema; el resto, como el alta. ── */
+.bienvenida-hero { margin: -16px -16px 18px; padding: 26px 20px 22px; border-radius: 0 0 var(--r-lg) var(--r-lg); background: linear-gradient(160deg, var(--brand-bg), var(--brand-end)); color: var(--on-accent); text-align: center; }
+.bienvenida-escudo { display: inline-flex; width: 96px; height: 96px; padding: 6px; border-radius: 50%; background: var(--on-accent); box-shadow: 0 0 0 5px var(--on-accent-wash), var(--sombra-lg); }
+.bienvenida-escudo img { width: 100%; height: 100%; border-radius: 50%; object-fit: contain; }
+.bienvenida-hero .justif-question { margin: 16px 0 6px; font-size: 1.28rem; line-height: 1.25; color: var(--on-accent); text-wrap: balance; }
+.bienvenida-saludo { margin: 0; font-size: .92rem; font-weight: 600; color: var(--on-accent-muted); }
+.bienvenida-saludo:empty { display: none; }
+.bienvenida-lista { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; list-style: none; }
+.bienvenida-lista li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r); background: var(--morado-xs); color: var(--texto); font-size: .9rem; font-weight: 600; line-height: 1.3; }
+.bienvenida-lista svg { flex: 0 0 auto; width: 34px; height: 34px; padding: 7px; border-radius: 50%; background: var(--morado-s); fill: none; stroke: var(--morado); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.bienvenida-inicio .justif-hint { margin: 0; }
+.bienvenida-codigo { margin-top: 14px; }
+.bienvenida-codigo[hidden] { display: none; }
 .justif-detalle { margin: 12px 0 0; }
 .justif-detalle label { margin-bottom: 4px; }
 .justif-detalle textarea { min-height: 60px; font-size: .88rem; }

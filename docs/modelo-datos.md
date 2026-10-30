@@ -60,6 +60,7 @@ Registro global de jugadores del club, independiente de equipos o temporadas.
 | `Email` | String | Email de contacto |
 | `FotoURL` | String | Foto anterior (URL), avatar `avatar:<slug>` o JPEG `data:image/jpeg;base64,...` (máximo 16000 caracteres); vacío elimina la foto |
 | `Dorsal` | Number | Número de camiseta. Único entre los jugadores activos de cada equipo (validado en la app al cambiarlo o al asignar a un equipo; sin restricción en BD) |
+| `BienvenidaVista` | Timestamp (nullable) | Cuándo la familia terminó, omitió o cerró el asistente de bienvenida. `NULL` = se muestra en la próxima entrada como jugador. Solo lo escribe `marcarBienvenidaVista` (hora del servidor); aplicar `supabase/perfil.sql` en instalaciones existentes |
 
 ---
 
