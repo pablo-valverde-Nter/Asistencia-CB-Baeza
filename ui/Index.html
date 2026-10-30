@@ -95,40 +95,55 @@
         <h1 class="login-title">CB BAEZA</h1>
         <p class="login-subtitle">Gesti&oacute;n de Asistencia</p>
 
-        <!-- Toggle tipo de usuario -->
-        <div class="login-tabs">
-          <button class="login-tab active" id="tab-entrenador" onclick="App.setLoginTipo('entrenador')">
-            &#x1F3BD; Entrenador
+        <form id="login-form" class="login-form" novalidate onsubmit="event.preventDefault();App.iniciarSesion()" oninput="App.limpiarErrorLogin()">
+          <!-- Tipo de acceso: iconos de trazo (misma línea que el menú de usuario) -->
+          <div class="login-tabs" id="login-tabs" role="group" aria-label="Tipo de acceso" data-tipo="entrenador">
+            <button type="button" class="login-tab active" id="tab-entrenador" aria-pressed="true" onclick="App.setLoginTipo('entrenador')">
+              <svg class="login-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><rect x="9" y="2.5" width="6" height="3" rx="1"/><path d="m8.2 9 2.6 2.6m0-2.6-2.6 2.6"/><circle cx="14.9" cy="15.6" r="1.9"/></svg>
+              <span>Entrenador</span>
+            </button>
+            <button type="button" class="login-tab" id="tab-jugador" aria-pressed="false" onclick="App.setLoginTipo('jugador')">
+              <svg class="login-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3h2a1.5 1.5 0 0 0 3 0h2l.4 2.2A4 4 0 0 0 19 8.4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8.4a4 4 0 0 0 3.1-3.2Z"/><path d="M10.5 11h3l-2 5.5"/></svg>
+              <span>Jugador</span>
+            </button>
+          </div>
+
+          <div class="form-group login-field" id="login-field-email">
+            <label for="login-email">Email registrado</label>
+            <input type="email" id="login-email" class="login-input" placeholder="entrenador@ejemplo.com" autocomplete="email"
+              autocapitalize="none" spellcheck="false" aria-describedby="login-error">
+          </div>
+
+          <div class="form-group login-field hidden" id="login-field-usuario">
+            <label for="login-usuario">Usuario</label>
+            <input type="text" id="login-usuario" class="login-input login-input-usuario" placeholder="nombre.apellido" autocomplete="username"
+              autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="login-error">
+          </div>
+
+          <div class="form-group login-field">
+            <label for="login-pin">PIN de acceso</label>
+            <div class="login-pin-wrap">
+              <input type="password" id="login-pin" class="login-input login-input-pin" placeholder="&bull;&bull;&bull;&bull;" maxlength="6"
+                inputmode="numeric" autocomplete="current-password" aria-describedby="login-error">
+              <!-- mousedown sin foco: el PIN conserva el foco y el teclado del móvil sigue abierto -->
+              <button type="button" class="login-pin-toggle" id="login-pin-toggle" aria-controls="login-pin" aria-pressed="false" aria-label="Mostrar PIN"
+                onmousedown="event.preventDefault()" onclick="App.alternarPinLogin()">
+                <svg class="login-eye login-eye-show" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="login-eye login-eye-hide" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 5.6c.5-.1.9-.1 1.4-.1 6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.6 3.4M6.6 6.6C3.9 8.3 2.5 12 2.5 12s3.5 6.5 9.5 6.5c2 0 3.8-.6 5.3-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="m3 3 18 18"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div id="login-error" class="login-error" role="alert" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5m0 3.5v.01"/></svg>
+            <span><span id="login-error-msg"></span><small id="login-error-detail"></small></span>
+          </div>
+
+          <button type="submit" class="btn btn-login btn-full" id="login-submit">
+            <img class="login-submit-logo" alt="">
+            <span id="login-submit-text">Entrar</span>
           </button>
-          <button class="login-tab" id="tab-jugador" onclick="App.setLoginTipo('jugador')">
-            &#x1F3C0; Jugador
-          </button>
-        </div>
-
-        <!-- Campo: email (entrenador) -->
-        <div class="form-group login-field" id="login-field-email" style="margin-top:20px;text-align:left">
-          <label style="color:var(--on-accent-muted)">Email registrado</label>
-          <input type="email" id="login-email" placeholder="entrenador@ejemplo.com" autocomplete="email"
-            style="background:var(--on-accent-wash);border:1.5px solid var(--on-accent-border);color:var(--on-accent)">
-        </div>
-
-        <!-- Campo: usuario (jugador) -->
-        <div class="form-group login-field hidden" id="login-field-usuario" style="margin-top:20px;text-align:left">
-          <label style="color:var(--on-accent-muted)">Usuario</label>
-          <input type="text" id="login-usuario" placeholder="nombre.apellido" autocomplete="username"
-            style="background:var(--on-accent-wash);border:1.5px solid var(--on-accent-border);color:var(--on-accent);text-transform:lowercase">
-        </div>
-
-        <div class="form-group" style="text-align:left">
-          <label style="color:var(--on-accent-muted)">PIN de acceso</label>
-          <input type="password" id="login-pin" placeholder="&bull;&bull;&bull;&bull;" maxlength="6"
-            style="text-align:center;letter-spacing:6px;font-size:1.2rem;background:var(--on-accent-wash);border:1.5px solid var(--on-accent-border);color:var(--on-accent)"
-            autocomplete="current-password" onkeydown="if(event.key==='Enter')App.iniciarSesion()">
-        </div>
-
-        <button class="btn btn-login btn-full" onclick="App.iniciarSesion()">
-          Entrar
-        </button>
+        </form>
       </div>
     </section>
 

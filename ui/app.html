@@ -898,34 +898,84 @@ const App = {
 
   setLoginTipo(tipo) {
     App.state._loginTipo = tipo;
-    document.getElementById('tab-entrenador').classList.toggle('active', tipo === 'entrenador');
-    document.getElementById('tab-jugador').classList.toggle('active', tipo === 'jugador');
+    document.getElementById('login-tabs').dataset.tipo = tipo;
+    ['entrenador', 'jugador'].forEach(function(t) {
+      var tab = document.getElementById('tab-' + t);
+      tab.classList.toggle('active', t === tipo);
+      tab.setAttribute('aria-pressed', String(t === tipo));
+    });
     document.getElementById('login-field-email').classList.toggle('hidden', tipo === 'jugador');
     document.getElementById('login-field-usuario').classList.toggle('hidden', tipo === 'entrenador');
+    App.limpiarErrorLogin();
+  },
+
+  // Muestra u oculta el PIN sin mover el foco (el botón evita el foco en mousedown) ni el cursor.
+  alternarPinLogin() {
+    var pin = document.getElementById('login-pin');
+    var boton = document.getElementById('login-pin-toggle');
+    var visible = pin.type === 'password';
+    var inicio = pin.selectionStart, fin = pin.selectionEnd;
+    pin.type = visible ? 'text' : 'password';
+    if (document.activeElement === pin && inicio !== null) pin.setSelectionRange(inicio, fin);
+    boton.setAttribute('aria-pressed', String(visible));
+    boton.setAttribute('aria-label', visible ? 'Ocultar PIN' : 'Mostrar PIN');
+  },
+
+  limpiarErrorLogin() {
+    var caja = document.getElementById('login-error');
+    if (!caja || caja.hidden) return;
+    caja.hidden = true;
+    ['login-email', 'login-usuario', 'login-pin'].forEach(function(id) { document.getElementById(id).removeAttribute('aria-invalid'); });
+  },
+
+  // Error junto al formulario (no un toast que desaparece): queda a la vista con el teclado abierto.
+  _mostrarErrorLogin(mensaje, detalle, campos) {
+    document.getElementById('login-error-msg').textContent = mensaje;
+    document.getElementById('login-error-detail').textContent = detalle || '';
+    document.getElementById('login-error').hidden = false;
+    (campos || []).forEach(function(el) { el.setAttribute('aria-invalid', 'true'); });
+  },
+
+  _loginCargando(activo) {
+    var boton = document.getElementById('login-submit');
+    var logo = boton.querySelector('.login-submit-logo');
+    var fuente = document.querySelector('.login-logo-img');
+    if (activo && !logo.getAttribute('src') && fuente) logo.src = fuente.src;
+    boton.classList.toggle('is-loading', activo);
+    boton.disabled = activo;
+    boton.setAttribute('aria-busy', String(activo));
+    document.getElementById('login-submit-text').textContent = activo ? 'Entrando\u2026' : 'Entrar';
+    // readOnly en lugar de disabled: el campo enfocado no pierde el foco ni cierra el teclado.
+    ['login-email', 'login-usuario', 'login-pin'].forEach(function(id) { document.getElementById(id).readOnly = activo; });
   },
 
   iniciarSesion() {
+    if (document.getElementById('login-submit').disabled) return;
     var reqSeq = ++App.state._authReqSeq;
     var tipo = App.state._loginTipo || 'entrenador';
-    var credencial = tipo === 'jugador'
-      ? document.getElementById('login-usuario').value.trim()
-      : document.getElementById('login-email').value.trim();
-    var pin = document.getElementById('login-pin').value.trim();
+    var campoCredencial = document.getElementById(tipo === 'jugador' ? 'login-usuario' : 'login-email');
+    var campoPin = document.getElementById('login-pin');
+    var credencial = campoCredencial.value.trim();
+    var pin = campoPin.value.trim();
     _clientLog('login_submit', { tipo: tipo, credencialLen: credencial ? credencial.length : 0, pinLen: pin ? String(pin).length : 0 });
 
+    App.limpiarErrorLogin();
     if (!credencial || !pin) {
-      showToast('Introduce ' + (tipo === 'jugador' ? 'tu usuario' : 'tu email') + ' y el PIN', 'error');
+      var vacios = [!credencial && campoCredencial, !pin && campoPin].filter(Boolean);
+      App._mostrarErrorLogin('Introduce ' + (tipo === 'jugador' ? 'tu usuario' : 'tu email') + ' y el PIN', '', vacios);
+      vacios[0].focus();
       return;
     }
 
-    showLoading('Iniciando sesión...');
+    App._loginCargando(true);
     server('iniciarSesion', tipo, credencial, pin)
       .then(function(res) {
         if (reqSeq !== App.state._authReqSeq) {
           _clientLog('login_response_stale_ignored', { reqSeq: reqSeq, currentReqSeq: App.state._authReqSeq });
+          App._loginCargando(false);
           return;
         }
-        hideLoading();
+        App._loginCargando(false);
         if (res && res.success) {
           _clientLog('login_success', { traceId: res.traceId || null });
           var auth = tipo === 'jugador'
@@ -936,23 +986,30 @@ const App = {
           App._applyBootstrapData(res);
           App.realtime.start();
           showToast('Sesión iniciada', 'success');
-          document.getElementById(tipo === 'jugador' ? 'login-usuario' : 'login-email').value = '';
-          document.getElementById('login-pin').value = '';
+          campoCredencial.value = '';
+          campoPin.value = '';
+          if (campoPin.type !== 'password') App.alternarPinLogin();
           _clientLog('login_navigate_home', { rol: App.state.rol });
           App.navigate(App.state.rol === 'jugador' ? 'perfil-jugador' : 'equipos');
         } else {
           _clientLog('login_fail', { stage: res && res.stage ? res.stage : null, traceId: res && res.traceId ? res.traceId : null, error: res && res.error ? res.error : null });
-          showToast(_formatDiagError((res && res.error) || 'Credenciales incorrectas', res, 'login_auth'), 'error');
+          // Credenciales rechazadas: mensaje limpio. Fallo técnico: se añade el diagnóstico para soporte.
+          var credenciales = res && res.stage === 'auth_context';
+          App._mostrarErrorLogin((res && res.error) || 'Credenciales incorrectas',
+            credenciales ? '' : _detalleDiag(res, 'login_auth'),
+            credenciales ? [campoCredencial, campoPin] : []);
+          if (credenciales) { campoPin.focus(); campoPin.select(); }
         }
       })
       .catch(function(err) {
         if (reqSeq !== App.state._authReqSeq) {
           _clientLog('login_network_stale_ignored', { reqSeq: reqSeq, currentReqSeq: App.state._authReqSeq });
+          App._loginCargando(false);
           return;
         }
-        hideLoading();
+        App._loginCargando(false);
         _clientLog('login_network_error', { error: (err && err.message) || null });
-        showToast(_formatDiagError((err && err.message) || 'Error al conectar', null, 'login_network'), 'error');
+        App._mostrarErrorLogin((err && err.message) || 'Error al conectar', _detalleDiag(null, 'login_network'), []);
       });
   },
 
@@ -5149,15 +5206,19 @@ function _clearStoredAuth() {
   } catch (e) {}
 }
 
-function _formatDiagError(baseMsg, res, fallbackStage) {
-  var msg = baseMsg || 'Error';
+// Sufijo de diagnóstico para soporte: [stage] [hoja] [trace].
+function _detalleDiag(res, fallbackStage) {
   var stage = (res && res.stage) || fallbackStage;
-  var trace = res && res.traceId;
-  var hoja = res && res.failedSheet;
-  if (stage) msg += ' [stage: ' + stage + ']';
-  if (hoja) msg += ' [hoja: ' + hoja + ']';
-  if (trace) msg += ' [trace: ' + trace + ']';
-  return msg;
+  var partes = [];
+  if (stage) partes.push('[stage: ' + stage + ']');
+  if (res && res.failedSheet) partes.push('[hoja: ' + res.failedSheet + ']');
+  if (res && res.traceId) partes.push('[trace: ' + res.traceId + ']');
+  return partes.join(' ');
+}
+
+function _formatDiagError(baseMsg, res, fallbackStage) {
+  var detalle = _detalleDiag(res, fallbackStage);
+  return (baseMsg || 'Error') + (detalle ? ' ' + detalle : '');
 }
 
 function _clientLog(evento, data) {
@@ -7375,6 +7436,11 @@ Object.assign(App.i18n.diccionario, {
   'Completar ficha':'Complete profile',
 });
 Object.assign(App.i18n.diccionario, {
+  'Tipo de acceso':'Sign-in type',
+  'Mostrar PIN':'Show PIN',
+  'Ocultar PIN':'Hide PIN',
+  'Entrando…':'Signing in…',
+  'Credenciales incorrectas':'Incorrect credentials',
   '¿Qué quieres avisar?':'What do you want to report?',
   'No podrá ir al entrenamiento':'Will miss training',
   'Llegará tarde':'Will arrive late',

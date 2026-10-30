@@ -41,6 +41,7 @@
   --on-accent-wash: rgba(255,255,255,.18);
   --on-accent-muted: rgba(255,255,255,.88);
   --on-accent-border: rgba(255,255,255,.3);
+  --on-accent-error: #FFCDD2; /* borde de campo con error sobre --brand-bg */
   --button-ink:   #FFFFFF;   /* tinta sobre verde, rojo y --stats-positive */
   --chart-ink:    #2E2108;   /* tinta sobre --stats-gold y --stats-coral */
   --avatar-ink:   #F7EDFF;
@@ -64,7 +65,7 @@ html[data-theme="oscuro"] {
   --naranja:#FFD08B; --naranja-s:#463321; --ambar:#FFD181; --ambar-s:#44351E;
   --stats-positive:#C49AF3; --stats-gold:#E3BF6C; --stats-coral:#E9A397; --programado:#BC93EE;
   --fuego-ext:#FF7043; --fuego-med:#FF9E40; --fuego-int:#FFD54F; --fuego-nucleo:#FFF8E1; --fuego-azul:#4FC3F7; --fuego-blanco:#FFFFFF;
-  --brand-bg:#4B2770; --brand-end:#643A8C;
+  --brand-bg:#4B2770; --brand-end:#643A8C; --on-accent-error:#FFACA9;
   --button-ink:#17101F; --avatar-accent:#E3BF6C; --toast-bg:#352640; --loading-scrim:rgba(6,2,12,.86);
   --shadow-color:rgba(0,0,0,.35); --sombra:0 2px 8px rgba(0,0,0,.3); --sombra-lg:0 6px 24px rgba(0,0,0,.45);
 }
@@ -74,7 +75,7 @@ html[data-theme="patrimonio"] {
   --blanco:#FFFFFF; --fondo:#F4F4F4; --texto:#211A1B; --texto-sec:#5C5455; --borde:#E0DCDC;
   --stats-positive:#8F2830; --stats-gold:#E0A93A; --stats-coral:#EC967A; --programado:#8C8586;
   --fuego-ext:#C4391D; --fuego-med:#EE7A1F; --fuego-int:#F6B530; --fuego-nucleo:#FFF1C9; --fuego-azul:#3FA9E0; --fuego-blanco:#FFFDF7;
-  --brand-bg:#7B1E24; --brand-end:#9A2A33;
+  --brand-bg:#7B1E24; --brand-end:#9A2A33; --on-accent-error:#FFCDD2;
   --avatar-ink:#FFFFFF; --avatar-accent:#E3B85C; --toast-bg:#2B2122; --loading-scrim:rgba(40,8,12,.84);
   --shadow-color:rgba(60,16,20,.12); --sombra:0 2px 8px rgba(123,30,36,.08); --sombra-lg:0 4px 20px rgba(123,30,36,.15);
 }
@@ -1445,34 +1446,99 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
   color: var(--morado) !important;
   font-weight: 800;
   width: 100%;
+  min-height: 48px;
   margin-top: 16px;
+  gap: 8px;
   box-shadow: 0 4px 15px rgba(0,0,0,0.2);
   border-radius: 24px;
+  touch-action: manipulation;
 }
 
 .btn-login:active {
   background: var(--morado-s);
   transform: scale(0.98);
 }
+.btn-login:focus-visible { outline: 2px solid var(--on-accent); outline-offset: 3px; }
+/* «Entrando…»: el mismo logo giratorio del indicador de guardado, dentro del botón. */
+.login-submit-logo { display: none; width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.btn-login.is-loading { cursor: progress; transform: none; }
+.btn-login.is-loading .login-submit-logo { display: block; animation: operation-logo-spin .9s linear infinite; }
 
 
 /* ══════════════════════════════════════════════
    NUEVOS ESTILOS — Sistema de 4 roles (v2)
    ══════════════════════════════════════════════ */
 
-/* ── 3c-1: Login toggle tabs ── */
+/* ── 3c-1: Login: tipo de acceso, campos, PIN visible y errores ── */
+.login-form { margin-top: 16px; text-align: left; }
 .login-tabs {
-  display: flex; gap: 4px; margin: 16px 0 4px;
-  background: rgba(255,255,255,.1); border-radius: 24px; padding: 4px;
+  position: relative; display: grid; grid-template-columns: 1fr 1fr;
+  margin-bottom: 20px; padding: 4px; border-radius: 16px;
+  background: var(--on-accent-wash); border: 1px solid var(--on-accent-wash);
 }
+/* Pastilla del rol activo: se desliza con transform, sin repintar los botones. */
+.login-tabs::before {
+  content: ''; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
+  border-radius: 12px; background: var(--blanco); box-shadow: 0 2px 8px var(--shadow-color);
+  transition: transform .24s cubic-bezier(.3,.7,.2,1);
+}
+.login-tabs[data-tipo="jugador"]::before { transform: translateX(100%); }
 .login-tab {
-  flex: 1; padding: 9px 6px; border-radius: 20px;
-  font-size: .78rem; font-weight: 700; color: var(--on-accent-muted);
-  transition: all .18s; white-space: nowrap;
+  position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-width: 0; min-height: 48px; padding: 8px 10px; border-radius: 12px;
+  font-size: .86rem; font-weight: 700; color: var(--on-accent-muted);
+  transition: color .2s, transform .12s; white-space: nowrap; touch-action: manipulation;
 }
-.login-tab.active {
-  background: var(--blanco); color: var(--morado);
-  box-shadow: 0 2px 8px rgba(0,0,0,.18);
+.login-tab-icon {
+  width: 22px; height: 22px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.login-tab:not(.active):hover { color: var(--on-accent); }
+.login-tab:active { transform: scale(.96); }
+.login-tab:focus-visible { outline: 2px solid var(--on-accent); outline-offset: 2px; }
+#view-login .login-tab.active { color: var(--morado); }
+#view-login .login-field label { color: var(--on-accent-muted); }
+#view-login .login-input {
+  min-height: 48px; font-size: 1rem; /* 16px: iOS no amplía al enfocar */
+  background: var(--on-accent-wash); border: 1.5px solid var(--on-accent-border); color: var(--on-accent);
+  caret-color: var(--on-accent); transition: border-color .18s, box-shadow .18s;
+}
+#view-login .login-input:focus { background: var(--on-accent-wash); border-color: var(--on-accent); box-shadow: 0 0 0 3px var(--on-accent-wash); }
+#view-login .login-input[aria-invalid="true"] { border-color: var(--on-accent-error); box-shadow: 0 0 0 3px var(--on-accent-wash); }
+#view-login .login-input:-webkit-autofill { -webkit-text-fill-color: var(--on-accent); -webkit-box-shadow: 0 0 0 40px var(--brand-bg) inset; }
+#view-login .login-input-usuario { text-transform: lowercase; }
+#view-login .login-input-pin { padding: 10px 48px; text-align: center; letter-spacing: 6px; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.login-pin-wrap { position: relative; }
+.login-pin-toggle {
+  position: absolute; top: 50%; right: 4px; display: grid; place-items: center; width: 40px; height: 40px;
+  border-radius: 10px; color: var(--on-accent-muted); transform: translateY(-50%);
+  transition: color .15s, background .15s; touch-action: manipulation;
+}
+.login-pin-toggle:hover, .login-pin-toggle:active { color: var(--on-accent); background: var(--on-accent-wash); }
+.login-pin-toggle:focus-visible { outline: 2px solid var(--on-accent); outline-offset: -2px; }
+.login-eye { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.login-pin-toggle[aria-pressed="true"] .login-eye-show,
+.login-pin-toggle[aria-pressed="false"] .login-eye-hide { display: none; }
+.login-error {
+  display: flex; align-items: flex-start; gap: 8px; margin: 2px 0 0; padding: 10px 12px;
+  border-radius: 10px; background: var(--rojo-s); color: var(--rojo);
+  font-size: .82rem; font-weight: 650; line-height: 1.35;
+  animation: login-error-in .2s ease-out both;
+}
+.login-error[hidden] { display: none; }
+.login-error svg { width: 18px; height: 18px; flex: none; margin-top: 1px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.login-error small { display: block; margin-top: 3px; font-size: .68rem; font-weight: 500; overflow-wrap: anywhere; }
+.login-error small:empty { display: none; }
+@keyframes login-error-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (max-width: 359px) {
+  .login-container { padding: 28px 16px; }
+  .login-tab { gap: 6px; padding: 8px 6px; font-size: .8rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-logo { animation: none; }
+  .login-tabs::before, .login-tab { transition: none; }
+  .login-error { animation: none; }
+  .btn-login.is-loading .login-submit-logo { animation-duration: 3s; }
 }
 
 /* ── 3c-2: Badge admin en lista de entrenadores ── */
