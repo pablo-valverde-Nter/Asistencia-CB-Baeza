@@ -600,7 +600,7 @@
         <div class="justif-progress-track" aria-hidden="true"><span id="alta-progress-fill" class="justif-progress-fill"></span></div>
         <span id="alta-progress-text" class="justif-progress-text" aria-live="polite">Paso 1 de 5</span>
       </div>
-      <div id="alta-steps" class="modal-body justif-steps">
+      <div id="alta-steps" class="modal-body justif-steps" oninput="App.views.altaJugador._actualizarBotones()" onchange="App.views.altaJugador._actualizarBotones()">
 
         <section class="justif-step" data-step="nombre">
           <h4 class="justif-question" tabindex="-1">&iquest;C&oacute;mo se llama el jugador?</h4>
@@ -612,7 +612,7 @@
           <div class="form-group"><label for="alta-nombre">Nombre</label><input type="text" id="alta-nombre" placeholder="Nombre" autocomplete="off" aria-describedby="alta-nombre-error" oninput="App.views.altaJugador._limpiarError(this)"><p class="alta-field-error" id="alta-nombre-error" role="alert" hidden>Escribe el nombre del jugador</p></div>
           <div class="form-group"><label for="alta-apellidos">Apellidos</label><input type="text" id="alta-apellidos" placeholder="Apellidos" autocomplete="off" aria-describedby="alta-apellidos-error" oninput="App.views.altaJugador._limpiarError(this)"><p class="alta-field-error" id="alta-apellidos-error" role="alert" hidden>Escribe los apellidos del jugador</p></div>
           <div class="justif-actions">
-            <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
+            <button type="button" id="alta-continuar-nombre" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
           </div>
         </section>
 
@@ -621,7 +621,7 @@
           <p class="justif-hint">Opcional. No puede repetirse en el mismo equipo.</p>
           <div class="form-group"><label for="alta-dorsal">Dorsal</label><input type="number" id="alta-dorsal" placeholder="0" min="0" max="99" inputmode="numeric"></div>
           <div class="justif-actions">
-            <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
+            <button type="button" id="alta-continuar-dorsal" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
             <button type="button" class="btn btn-secondary btn-full" onclick="App.views.altaJugador.omitir()">Omitir</button>
           </div>
         </section>
@@ -633,7 +633,7 @@
           <div class="form-group"><label for="alta-tel">Tel&eacute;fono</label><input type="tel" id="alta-tel" placeholder="+34 600 000 000"></div>
           <div class="form-group"><label for="alta-email">Email</label><input type="email" id="alta-email" placeholder="email@ejemplo.com"></div>
           <div class="justif-actions">
-            <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
+            <button type="button" id="alta-continuar-datos" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
             <button type="button" class="btn btn-secondary btn-full" onclick="App.views.altaJugador.omitir()">Omitir</button>
           </div>
         </section>
@@ -664,7 +664,7 @@
             </div>
           </fieldset>
           <div class="justif-actions">
-            <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
+            <button type="button" id="alta-continuar-familia" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
             <button type="button" class="btn btn-secondary btn-full" onclick="App.views.altaJugador.omitir()">Omitir</button>
           </div>
         </section>
@@ -681,10 +681,7 @@
           <h4 class="justif-question" tabindex="-1">Jugador creado</h4>
           <div id="alta-credenciales"></div>
           <div class="justif-actions">
-            <div class="alta-compartir">
-              <button type="button" class="btn btn-secondary" onclick="App.views.altaJugador.copiar()">Copiar</button>
-              <button type="button" class="btn btn-whatsapp" onclick="App.views.altaJugador.whatsapp()">WhatsApp</button>
-            </div>
+            <div id="alta-compartir" class="alta-compartir"></div>
             <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.cerrar()">Entendido</button>
           </div>
         </section>
@@ -707,7 +704,7 @@
         <div class="justif-progress-track" aria-hidden="true"><span id="bienvenida-progress-fill" class="justif-progress-fill"></span></div>
         <span id="bienvenida-progress-text" class="justif-progress-text" aria-live="polite">Paso 1 de 4</span>
       </div>
-      <div id="bienvenida-steps" class="modal-body justif-steps">
+      <div id="bienvenida-steps" class="modal-body justif-steps" oninput="App.views.bienvenida._actualizarBotones()" onchange="App.views.bienvenida._actualizarBotones()">
 
         <section class="justif-step bienvenida-inicio" data-step="inicio">
           <div class="bienvenida-hero">
@@ -731,7 +728,7 @@
           <p class="justif-hint">Ayuda al club a organizar las categor&iacute;as.</p>
           <div class="form-group"><label for="bienvenida-FechaNac">Fecha de nacimiento</label><input type="date" id="bienvenida-FechaNac"></div>
           <div class="justif-actions">
-            <button type="button" class="btn btn-primary btn-full" onclick="App.views.bienvenida.continuar()">Continuar</button>
+            <button type="button" id="bienvenida-continuar-fecha" class="btn btn-primary btn-full" onclick="App.views.bienvenida.continuar()">Continuar</button>
             <button type="button" class="btn btn-secondary btn-full" onclick="App.views.bienvenida.omitir()">Omitir</button>
           </div>
         </section>
@@ -745,7 +742,7 @@
           <div class="form-group"><label for="bienvenida-EmailPadre1">Email</label><input type="email" id="bienvenida-EmailPadre1" placeholder="familia@ejemplo.com" autocomplete="email"></div>
           <p id="bienvenida-avisos-1" class="account-hint account-avisos"></p>
           <div class="justif-actions">
-            <button type="button" class="btn btn-primary btn-full" onclick="App.views.bienvenida.continuar()">Continuar</button>
+            <button type="button" id="bienvenida-continuar-tutor1" class="btn btn-primary btn-full" onclick="App.views.bienvenida.continuar()">Continuar</button>
             <button type="button" class="btn btn-secondary btn-full" onclick="App.views.bienvenida.omitir()">Omitir</button>
           </div>
         </section>
@@ -759,7 +756,7 @@
           <div class="form-group"><label for="bienvenida-EmailPadre2">Email</label><input type="email" id="bienvenida-EmailPadre2" placeholder="familia@ejemplo.com" autocomplete="off"></div>
           <p id="bienvenida-avisos-2" class="account-hint account-avisos"></p>
           <div class="justif-actions">
-            <button type="button" class="btn btn-primary btn-full" onclick="App.views.bienvenida.continuar()">Continuar</button>
+            <button type="button" id="bienvenida-continuar-tutor2" class="btn btn-primary btn-full" onclick="App.views.bienvenida.continuar()">Continuar</button>
             <button type="button" class="btn btn-secondary btn-full" onclick="App.views.bienvenida.omitir()">Omitir</button>
           </div>
         </section>

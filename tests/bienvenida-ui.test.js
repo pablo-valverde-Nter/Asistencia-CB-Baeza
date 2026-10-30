@@ -138,3 +138,23 @@ test('reabierto desde Perfil empieza en la fecha y no vuelve a marcar', () => {
   wizard.cerrar();
   assert.deepEqual(servidor, []);
 });
+
+test('Continuar solo aparece con datos (también los ya guardados); vacío queda solo Omitir', () => {
+  const { wizard, set, els } = client({ jugador: { NombrePadre1: 'Eva' } });
+  wizard.comprobar();
+  wizard.continuar();
+  const fecha = els['bienvenida-continuar-fecha'];
+  assert.equal(fecha.hidden, true, 'vacío: solo Omitir');
+  set('FechaNac', '2014-05-02'); wizard._actualizarBotones();
+  assert.equal(fecha.hidden, false, 'al escribir aparece');
+  set('FechaNac', ''); wizard._actualizarBotones();
+  assert.equal(fecha.hidden, true, 'al vaciar desaparece');
+  wizard.omitir();
+  const tutor1 = els['bienvenida-continuar-tutor1'];
+  assert.equal(tutor1.hidden, false, 'prerrellenado con el dato guardado');
+  set('NombrePadre1', ''); wizard._actualizarBotones();
+  assert.equal(tutor1.hidden, true);
+  set('TelefonoPadre1', '600000000'); wizard.continuar();
+  wizard.atras();
+  assert.equal(tutor1.hidden, false, 'al volver a un paso con datos sigue visible');
+});

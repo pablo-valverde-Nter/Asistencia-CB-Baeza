@@ -3209,6 +3209,14 @@ const App = {
         this._mover(1);
       },
 
+      // «Continuar» de los pasos omitibles solo aparece con algún dato; en el de familiares, con alguno elegido.
+      _actualizarBotones: function() {
+        var paso = this._paso, campos = this.CAMPOS_PASO[paso], self = this;
+        var conDatos = paso === 'familia' ? !!(this._familiares[1] || this._familiares[2])
+          : !!campos && campos.some(function(id) { return !!self._valor(id); });
+        App.wizardCards.actualizarBotones('alta', paso, !!campos, conDatos);
+      },
+
       atras: function() {
         if (this._paso !== 'credenciales') this._mover(-1);
       },
@@ -3221,6 +3229,7 @@ const App = {
       alternarFamiliar: function(n) {
         this._familiares[n] = !this._familiares[n];
         this._pintarFamiliares();
+        this._actualizarBotones();
         var campo = this._familiares[n] && document.getElementById('alta-p' + n + '-nombre');
         if (campo && campo.focus) campo.focus();
       },
@@ -3253,6 +3262,7 @@ const App = {
           }
         });
         this._pintarFamiliares();
+        this._actualizarBotones();
         document.getElementById('alta-progress').classList.toggle('hidden', final);
         document.getElementById('alta-progress-text').textContent = 'Paso ' + (indice + 1) + ' de ' + this.PASOS.length;
         document.getElementById('alta-progress-fill').style.width = Math.round((indice + 1) * 100 / this.PASOS.length) + '%';
@@ -3333,6 +3343,11 @@ const App = {
           campo('alta-cred-codigo', 'C\u00f3digo familias', j.CodigoPadres, 'alta-credencial') +
           campo('alta-cred-pin', 'PIN inicial', j.PIN, 'alta-credencial') +
           '<p class="form-hint">Comparte tambi\u00e9n el C\u00f3digo familias con los padres. El jugador puede cambiar su PIN desde la app.</p>';
+        // WhatsApp es un enlace real que pulsa el usuario (como en Contacto): window.open queda bloqueado en el iframe
+        // de Apps Script. Sin número, WhatsApp deja elegir el chat con el mensaje ya escrito.
+        document.getElementById('alta-compartir').innerHTML =
+          '<button type="button" class="btn btn-secondary" onclick="App.views.altaJugador.copiar()">Copiar</button>' +
+          '<a id="alta-whatsapp" class="btn btn-whatsapp" href="' + _esc('https://wa.me/?text=' + encodeURIComponent(this.textoCredenciales(j))) + '" target="_blank" rel="noopener noreferrer" onclick="App.views.altaJugador.whatsapp()">WhatsApp</a>';
       },
 
       textoCredenciales: function(j) {
@@ -3347,14 +3362,10 @@ const App = {
         });
       },
 
-      // Copia el texto y abre WhatsApp sin chat concreto (la app en móvil; wa.me si no se abre o en escritorio).
+      // Click del enlace de WhatsApp: no cancela la navegación; solo copia el texto por si el chat no lo recoge.
       whatsapp: function() {
-        var copia = _copiarTexto(this.textoCredenciales(this._jugador));
-        var agente = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
-        var ventana = /Android|iPhone|iPad|iPod/i.test(agente) ? window.open('whatsapp://', '_blank') : null;
-        if (!ventana) window.open('https://wa.me/', '_blank');
-        return copia.then(function(ok) {
-          showToast(ok ? 'Mensaje copiado, p\u00e9galo en el chat' : 'No se pudo copiar el mensaje', ok ? 'success' : 'error');
+        return _copiarTexto(this.textoCredenciales(this._jugador)).then(function(ok) {
+          if (ok) showToast('Mensaje copiado, p\u00e9galo en el chat', 'success');
           return ok;
         });
       },
@@ -3483,6 +3494,12 @@ const App = {
         this._mover(1);
       },
 
+      // «Continuar» de los pasos omitibles solo aparece con algún dato (también el ya guardado que se prerrellena).
+      _actualizarBotones: function() {
+        var campos = this.CAMPOS_PASO[this._paso], self = this;
+        App.wizardCards.actualizarBotones('bienvenida', this._paso, !!campos, !!campos && campos.some(function(c) { return !!self._valor(c); }));
+      },
+
       atras: function() {
         this._mover(-1);
       },
@@ -3508,6 +3525,7 @@ const App = {
             step.classList.add(direccion > 0 ? 'enter-forward' : 'enter-back');
           }
         });
+        this._actualizarBotones();
         document.getElementById('bienvenida-progress').classList.toggle('hidden', indice === 0);
         document.getElementById('bienvenida-progress-text').textContent = 'Paso ' + indice + ' de ' + total;
         document.getElementById('bienvenida-progress-fill').style.width = Math.round(indice * 100 / total) + '%';
@@ -5157,6 +5175,13 @@ document.addEventListener('focusout', function() { setTimeout(function() { App.e
 // cada asistente. Al cambiar de paso, una copia inerte de la tarjeta sale (avanzar: vuela de lado; retroceder: vuelve
 // a la pila) y la tarjeta real entra desde la pila o desde el lado. El overlay sigue al viewport visible (teclado).
 App.wizardCards = {
+  // Pie de cada paso (#<prefijo>-continuar-<paso>): en un paso omitible, «Continuar» solo aparece con algún dato y sin
+  // datos queda solo «Omitir»; en un paso obligatorio se ve siempre. La portada y los pasos finales tienen sus botones.
+  actualizarBotones: function(prefijo, paso, omitible, conDatos) {
+    var boton = document.getElementById(prefijo + '-continuar-' + paso);
+    if (boton) boton.hidden = omitible && !conDatos;
+  },
+
   _tarjeta: function(modalId) {
     var modal = document.getElementById(modalId);
     var tarjeta = modal && modal.querySelector ? modal.querySelector('.alta-wizard') : null;

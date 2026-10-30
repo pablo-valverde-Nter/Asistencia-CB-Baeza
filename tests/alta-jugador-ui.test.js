@@ -61,6 +61,31 @@ test('el nombre y los apellidos son obligatorios: error en línea bajo el campo 
   assert.equal(wizard._paso, 'dorsal');
 });
 
+test('Continuar solo aparece con datos en los pasos omitibles; en el paso obligatorio se ve siempre', () => {
+  const { wizard, set, els } = client();
+  wizard.abrir(false);
+  assert.equal(els['alta-continuar-nombre'].hidden, false, 'nombre vacío: Continuar visible (validación en línea)');
+  set('alta-nombre', 'Luis'); set('alta-apellidos', 'Pérez');
+  wizard.continuar();
+  const dorsal = els['alta-continuar-dorsal'];
+  assert.equal(dorsal.hidden, true, 'vacío: solo Omitir');
+  set('alta-dorsal', '7'); wizard._actualizarBotones();
+  assert.equal(dorsal.hidden, false, 'al escribir aparece');
+  set('alta-dorsal', ''); wizard._actualizarBotones();
+  assert.equal(dorsal.hidden, true, 'al vaciar desaparece');
+  set('alta-dorsal', '7'); wizard.continuar();
+  assert.equal(els['alta-continuar-datos'].hidden, true);
+  wizard.atras();
+  assert.equal(dorsal.hidden, false, 'al volver a un paso con datos sigue visible');
+  wizard.continuar(); wizard.omitir();
+  const familia = els['alta-continuar-familia'];
+  assert.equal(familia.hidden, true, 'sin familiar elegido: solo Omitir');
+  wizard.alternarFamiliar(2);
+  assert.equal(familia.hidden, false);
+  wizard.alternarFamiliar(2);
+  assert.equal(familia.hidden, true);
+});
+
 test('dorsal, datos y familiares se omiten: los campos omitidos no se guardan', async () => {
   const { wizard, set, calls, els } = client();
   wizard.abrir(false);
@@ -116,18 +141,37 @@ test('el texto copiado tiene exactamente usuario, PIN y código de padres', asyn
   assert.equal(escritos[0], esperado);
   assert.equal(await wizard.whatsapp(), true);
   assert.equal(escritos[1], esperado);
-  assert.deepEqual(opened, ['https://wa.me/'], 'escritorio abre wa.me sin número');
+  assert.deepEqual(opened, [], 'navega el propio enlace, sin window.open');
   assert.deepEqual(notices.pop(), { message: 'Mensaje copiado, pégalo en el chat', type: 'success' });
 });
 
-test('si la Clipboard API falla se copia con el respaldo; en móvil se intenta whatsapp://', async () => {
-  const { wizard, set, document, opened } = client({ clipboard: { writeText: () => Promise.reject(new Error('denegado')) }, userAgent: 'Mozilla/5.0 (Linux; Android 14)' });
+test('WhatsApp es un enlace real a wa.me sin número con el texto de las credenciales', async () => {
+  const { wizard, set, els } = client();
   wizard.abrir(false);
   set('alta-nombre', 'Luis'); set('alta-apellidos', 'Pérez');
   await wizard.guardar();
-  assert.equal(await wizard.whatsapp(), true);
-  assert.equal(document.copiado, 'Usuario: lperez\nPIN: 4821\nCódigo de padres: XK29PQ');
-  assert.deepEqual(opened, ['whatsapp://', 'https://wa.me/'], 'si la app no se abre, usa wa.me');
+  const enlace = /<a\b[^>]*\bid="alta-whatsapp"[^>]*>/.exec(els['alta-compartir'].innerHTML);
+  assert.ok(enlace, 'es un <a>');
+  const atributo = nombre => (new RegExp('\\s' + nombre + '="([^"]*)"').exec(enlace[0]) || [])[1];
+  assert.equal(atributo('href'), 'https://wa.me/?text=Usuario%3A%20lperez%0APIN%3A%204821%0AC%C3%B3digo%20de%20padres%3A%20XK29PQ');
+  assert.equal(atributo('target'), '_blank');
+  assert.equal(atributo('rel'), 'noopener noreferrer');
+});
+
+test('si la Clipboard API falla se copia con el respaldo; si tampoco se puede, no avisa de copiado', async () => {
+  const fallo = client({ clipboard: { writeText: () => Promise.reject(new Error('denegado')) } });
+  fallo.wizard.abrir(false);
+  fallo.set('alta-nombre', 'Luis'); fallo.set('alta-apellidos', 'Pérez');
+  await fallo.wizard.guardar();
+  assert.equal(await fallo.wizard.whatsapp(), true);
+  assert.equal(fallo.document.copiado, 'Usuario: lperez\nPIN: 4821\nCódigo de padres: XK29PQ');
+
+  const sinCopia = client({ execCommand: false });
+  sinCopia.wizard.abrir(false);
+  sinCopia.set('alta-nombre', 'Luis'); sinCopia.set('alta-apellidos', 'Pérez');
+  await sinCopia.wizard.guardar();
+  assert.equal(await sinCopia.wizard.whatsapp(), false);
+  assert.deepEqual(sinCopia.notices, []);
 });
 
 test('los datos mostrados se escapan', async () => {

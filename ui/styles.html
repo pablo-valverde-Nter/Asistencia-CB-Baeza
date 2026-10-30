@@ -1725,7 +1725,7 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
   padding: max(env(safe-area-inset-top, 0px) + 16px, min(76px, calc(var(--wizard-vh, 100dvh) * .11))) 20px
            max(env(safe-area-inset-bottom, 0px) + 28px, min(84px, calc(var(--wizard-vh, 100dvh) * .125)));
   background: linear-gradient(165deg, var(--wizard-bg) 0%, var(--wizard-bg-mid) 55%, var(--wizard-bg-end) 100%);
-  transition: opacity .28s ease, visibility 0s;
+  transition: opacity .28s ease, visibility 0s, padding-bottom .3s ease;
 }
 .modal-justif-overlay.wizard-cards.hidden { visibility: hidden; transition: opacity .2s ease, visibility 0s .2s; }
 .wizard-fondo { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
@@ -1761,16 +1761,22 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 .wizard-cards .justif-progress { padding: 4px 22px 0; }
 .wizard-cards .justif-progress-track { height: 8px; border-radius: 4px; background: var(--morado-s); }
 .wizard-cards .justif-progress-fill { background: linear-gradient(90deg, var(--morado-m), var(--morado)); transition: width .6s var(--wizard-spring); }
-.alta-wizard .justif-steps { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.alta-wizard .justif-steps { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scroll-padding-bottom: 120px; }
 .wizard-cards .justif-wizard .justif-steps { padding: 16px 20px 0; scrollbar-width: thin; scrollbar-color: var(--borde) transparent; }
 .wizard-cards .form-group { margin-bottom: 12px; }
 .wizard-cards .alta-wizard .form-group > label:not(.parent-email-notify) { margin-bottom: 4px; }
 /* El paso no se anima por dentro: es la tarjeta entera la que entra y sale. */
 .wizard-cards .justif-step.enter-forward, .wizard-cards .justif-step.enter-back { animation: none; }
-/* Pie fijo de la tarjeta: los botones del paso siempre visibles; el contenido se desvanece al pasar por debajo. */
-.wizard-cards .justif-actions { position: sticky; bottom: 0; z-index: 1; margin: auto -20px 0; padding: 14px 20px 18px; background: var(--blanco); }
-.wizard-cards .justif-actions::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 18px; background: linear-gradient(to top, var(--blanco), transparent); pointer-events: none; }
+/* Pie fijo de la tarjeta: los botones del paso siempre visibles; el contenido se desvanece al pasar por debajo. El
+   difuminado es la parte superior del propio pie (padding-top): al final del scroll el último campo queda entero encima. */
+.wizard-cards .justif-actions {
+  position: sticky; bottom: 0; z-index: 1; margin: auto -20px 0; padding: 34px 20px 18px;
+  background: linear-gradient(to bottom, transparent, var(--blanco) 22px); pointer-events: none;
+}
+.wizard-cards .justif-actions > * { pointer-events: auto; }
 .wizard-cards .justif-actions .btn { min-height: 48px; border-radius: 999px; }
+.wizard-cards .justif-actions > .btn[hidden] { display: none; }
+/* Continuar + Omitir en fila; si solo queda uno (paso omitible sin datos), ocupa todo el ancho. */
 .wizard-cards .justif-actions:has(> .btn-secondary) { flex-direction: row-reverse; }
 .wizard-cards .justif-actions:has(> .btn-secondary) > .btn { flex: 1 1 0; min-width: 0; }
 .wizard-cards .bienvenida-hero { margin: -16px -20px 16px; padding: 20px 18px 18px; border-radius: 0 0 24px 24px; }
@@ -1790,10 +1796,10 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 @keyframes wizard-sale-retrocede { from { opacity: 1; transform: none; } to { opacity: 0; transform: translate3d(0, 16px, 0) scale(.92); } }
 @keyframes wizard-entra-pila { from { opacity: .4; transform: translate3d(0, 16px, 0) scale(.92); } to { opacity: 1; transform: none; } }
 @keyframes wizard-entra-lado { from { opacity: 0; transform: translate3d(-64%, 10px, 0) rotate(-7deg) scale(.92); } to { opacity: 1; transform: none; } }
-/* Con un asistente abierto, «Guardando…» y los avisos van arriba, sobre el fondo: nunca tapan la tarjeta ni sus botones. */
-body:has(.wizard-cards:not(.hidden)) .operation-status { top: calc(env(safe-area-inset-top, 0px) + 8px); bottom: auto; }
-body:has(.wizard-cards:not(.hidden)) #toast-container { top: calc(env(safe-area-inset-top, 0px) + 8px); bottom: auto; }
-body:has(.wizard-cards:not(.hidden)):has(.operation-status.pending:not(.hidden)) #toast-container { top: calc(env(safe-area-inset-top, 0px) + 54px); }
+/* «Guardando…» y los avisos salen abajo, como en el resto de la app, y por encima del asistente (z-index 350/400 > 210).
+   Mientras se ven, la tarjeta sube y deja libre esa franja para que no tapen sus botones. */
+body:has(.operation-status:not(.hidden), #toast-container > .toast) .modal-justif-overlay.wizard-cards { padding-bottom: calc(var(--nav-h) + 64px + env(safe-area-inset-bottom, 0px)); }
+body:has(.operation-status.pending:not(.hidden)):has(#toast-container > .toast) .modal-justif-overlay.wizard-cards { padding-bottom: calc(var(--nav-h) + 108px + env(safe-area-inset-bottom, 0px)); }
 @media (prefers-reduced-motion: reduce) {
   .wizard-fondo span { animation: none; }
   .wizard-cards .alta-wizard { transform: none; transition: opacity .16s linear; }
@@ -1822,7 +1828,7 @@ body:has(.wizard-cards:not(.hidden)):has(.operation-status.pending:not(.hidden))
 .alta-aviso { margin: 0; padding: 10px 12px; border-left: 3px solid var(--naranja); border-radius: 8px; background: var(--naranja-s); color: var(--texto); font-size: .8rem; line-height: 1.45; }
 .alta-credencial { font-family: inherit; letter-spacing: 3px; font-weight: 700; }
 .alta-compartir { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.alta-compartir .btn { min-height: 44px; padding: 10px 12px; }
+.alta-compartir .btn { min-height: 44px; padding: 10px 12px; text-decoration: none; }
 .btn-whatsapp { background: var(--verde); color: var(--button-ink); }
 .alta-wizard .btn:focus-visible { outline: 2px solid var(--morado); outline-offset: 2px; }
 /* ── Asistente de bienvenida (jugador/familia): portada con los colores de marca del tema; el resto, como el alta. ── */
