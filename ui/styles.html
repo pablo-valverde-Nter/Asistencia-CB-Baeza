@@ -2267,6 +2267,22 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 .account-card .form-group { margin-bottom:16px; }
 .account-family,.account-staff-family { min-width:0; margin:0 0 16px; padding:14px 14px 2px; border:1px solid var(--borde); border-radius:14px; background:var(--morado-xs); }
 .account-family legend,.account-staff-family legend { padding:0 6px; font-size:.74rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--morado); }
+/* Avisos por correo de la familia: chip de estado y (i) con popover que sale hacia arriba; JS fija --avisos-shift para no salirse de pantalla. */
+.account-avisos { margin:10px 0 0; }
+.account-family .account-avisos { margin:0 0 14px; }
+.avisos-estado { display:inline-flex; align-items:center; gap:4px; max-width:100%; vertical-align:middle; }
+.avisos-chip { display:inline-flex; align-items:center; gap:6px; min-height:26px; padding:3px 11px 3px 9px; border-radius:999px; font-size:.72rem; font-weight:700; line-height:1.2; }
+.avisos-chip::before { content:''; flex:none; width:7px; height:7px; border-radius:50%; background:currentColor; }
+.avisos-chip.is-on { background:var(--verde-s); color:var(--verde); }
+.avisos-chip.is-off { background:var(--rojo-s); color:var(--rojo); }
+.avisos-info { position:relative; display:inline-flex; }
+.avisos-info-btn { display:inline-grid; place-items:center; width:32px; height:32px; padding:6px; border-radius:50%; color:var(--texto-sec); }
+.avisos-info-btn svg { width:18px; height:18px; }
+.avisos-info-btn:hover,.avisos-info-btn[aria-expanded="true"] { background:var(--fondo); color:var(--morado); }
+.avisos-info-btn:focus-visible { outline:2px solid var(--morado); outline-offset:1px; }
+.avisos-popover { position:absolute; z-index:60; bottom:calc(100% + 8px); left:50%; width:max-content; max-width:min(240px,calc(100vw - 16px)); padding:9px 12px; border-radius:10px; background:var(--toast-bg); color:var(--on-accent); box-shadow:var(--sombra-lg); font-size:.76rem; font-weight:500; line-height:1.45; text-align:left; transform:translateX(calc(-50% + var(--avisos-shift,0px))); }
+.avisos-popover[hidden] { display:none; }
+.avisos-popover::after { content:''; position:absolute; top:100%; left:calc(50% - var(--avisos-shift,0px)); margin-left:-6px; border:6px solid transparent; border-top-color:var(--toast-bg); }
 .account-check { display:flex; gap:10px; align-items:center; min-height:32px; margin:0 0 14px; font-size:.78rem; line-height:1.45; color:var(--texto); cursor:pointer; }
 .account-check input { width:18px; height:18px; flex-shrink:0; accent-color:var(--morado); }
 .account-intro { padding:4px 4px 20px; }

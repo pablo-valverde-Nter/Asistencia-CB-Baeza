@@ -3756,7 +3756,7 @@ const App = {
         if (!persona || !persona.ID) { host.innerHTML = '<div class="account-card"><h2>Tu perfil</h2><p>Tu cuenta de administración no tiene ficha de entrenador.</p></div>'; return; }
         var row = function(label,value) { return '<div class="account-summary-row"><dt>' + _statsTexto(label) + '</dt><dd translate="no">' + _statsTexto(value || '—') + '</dd></div>'; };
         var html = '<div class="account-profile-hero"><div id="perfil-avatar">' + App.avatarHtml(persona.FotoURL,persona.Nombre+' '+persona.Apellidos,88) + '</div><h2 translate="no">' + _statsTexto(persona.Nombre+' '+persona.Apellidos) + '</h2><div class="account-hero-actions"><button class="btn btn-primary" onclick="App.navigate(\'perfil-editar\')">Editar perfil</button>' + (!App.account.isStaff() ? '<button class="btn btn-secondary" onclick="App.views[\'perfil-usuario\'].elegirFoto()">Cambiar foto</button>' : '') + '</div></div><div class="account-card"><h2>Datos personales</h2><dl class="account-summary">' + row('Nombre',persona.Nombre) + row('Apellidos',persona.Apellidos) + (jugador ? row('Fecha de nacimiento',persona.FechaNac) + row('Dorsal',persona.Dorsal) : '') + '</dl></div><div class="account-card"><h2>Contacto</h2><dl class="account-summary">' + row('Teléfono',persona.Telefono) + row('Email',persona.Email) + '</dl></div>';
-        if (jugador) [1,2].forEach(function(n) { html += '<div class="account-card"><h2>' + (n === 1 ? 'Familiar 1' : 'Familiar 2') + '</h2><dl class="account-summary">' + row('Nombre',[persona['NombrePadre'+n],persona['ApellidosPadre'+n]].filter(Boolean).join(' ')) + row('Teléfono',persona['TelefonoPadre'+n]) + row('Email',persona['EmailPadre'+n]) + '</dl><p>' + App.account.textoAvisos(persona, n) + '</p></div>'; });
+        if (jugador) [1,2].forEach(function(n) { html += '<div class="account-card"><h2>' + (n === 1 ? 'Familiar 1' : 'Familiar 2') + '</h2><dl class="account-summary">' + row('Nombre',[persona['NombrePadre'+n],persona['ApellidosPadre'+n]].filter(Boolean).join(' ')) + row('Teléfono',persona['TelefonoPadre'+n]) + row('Email',persona['EmailPadre'+n]) + '</dl><p class="account-avisos">' + App.account.avisosHtml(persona, n, 'perfil') + '</p></div>'; });
         host.innerHTML = html;
         App.state._formIsDirty = false;
       },
@@ -3788,7 +3788,7 @@ const App = {
           [1,2].forEach(function(n) {
             html += '<fieldset class="account-family"><legend>Familiar ' + n + '</legend>';
             [['NombrePadre','Nombre','text'],['ApellidosPadre','Apellidos','text'],['TelefonoPadre','Teléfono','tel'],['EmailPadre','Email','email']].forEach(function(c) { var spec = [c[0]+n,c[1],c[2]]; App.views['perfil-usuario']._campos.push(spec); html += campo(spec); });
-            html += '<p class="account-hint">' + App.account.textoAvisos(persona, n) + '</p></fieldset>';
+            html += '<p class="account-hint account-avisos">' + App.account.avisosHtml(persona, n, 'editar') + '</p></fieldset>';
           });
           html += '<div class="form-group"><label for="perfil-codigo">Código de seguridad</label><input id="perfil-codigo" type="password" maxlength="6" autocomplete="off" placeholder="6 caracteres"><small>El mismo código que utilizas para justificar ausencias. Es necesario para guardar.</small></div>';
         }
@@ -5403,10 +5403,41 @@ App.account = {
   isStaff: function() { return !!this.target; },
   allowed: function() { return !this.target || (App.state.rol !== 'jugador' && (this.target.tipo === 'jugador' || App.state.esAdmin)); },
   // Avisos de ausencia por email del familiar n: solo entrenadores y admin los cambian (perfil del jugador en vista staff).
-  textoAvisos: function(persona, n) {
+  // La familia ve un chip de estado y un botón (i) cuyo popover explica a quién pedir el cambio; `ambito` hace únicos los id.
+  avisosHtml: function(persona, n, ambito) {
     var activo = persona['NotificarAusenciasPadre'+n] !== false && persona['NotificarAusenciasPadre'+n] !== 'FALSE';
     if (this.isStaff()) return activo ? 'Avisos por email activados' : 'Avisos por email desactivados';
-    return activo ? 'Avisos de ausencia por email activados. Solo el entrenador puede cambiarlo.' : 'Avisos de ausencia por email desactivados. Solo el entrenador puede cambiarlo.';
+    var id = 'avisos-info-' + _statsTexto(ambito) + '-' + n;
+    return '<span class="avisos-estado"><span class="avisos-chip ' + (activo ? 'is-on' : 'is-off') + '">' + (activo ? 'Avisos por correo activados' : 'Avisos por correo desactivados') + '</span>' +
+      '<span class="avisos-info"><button type="button" class="avisos-info-btn" aria-label="Información sobre los avisos por correo" aria-expanded="false" aria-controls="' + id + '" onclick="App.account.toggleAvisosInfo(this)"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5m0-8v1"/></svg></button>' +
+      '<span class="avisos-popover" id="' + id + '" role="note" hidden>Si quieres cambiarlo, avisa a tu entrenador para que lo modifique.</span></span></span>';
+  },
+  // Abre o cierra el popover del (i); uno abierto a la vez, se cierra al tocar fuera o con Escape.
+  toggleAvisosInfo: function(boton) {
+    var pop = document.getElementById(boton.getAttribute('aria-controls'));
+    var abrir = boton.getAttribute('aria-expanded') !== 'true';
+    this.cerrarAvisosInfo();
+    if (!abrir || !pop) return;
+    boton.setAttribute('aria-expanded', 'true');
+    pop.hidden = false;
+    // Sale hacia arriba centrado en el (i); se desplaza en horizontal para no cortarse en los bordes.
+    pop.style.setProperty('--avisos-shift', '0px');
+    var r = pop.getBoundingClientRect(), margen = 8, ancho = document.documentElement.clientWidth || window.innerWidth;
+    var shift = r.left < margen ? margen - r.left : r.right > ancho - margen ? ancho - margen - r.right : 0;
+    pop.style.setProperty('--avisos-shift', shift + 'px');
+    if (!this._avisosListeners) {
+      this._avisosListeners = true;
+      var self = this;
+      document.addEventListener('click', function(e) { if (!(e.target && e.target.closest && e.target.closest('.avisos-info'))) self.cerrarAvisosInfo(); });
+      document.addEventListener('keydown', function(e) { if (e.key === 'Escape') self.cerrarAvisosInfo(); });
+    }
+  },
+  cerrarAvisosInfo: function() {
+    Array.prototype.forEach.call(document.querySelectorAll('.avisos-info-btn[aria-expanded="true"]'), function(b) {
+      b.setAttribute('aria-expanded', 'false');
+      var pop = document.getElementById(b.getAttribute('aria-controls'));
+      if (pop) pop.hidden = true;
+    });
   },
   // Única regla de perfil de jugador incompleto: la usan el aviso de inicio y el formulario de edición.
   // Pide la fecha de nacimiento y, si ningún familiar está completo, los datos que faltan del más avanzado.
@@ -6690,8 +6721,10 @@ App.i18n = {
 "Contacto familiar":"Family contact",
 "Estos datos ayudan al club a contactar contigo y con tu familia.":"These details help the club contact you and your family.",
 "El mismo código que utilizas para justificar ausencias. Es necesario para guardar.":"The same code you use to explain absences. It is required to save.",
-"Avisos de ausencia por email activados. Solo el entrenador puede cambiarlo.":"Absence email notifications on. Only the coach can change this.",
-"Avisos de ausencia por email desactivados. Solo el entrenador puede cambiarlo.":"Absence email notifications off. Only the coach can change this.",
+"Avisos por correo activados":"Email notifications on",
+"Avisos por correo desactivados":"Email notifications off",
+"Información sobre los avisos por correo":"About email notifications",
+"Si quieres cambiarlo, avisa a tu entrenador para que lo modifique.":"If you want to change it, ask your coach to update it.",
 "Avisos por email activados":"Email notifications on",
 "Avisos por email desactivados":"Email notifications off",
 "Elige un avatar del club o sube tu foto.":"Choose a club avatar or upload your photo.",

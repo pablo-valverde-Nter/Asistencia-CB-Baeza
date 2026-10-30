@@ -28,15 +28,56 @@ test('perfil del jugador conserva el contacto familiar pero no deja cambiar los 
   app.state.jugador = {ID:'j', Nombre:'Ana', Apellidos:'Baeza', EmailPadre1:'familia@example.test', NotificarAusenciasPadre1:false};
   app.views['perfil-usuario'].render();
   assert.doesNotMatch(fields['perfil-usuario-contenido'].innerHTML,/<input|<form/);
-  assert.match(fields['perfil-usuario-contenido'].innerHTML,/Avisos de ausencia por email desactivados\. Solo el entrenador puede cambiarlo\./);
+  const resumen = fields['perfil-usuario-contenido'].innerHTML;
+  assert.match(resumen,/<span class="avisos-chip is-off">Avisos por correo desactivados<\/span>/);
+  assert.match(resumen,/<span class="avisos-chip is-on">Avisos por correo activados<\/span>/, 'el familiar 2 sin valor queda activado por defecto');
+  assert.match(resumen,/<button type="button" class="avisos-info-btn" aria-label="Información sobre los avisos por correo" aria-expanded="false" aria-controls="avisos-info-perfil-1"/);
+  assert.match(resumen,/id="avisos-info-perfil-1" role="note" hidden>Si quieres cambiarlo, avisa a tu entrenador para que lo modifique\.</);
+  assert.doesNotMatch(resumen,/Solo el entrenador puede cambiarlo/);
   app.views['perfil-usuario'].editar();
   const html = fields['perfil-editar-contenido'].innerHTML;
   for (const name of ['FechaNac','Telefono','Email','NombrePadre1','ApellidosPadre1','TelefonoPadre1','EmailPadre1','NombrePadre2','ApellidosPadre2','TelefonoPadre2','EmailPadre2']) assert.ok(html.includes('data-perfil="'+name+'"'),name);
   assert.doesNotMatch(html,/NotificarAusencias|type="checkbox"/, 'la familia no ve interruptores de avisos');
-  assert.match(html,/Avisos de ausencia por email desactivados\. Solo el entrenador puede cambiarlo\./);
-  assert.match(html,/Avisos de ausencia por email activados\. Solo el entrenador puede cambiarlo\./, 'el familiar 2 sin valor queda activado por defecto');
+  assert.match(html,/avisos-chip is-off">Avisos por correo desactivados/);
+  assert.match(html,/avisos-chip is-on">Avisos por correo activados/);
+  assert.match(html,/aria-controls="avisos-info-editar-2"/, 'los id del formulario no chocan con los del resumen');
   assert.match(html,/id="perfil-codigo"/);
   assert.doesNotMatch(html,/data-perfil="(?:PIN|CodigoPadres|Usuario)"/);
+});
+
+test('popover de avisos: se abre hacia arriba sin salirse de pantalla y se cierra al volver a tocar, fuera o con Escape', () => {
+  const listeners = {};
+  const popover = (left, right) => { const p = { hidden: true, shift: null, getBoundingClientRect: () => ({ left, right }) }; p.style = { setProperty(k, v) { p.shift = v; } }; return p; };
+  const pops = { 'avisos-info-perfil-1': popover(200, 380), 'avisos-info-perfil-2': popover(-30, 150) };
+  const boton = id => ({ attrs: { 'aria-controls': id, 'aria-expanded': 'false' }, getAttribute(k) { return this.attrs[k]; }, setAttribute(k, v) { this.attrs[k] = String(v); } });
+  const b1 = boton('avisos-info-perfil-1'), b2 = boton('avisos-info-perfil-2');
+  const document = {
+    documentElement: { clientWidth: 360 },
+    addEventListener(tipo, fn) { (listeners[tipo] = listeners[tipo] || []).push(fn); },
+    getElementById: id => pops[id] || null,
+    querySelectorAll: sel => sel === '.avisos-info-btn[aria-expanded="true"]' ? [b1, b2].filter(b => b.attrs['aria-expanded'] === 'true') : [],
+  };
+  const {app} = client({}, { document });
+  for (const tipo of Object.keys(listeners)) delete listeners[tipo]; // solo los que instala el popover
+  const abierto = (b, p) => b.attrs['aria-expanded'] === 'true' && p.hidden === false;
+
+  app.account.toggleAvisosInfo(b1);
+  assert.ok(abierto(b1, pops['avisos-info-perfil-1']));
+  assert.equal(pops['avisos-info-perfil-1'].shift, '-28px', 'se desplaza para quedar a 8px del borde derecho');
+  app.account.toggleAvisosInfo(b2);
+  assert.ok(!abierto(b1, pops['avisos-info-perfil-1']), 'solo uno abierto a la vez');
+  assert.equal(pops['avisos-info-perfil-2'].shift, '38px', 'se desplaza para quedar a 8px del borde izquierdo');
+  app.account.toggleAvisosInfo(b2);
+  assert.ok(!abierto(b2, pops['avisos-info-perfil-2']), 'volver a tocar el (i) lo cierra');
+
+  app.account.toggleAvisosInfo(b1);
+  listeners.click.forEach(fn => fn({ target: { closest: sel => sel === '.avisos-info' ? {} : null } }));
+  assert.ok(abierto(b1, pops['avisos-info-perfil-1']), 'tocar dentro del popover no lo cierra');
+  listeners.click.forEach(fn => fn({ target: { closest: () => null } }));
+  assert.ok(!abierto(b1, pops['avisos-info-perfil-1']), 'tocar fuera lo cierra');
+  app.account.toggleAvisosInfo(b1);
+  listeners.keydown.forEach(fn => fn({ key: 'Escape' }));
+  assert.ok(!abierto(b1, pops['avisos-info-perfil-1']));
 });
 
 test('campos pendientes: el aviso y el formulario marcan los mismos datos', () => {
