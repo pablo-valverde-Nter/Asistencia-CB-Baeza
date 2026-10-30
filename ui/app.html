@@ -3385,7 +3385,8 @@ const App = {
           '</div>';
 
         html += _htmlFiltroStats();
-        html += _statsBloque('Equipo técnico',App.cache.getEntrenadoresByEquipo(id).map(function(e) { return '<button class="btn btn-secondary btn-sm person-inline" onclick="App.views[\'entrenador-detalle\'].cargar(' + _statsArgumento(e.ID) + ')">' + App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,36) + '<span>' + _statsTexto(e.Nombre + ' ' + e.Apellidos) + '</span></button>'; }).join('') || '<p>Sin entrenadores asignados</p>');
+        var tecnicos = App.cache.getEntrenadoresByEquipo(id).map(function(e) { return '<button class="btn btn-secondary btn-sm person-inline" onclick="App.views[\'entrenador-detalle\'].cargar(' + _statsArgumento(e.ID) + ')">' + App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,36) + '<span>' + _statsTexto(e.Nombre + ' ' + e.Apellidos) + '</span></button>'; }).join('');
+        html += _statsBloque('Equipo técnico',tecnicos ? '<div class="stats-staff-list">' + tecnicos + '</div>' : '<p>Sin entrenadores asignados</p>');
         if (d) {
           var s = d.sesiones;
           html += _statsHero(d,d.comparativaClubPp) +
@@ -5488,7 +5489,7 @@ Object.assign(App.account, {
       var rol = !jugador && relacion && editable ? '<label>Rol en el equipo<select aria-label="Rol en el equipo" onchange="App.account.guardarStaffRolEquipo(\'' + _esc(equipo.ID) + '\',this.value)"><option value="Entrenador"' + (relacion.TipoRol !== 'Visor' ? ' selected' : '') + '>Entrenador</option><option value="Visor"' + (relacion.TipoRol === 'Visor' ? ' selected' : '') + '>Visor</option></select></label>' : '';
       html += '<div class="account-staff-team"><span>' + _statsTexto(equipo.Nombre || '') + (relacion ? ' · ' + _statsTexto(relacion.Tipo || relacion.TipoRol || '') : '') + '</span>' + rol + (editable ? '<button class="btn btn-secondary btn-sm" type="button" onclick="App.views[\'equipo-form\'].cargar(\'' + _esc(equipo.ID) + '\')">Gestionar equipo</button>' : '') + '</div>';
     });
-    return html + '<button class="btn btn-danger btn-full" type="button" onclick="App.account.eliminarStaff()">' + (jugador ? 'Eliminar jugador' : 'Eliminar entrenador') + '</button>';
+    return html + '<div class="account-danger-zone"><button class="btn btn-danger btn-full" type="button" onclick="App.account.eliminarStaff()">' + (jugador ? 'Eliminar jugador' : 'Eliminar entrenador') + '</button></div>';
   },
   guardarStaffPerfil: function(datos, force, emailWarningConfirmed, emailChangeConfirmed) {
     if (!this.isStaff() || !this.allowed()) return;

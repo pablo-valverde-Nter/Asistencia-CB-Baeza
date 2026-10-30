@@ -702,13 +702,13 @@ input, select, textarea { font-family: inherit; }
 .player-profile-incomplete button { padding: 4px 0 0 32px; color: var(--verde); font-size: .73rem; font-weight: 800; }
 .player-profile-incomplete button span { margin-left: 3px; font-size: 1rem; }
 .parent-email-notify {
-  display: flex !important; align-items: center; gap: 6px; margin-top: 7px;
-  color: var(--texto-sec) !important; font-size: .67rem !important; font-weight: 600 !important;
+  display: flex !important; align-items: center; gap: 8px; margin-top: 8px;
+  color: var(--texto-sec) !important; font-size: .76rem !important; font-weight: 600 !important;
   cursor: pointer;
 }
 .parent-email-notify input {
-  width: 16px !important; height: 16px; margin: 0; padding: 0 !important;
-  accent-color: var(--morado); flex: 0 0 16px;
+  width: 18px !important; height: 18px; margin: 0; padding: 0 !important;
+  accent-color: var(--morado); flex: 0 0 18px;
 }
 
 @media (max-width: 360px) {
@@ -1954,20 +1954,21 @@ input, select, textarea { font-family: inherit; }
 .account-hero-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
 .account-profile-hero p { color:var(--texto-sec); font-size:.82rem; margin:0 0 16px; }
 .account-card { padding:20px; margin:0 0 16px; background:var(--blanco); border:1px solid var(--borde); border-radius:18px; box-shadow:0 3px 14px rgba(35,15,53,.035); }
-.account-card h2 { font-size:1rem; margin:0 0 18px; color:var(--texto); }
-.account-card p,.account-card small { font-size:.78rem; line-height:1.65; color:var(--texto-sec); }
+.account-card :is(h2,h3) { font-size:1rem; font-weight:700; line-height:1.35; margin:0 0 14px; color:var(--texto); overflow-wrap:anywhere; }
+.account-card:not(.policy-text) > :is(h2,h3):has(+ p) { margin-bottom:6px; }
+.account-card p,.account-card small { font-size:.78rem; line-height:1.6; color:var(--texto-sec); }
 .account-card p { margin:0 0 16px; }
-.account-card small { display:block; margin-top:6px; }
+.account-card small { display:block; margin-top:6px; font-size:.74rem; line-height:1.5; }
 .account-card input[readonly] { background:var(--fondo); color:var(--texto-sec); }
 .account-card .form-group { margin-bottom:16px; }
-.account-family { border:1px solid var(--borde); border-radius:12px; padding:16px 12px; margin:20px 0; min-width:0; }
-.account-family legend { padding:0 8px; font-size:.8rem; font-weight:700; color:var(--morado); }
-.account-check { display:flex; gap:10px; align-items:flex-start; font-size:.78rem; line-height:1.5; cursor:pointer; }
+.account-family,.account-staff-family { min-width:0; margin:0 0 16px; padding:14px 14px 2px; border:1px solid var(--borde); border-radius:14px; background:var(--morado-xs); }
+.account-family legend,.account-staff-family legend { padding:0 6px; font-size:.74rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--morado); }
+.account-check { display:flex; gap:10px; align-items:center; min-height:32px; margin:0 0 14px; font-size:.78rem; line-height:1.45; color:var(--texto); cursor:pointer; }
 .account-check input { width:18px; height:18px; flex-shrink:0; accent-color:var(--morado); }
-.account-intro { padding:8px 4px 24px; }
-.account-eyebrow { font-size:.62rem; color:var(--morado); letter-spacing:.12em; font-weight:800; }
-.account-intro h2 { font-size:1.6rem; margin:8px 0; letter-spacing:-.04em; }
-.account-intro p { margin:0; font-size:.82rem; line-height:1.6; color:var(--texto-sec); }
+.account-intro { padding:4px 4px 20px; }
+.account-eyebrow { font-size:.66rem; color:var(--morado); letter-spacing:.12em; font-weight:800; }
+.account-intro h2 { font-size:1.35rem; line-height:1.25; margin:6px 0; letter-spacing:-.02em; }
+.account-intro p { margin:0; font-size:.8rem; line-height:1.6; color:var(--texto-sec); }
 .account-link { display:flex; justify-content:space-between; align-items:center; width:100%; background:none; border:0; border-top:1px solid var(--borde); padding:16px 0; color:var(--morado); text-align:left; font-size:.82rem; font-weight:600; cursor:pointer; }
 .account-link:last-child { padding-bottom:0; }
 .account-notice { background:var(--fondo); border-left:3px solid var(--morado); padding:12px; border-radius:8px; font-size:.8rem; line-height:1.6; margin-bottom:14px; }
@@ -2050,32 +2051,64 @@ p.person-inline { display:flex; margin:9px 0; }
 .ranking-podium-card > .club-avatar { margin:2px auto 6px; }
 .stats-table .person-inline { min-width:175px; padding:5px 8px; }
 .contact-missing-row .person-inline { background:none; padding:0; color:var(--texto); }
-.account-staff-family { min-width:0; margin:16px 0; padding:12px; border:1px solid var(--borde); border-radius:12px; }
-.account-staff-family legend { padding:0 6px; font-weight:600; }
-.account-staff-team { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:10px 0; border-bottom:1px solid var(--borde); }
-.account-staff-team + .btn-danger { margin-top:20px; }
+.account-staff-team { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:12px 0; border-bottom:1px solid var(--borde); }
+.account-staff-team > span { flex:1 1 160px; min-width:0; font-size:.84rem; font-weight:600; line-height:1.4; color:var(--texto); overflow-wrap:anywhere; }
+.account-staff-team label { display:flex; align-items:center; gap:8px; font-size:.76rem; font-weight:600; color:var(--texto-sec); }
+.account-staff-team select { min-height:36px; padding:6px 10px; border:1.5px solid var(--borde); border-radius:8px; background:var(--fondo); color:var(--texto); font-size:.84rem; }
+.account-staff-team select:focus { border-color:var(--morado); }
+.account-danger-zone { order:1; margin-top:20px; padding-top:16px; border-top:1px solid var(--borde); }
 .detalle-settings .account-menu-icon { width:20px; height:20px; color:inherit; stroke:currentColor; fill:none; stroke-width:1.8; }
 .account-settings-list { border:1px solid var(--borde); border-radius:18px; overflow:hidden; background:var(--blanco); }
-.account-settings-row { display:flex; align-items:center; gap:14px; padding:19px 16px; width:100%; min-height:86px; background:none; border:0; color:var(--texto); text-align:left; cursor:pointer; }
+.account-settings-row { display:flex; align-items:center; gap:14px; padding:14px 16px; width:100%; min-height:72px; background:none; border:0; color:var(--texto); text-align:left; cursor:pointer; }
 .account-settings-row + .account-settings-row { border-top:1px solid var(--borde); }
 .account-settings-row:hover,.account-settings-row:focus-visible { background:var(--morado-s); }
 .account-settings-row:focus-visible { outline:2px solid var(--morado); outline-offset:-3px; }
-.account-settings-icon { display:flex; align-items:center; justify-content:center; width:42px; height:42px; flex-shrink:0; border-radius:12px; background:var(--morado-s); }
+.account-settings-icon { display:flex; align-items:center; justify-content:center; width:40px; height:40px; flex-shrink:0; border-radius:12px; background:var(--morado-s); }
 .account-settings-copy { flex:1; min-width:0; }
-.account-settings-copy strong { display:block; font-size:.86rem; line-height:1.4; }
-.account-settings-copy > span { display:block; font-size:.73rem; line-height:1.5; color:var(--texto-sec); margin-top:4px; }
-.account-settings-chevron { color:var(--texto-sec); font-size:1.6rem; font-weight:400; }
+.account-settings-copy strong { display:block; font-size:.88rem; line-height:1.35; }
+.account-settings-copy > span { display:block; font-size:.76rem; line-height:1.45; color:var(--texto-sec); margin-top:3px; }
+.account-settings-chevron { color:var(--texto-sec); font-size:1.4rem; font-weight:400; line-height:1; }
 .account-summary { margin:0; }
 .account-summary-row { display:flex; justify-content:space-between; gap:16px; padding:11px 0; border-bottom:1px solid var(--borde); font-size:.8rem; line-height:1.5; }
 .account-summary-row:last-child { border:0; }
 .account-summary dt { color:var(--texto-sec); flex-shrink:0; }
 .account-summary dd { margin:0; text-align:right; overflow-wrap:anywhere; min-width:0; font-weight:600; }
 .recovery-destinations { border:0; padding:0; margin:0 0 20px; }
-.recovery-destination { display:flex; align-items:center; gap:12px; padding:16px 12px; border:1px solid var(--borde); border-radius:12px; margin-bottom:10px; cursor:pointer; }
+.recovery-destination { display:flex; align-items:center; gap:12px; min-height:64px; padding:14px; border:1px solid var(--borde); border-radius:12px; margin-bottom:10px; cursor:pointer; }
 .recovery-destination:has(input:checked) { border-color:var(--morado); background:var(--morado-s); }
 .recovery-destination input { width:18px; height:18px; flex-shrink:0; accent-color:var(--morado); }
 .recovery-destination strong,.recovery-destination span span { display:block; font-size:.82rem; overflow-wrap:anywhere; }
 .recovery-destination span span { color:var(--texto-sec); margin-top:5px; }
-.recovery-code,.recovery-secret { font-size:1.3rem; letter-spacing:.2em; text-align:center; }
+.account-card .form-group input:is(.recovery-code,.recovery-secret) { font-size:1.1rem; letter-spacing:.24em; text-align:center; font-variant-numeric:tabular-nums; }
 .recovery-error { color:var(--rojo)!important; margin:12px 0 0!important; }
+.recovery-error:empty { display:none; }
+
+/* Formularios de perfil y seguridad (propios y de staff) y fichas de jugador/entrenador: una escala tipográfica,
+   controles de 44px y ritmo vertical comunes. Los campos de dos columnas se apilan cuando no caben. */
+:where(.account-page,#view-jugador-form,#view-entrenador-form) .form-group > label:not(.parent-email-notify,.form-toggle-row),
+.account-page label.form-group { font-size:.8rem; font-weight:600; line-height:1.35; color:var(--texto-sec); }
+:where(.account-page,#view-jugador-form,#view-entrenador-form) .form-group > label:not(.parent-email-notify,.form-toggle-row) { margin-bottom:6px; }
+.account-page label.form-group { display:flex; flex-direction:column; gap:6px; }
+:where(.account-page,#view-jugador-form,#view-entrenador-form) .form-group :is(input:not([type="checkbox"]):not([type="radio"]),select) { min-height:44px; min-width:0; }
+:where(.account-page,#view-jugador-form,#view-entrenador-form) .form-row { flex-wrap:wrap; gap:0 12px; }
+:where(.account-page,#view-jugador-form,#view-entrenador-form) .form-row > .form-group { flex:1 1 140px; min-width:0; }
+:where(.account-page,#view-jugador-form,#view-entrenador-form) .btn { min-height:44px; }
+:where(.account-page) .btn-sm { min-height:36px; }
+form.account-card { display:flex; flex-direction:column; }
+form.account-card > :is(h2,h3):not(:first-child) { margin-top:12px; padding-top:20px; border-top:1px solid var(--borde); }
+form.account-card > .btn-primary { margin-top:8px; }
+.account-card .btn-full + .btn-full,.account-card form + .btn-full { margin-top:10px; }
+.account-card .parent-email-notify { min-height:32px; margin:0 0 14px; color:var(--texto) !important; }
+:where(#view-jugador-form,#view-entrenador-form) .form-section { padding:20px 16px 6px; }
+:where(#view-jugador-form,#view-entrenador-form) .form-section + .form-section { border-top:1px solid var(--borde); }
+.form-subtitle { margin:0 0 10px; font-size:.8rem; font-weight:700; color:var(--texto); }
+.form-row + .form-subtitle { margin-top:2px; padding-top:14px; border-top:1px dashed var(--borde); }
+.form-hint { display:block; margin-top:6px; font-size:.74rem; line-height:1.5; color:var(--texto-sec); }
+.form-group > .form-toggle-row { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; margin:0; font-size:.84rem; font-weight:600; color:var(--texto); cursor:pointer; }
+#ent-admin-section:has(> .hidden) { display:none; }
+
+/* Equipo técnico en las estadísticas de equipo: rejilla con separación que se adapta a nombres largos. */
+.stats-staff-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr)); gap:8px; }
+.stats-staff-list > .person-inline { display:flex; width:100%; min-width:0; min-height:48px; justify-content:flex-start; padding:6px 12px 6px 6px; border-radius:14px; line-height:1.3; }
+.stats-staff-list > .person-inline > span { min-width:0; overflow-wrap:anywhere; }
 </style>

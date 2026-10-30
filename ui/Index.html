@@ -348,7 +348,7 @@
       </div>
       <div class="form-section">
         <div class="form-section-title">Contacto familiar</div>
-        <p style="font-size:.75rem;color:var(--texto-sec);margin:0 0 10px">Familiar 1</p>
+        <p class="form-subtitle">Familiar 1</p>
         <div class="form-row">
           <div class="form-group"><label>Nombre</label><input type="text" id="jug-padre1-nombre" placeholder="Nombre"></div>
           <div class="form-group"><label>Apellidos</label><input type="text" id="jug-padre1-apellidos" placeholder="Apellidos"></div>
@@ -359,7 +359,7 @@
             <label class="parent-email-notify"><input type="checkbox" id="jug-padre1-notificar" checked><span>Enviar avisos de ausencia</span></label>
           </div>
         </div>
-        <p style="font-size:.75rem;color:var(--texto-sec);margin:12px 0 10px">Familiar 2</p>
+        <p class="form-subtitle">Familiar 2</p>
         <div class="form-row">
           <div class="form-group"><label>Nombre</label><input type="text" id="jug-padre2-nombre" placeholder="Nombre"></div>
           <div class="form-group"><label>Apellidos</label><input type="text" id="jug-padre2-apellidos" placeholder="Apellidos"></div>
@@ -406,13 +406,13 @@
         <div class="form-group">
           <label>PIN de acceso</label>
           <input type="text" id="ent-pin-nuevo" placeholder="4 d&iacute;gitos" maxlength="4" style="letter-spacing:4px">
-          <small style="color:var(--texto-sec);font-size:.72rem">Si se deja vac&iacute;o, se usar&aacute; <strong>1234</strong> como PIN inicial.</small>
+          <small class="form-hint">Si se deja vac&iacute;o, se usar&aacute; <strong>1234</strong> como PIN inicial.</small>
         </div>
       </div>
 
       <div class="form-section" id="ent-admin-section">
         <div class="form-group" id="ent-admin-wrap">
-          <label style="display: flex; align-items: center; cursor: pointer; font-size: .85rem; font-weight: 500;">
+          <label class="form-toggle-row">
             <span>Conceder permisos de administrador</span>
             <div class="toggle-sw">
               <input type="checkbox" id="ent-es-admin">
