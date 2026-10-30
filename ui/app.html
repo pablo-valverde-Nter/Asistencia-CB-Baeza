@@ -3971,12 +3971,15 @@ const App = {
         var perfilAvisoEl = document.getElementById('perfil-configuracion-aviso');
         if (perfilAvisoEl) {
           var faltantesPerfil = App.account.camposPendientes(j);
+          // Toda la tarjeta es un único botón (clic, Enter y Espacio); «Completar ahora» es su llamada visible, sin handler propio.
           perfilAvisoEl.innerHTML = faltantesPerfil.length
-            ? '<div class="player-profile-incomplete"><div class="player-profile-incomplete-heading">' +
+            ? '<div class="player-profile-incomplete" role="button" tabindex="0" aria-label="Completar ahora la información de tu perfil" aria-describedby="perfil-incompleto-faltan"' +
+                ' onclick="App.views[\'perfil-jugador\'].completarPerfil()" onkeydown="if(event.key===\'Enter\' || event.key===\' \'){event.preventDefault();App.views[\'perfil-jugador\'].completarPerfil()}">' +
+                '<div class="player-profile-incomplete-heading">' +
                 '<span class="player-profile-incomplete-icon" aria-hidden="true">i</span>' +
                 '<strong>Completa la información de tu perfil</strong></div>' +
-                '<ul>' + faltantesPerfil.map(function(p) { return '<li>' + _esc(p.texto) + '</li>'; }).join('') + '</ul>' +
-                '<button type="button" onclick="App.navigate(\'perfil-editar\',{pendientes:true})">Completar mi perfil <span aria-hidden="true">&#8250;</span></button></div>'
+                '<ul id="perfil-incompleto-faltan">' + faltantesPerfil.map(function(p) { return '<li>' + _esc(p.texto) + '</li>'; }).join('') + '</ul>' +
+                '<span class="player-profile-incomplete-cta">Completar ahora <span aria-hidden="true">&#8250;</span></span></div>'
             : '';
         }
         var statsEl = document.getElementById('perfil-stats');
@@ -3984,6 +3987,10 @@ const App = {
         var propio = !App.stats.refreshing && !App.stats.error && App.stats.resumen && App.stats.resumen.datos.jugador;
         document.getElementById('perfil-racha').innerHTML = propio ? _statsRacha(propio) : '';
         statsEl.innerHTML = propio ? _statsHero(propio) + _statsBloque('Últimas 12 sesiones', _htmlHeatmap(propio.sesiones.slice(0,12))) + '<div class="p-16"><button class="btn btn-primary btn-full" onclick="App.navigate(\'mis-stats\')">Ver mis estadísticas</button></div>' : _statsResumenEstado();
+      },
+      // Aviso «Completa la información de tu perfil»: abre «Editar perfil» con los datos pendientes resaltados.
+      completarPerfil: function() {
+        App.navigate('perfil-editar', { pendientes: true });
       },
     },
 
@@ -7318,7 +7325,8 @@ App.i18n = {
 "Revisa las sesiones pendientes":"Review pending sessions",
 "Sin faltas pendientes de justificar":"No absences awaiting explanation",
 "Completa la información de tu perfil":"Complete your profile information",
-"Completar mi perfil":"Complete my profile",
+"Completar ahora":"Complete now",
+"Completar ahora la información de tu perfil":"Complete your profile information now",
 "Falta este dato":"This detail is missing",
 "Te falta 1 dato":"1 detail missing",
 "No asignado a ningún equipo":"Not assigned to a team",

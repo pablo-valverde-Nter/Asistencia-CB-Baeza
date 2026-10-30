@@ -105,6 +105,33 @@ test('campos pendientes: el aviso y el formulario marcan los mismos datos', () =
   assert.doesNotMatch(html, /id="perfil-NombrePadre2"[^>]*aria-describedby/);
 });
 
+test('aviso de perfil incompleto: la tarjeta entera y «Completar ahora» abren una sola vez Editar perfil con los pendientes', () => {
+  const ids = ['perfil-jugador-avatar','perfil-jugador-nombre','perfil-jugador-equipo','perfil-incidencias','perfil-configuracion-aviso','perfil-racha','perfil-stats'];
+  const fields = Object.fromEntries(ids.map(id => [id, {}]));
+  const {app,context} = client(fields);
+  const navegaciones = [];
+  app.navigate = (vista, params) => navegaciones.push([vista, params]);
+  app.state.rol = 'jugador';
+  app.state.jugador = {ID:'j', Nombre:'Ana', Apellidos:'Baeza'};
+  app.views['perfil-jugador'].render();
+  const html = fields['perfil-configuracion-aviso'].innerHTML;
+  const tarjeta = html.match(/^<div class="player-profile-incomplete" role="button" tabindex="0"[^>]*>/);
+  assert.ok(tarjeta, 'la tarjeta es un botón enfocable');
+  assert.match(html, /<span class="player-profile-incomplete-cta">Completar ahora /);
+  assert.equal(html.match(/on(click|keydown)=/g).length, 2, 'un único handler de clic (el de la tarjeta), sin doble disparo desde «Completar ahora»');
+  const handler = attr => vm.runInContext('(function(event){' + tarjeta[0].match(new RegExp(attr + '="([^"]*)"'))[1] + '})', context);
+  const pulsar = key => { let prevenido = false; handler('onkeydown')({key, preventDefault() { prevenido = true; }}); return prevenido; };
+  handler('onclick')({});
+  assert.ok(pulsar('Enter'));
+  assert.ok(pulsar(' '));
+  assert.equal(pulsar('a'), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(navegaciones)), [['perfil-editar',{pendientes:true}],['perfil-editar',{pendientes:true}],['perfil-editar',{pendientes:true}]]);
+
+  app.state.jugador = {ID:'j', Nombre:'Ana', Apellidos:'Baeza', FechaNac:'2012-03-04', NombrePadre1:'Eva', ApellidosPadre1:'Ruiz', TelefonoPadre1:'600000000', EmailPadre1:'eva@example.test'};
+  app.views['perfil-jugador'].render();
+  assert.equal(fields['perfil-configuracion-aviso'].innerHTML, '', 'sin datos pendientes no hay aviso');
+});
+
 test('foto: el indicador aparece antes de preparar la imagen, que se centra, reduce a 128 y limita el JPEG', async () => {
   const calls = [];
   let image;
