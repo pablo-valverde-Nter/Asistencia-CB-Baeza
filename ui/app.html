@@ -514,52 +514,102 @@ const App = {
       if (App.state.currentView === 'equipos') App.views.equipos.render();
     },
 
-    markRead: function(teamId, index) {
-      var item = this.items(teamId)[index];
-      if (!item) return;
+    // Iconos de línea (24×24, trazo currentColor). Los de leído muestran la acción, como Gmail: sobre abierto = marcar leída.
+    _icons: {
+      leida: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.6 12 4l9 5.6V18.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="m3 9.6 9 5.9 9-5.9"/></svg>',
+      noLeida: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7 8.5 6.2L20.5 7"/></svg>',
+      borrar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7"/><path d="m6.5 7 .8 11.6a2 2 0 0 0 2 1.9h5.4a2 2 0 0 0 2-1.9L17.5 7"/><path d="M10.25 11v5.5M13.75 11v5.5"/></svg>',
+      justificada: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/><path d="m9 14.5 2 2 4-4"/></svg>',
+    },
+
+    // Tipo avisado por la familia; los registros antiguos sin tipo usan el estado anotado.
+    _tipo: function(registro) {
+      return (App.views.sesion._estadoJustificacion(registro.TipoJustificacion) || App.cache.getEstadoRegistrado(registro)) === 'R' ? 'Retraso' : 'Ausencia';
+    },
+
+    // Datos y texto de una justificación: el mensaje es el mismo que el asistente enseña como «lo que verá el entrenador».
+    justificacion: function(registro) {
+      var sesion = registro && App.cache.sesiones.find(function(s) { return s.ID === registro.ID_Sesion; });
+      var jugador = registro && App.cache.getJugadorById(registro.ID_Jugador);
+      if (!sesion || !jugador) return null;
+      var tipo = this._tipo(registro);
+      var minutos = tipo === 'Retraso' && Number(registro.MinutosRetraso) > 0 ? Number(registro.MinutosRetraso) : null;
+      var motivo = registro.MotivoCategoria || 'Sin especificar', detalle = registro.MotivoDetalle || '';
+      return {
+        jugador: jugador, sesion: sesion, tipo: tipo, minutos: minutos, motivo: motivo,
+        mensaje: App.views.justificacion.mensaje(jugador, sesion, App.cache.getEquipoById(sesion.ID_Equipo), tipo, motivo, detalle, minutos),
+      };
+    },
+
+    detalleHtml: function(justif) {
+      return '<div class="justif-detail"><div class="justif-detail-meta">' +
+        '<span class="justif-detail-chip ' + (justif.tipo === 'Retraso' ? 'is-late' : 'is-absent') + '">' + justif.tipo + '</span>' +
+        (justif.minutos ? '<span class="justif-detail-chip">' + justif.minutos + ' min</span>' : '') +
+        '<span class="justif-detail-chip" data-no-i18n>' + _statsTexto(justif.motivo) + '</span></div>' +
+        '<p class="justif-detail-msg" data-no-i18n>' + _statsTexto(justif.mensaje) + '</p></div>';
+    },
+
+    verJustificacion: function(registro) {
+      var justif = this.justificacion(registro);
+      if (!justif) return;
+      App.openModal('Justificación', '<div class="justif-detail-modal"><p class="justif-detail-name" data-no-i18n>' + _statsTexto(justif.jugador.Apellidos + ', ' + justif.jugador.Nombre) + '</p>' +
+        this.detalleHtml(justif) + '<button type="button" class="btn btn-secondary btn-full" onclick="App.closeModal()">Cerrar</button></div>');
+    },
+
+    _find: function(teamId, key) {
+      return this.items(teamId).find(function(item) { return item.key === key; }) || null;
+    },
+
+    _marcar: function(lista, keys, incluir) {
       var state = this._state();
-      if (state.read.indexOf(item.key) < 0) state.read.push(item.key);
+      keys.forEach(function(key) {
+        var i = state[lista].indexOf(key);
+        if (incluir && i < 0) state[lista].push(key);
+        if (!incluir && i >= 0) state[lista].splice(i, 1);
+      });
       this._save(state);
+    },
+
+    _refrescar: function(teamId, focusKey) {
       this._refreshHome();
-      this.renderInbox(teamId);
+      this.renderInbox(teamId, focusKey);
+    },
+
+    toggleRead: function(teamId, key) {
+      if (!this._find(teamId, key)) return;
+      this._marcar('read', [key], this._state().read.indexOf(key) < 0);
+      this._refrescar(teamId);
     },
 
     markAllRead: function(teamId) {
-      var state = this._state();
-      this.items(teamId).forEach(function(item) {
-        if (state.read.indexOf(item.key) < 0) state.read.push(item.key);
-      });
-      this._save(state);
-      this._refreshHome();
-      this.renderInbox(teamId);
+      this._marcar('read', this.items(teamId).map(function(item) { return item.key; }), true);
+      this._refrescar(teamId);
     },
 
-    deleteOne: function(teamId, index) {
-      var item = this.items(teamId)[index];
-      if (!item) return;
-      var state = this._state();
-      if (state.deleted.indexOf(item.key) < 0) state.deleted.push(item.key);
-      this._save(state);
-      this._refreshHome();
-      this.renderInbox(teamId);
+    deleteOne: function(teamId, key) {
+      if (!this._find(teamId, key)) return;
+      this._marcar('deleted', [key], true);
+      if (this._abierta === key) this._abierta = null;
+      this._refrescar(teamId);
     },
 
     deleteAll: function(teamId) {
-      var state = this._state();
-      this.items(teamId).forEach(function(item) {
-        if (state.deleted.indexOf(item.key) < 0) state.deleted.push(item.key);
-      });
-      this._save(state);
-      this._refreshHome();
-      this.renderInbox(teamId);
+      this._marcar('deleted', this.items(teamId).map(function(item) { return item.key; }), true);
+      this._abierta = null;
+      this._refrescar(teamId);
     },
 
-    openItem: function(teamId, index) {
-      var item = this.items(teamId)[index];
+    // Tocar una entrada la despliega con el mensaje de la familia y la marca como leída; la sesión se abre desde «Ver sesión».
+    toggle: function(teamId, key) {
+      if (!this._find(teamId, key)) return;
+      this._abierta = this._abierta === key ? null : key;
+      if (this._abierta) this._marcar('read', [key], true);
+      this._refrescar(teamId, key);
+    },
+
+    verSesion: function(teamId, key) {
+      var item = this._find(teamId, key);
       if (!item) return;
-      var state = this._state();
-      if (state.read.indexOf(item.key) < 0) state.read.push(item.key);
-      this._save(state);
       App.closeModal();
       App.state.equipoSesionesId = item.sesion.ID_Equipo;
       App.state._equipoNombre = item.equipo ? item.equipo.Nombre : 'Equipo';
@@ -568,48 +618,54 @@ const App = {
 
     openInbox: function(teamId) {
       var equipo = App.cache.getEquipoById(teamId);
+      this._abierta = null;
       App.openModal('Notificaciones' + (equipo ? ' · ' + equipo.Nombre : ''), '<div id="notification-inbox"></div>');
       this.renderInbox(teamId);
     },
 
-    renderInbox: function(teamId) {
+    renderInbox: function(teamId, focusKey) {
       var container = document.getElementById('notification-inbox');
       if (!container) return;
-      var state = this._state();
+      var self = this, icons = this._icons, state = this._state();
       var all = this.items(teamId).filter(function(item) { return state.deleted.indexOf(item.key) < 0; });
       var html = '<div class="notification-toolbar">' +
-        '<button type="button" onclick="App.notifications.markAllRead(\'' + teamId + '\')">Marcar todas leídas</button>' +
-        '<button type="button" onclick="App.notifications.deleteAll(\'' + teamId + '\')">Borrar todas</button></div>';
+        '<button type="button" onclick="App.notifications.markAllRead(' + _statsArgumento(teamId) + ')">Marcar todas leídas</button>' +
+        '<button type="button" onclick="App.notifications.deleteAll(' + _statsArgumento(teamId) + ')">Borrar todas</button></div>';
       if (!all.length) {
         html += '<div class="notification-empty">No hay notificaciones</div>';
       } else {
-        html += '<div class="notification-list">' + all.map(function(item) {
-          var idx = App.notifications.items(teamId).findIndex(function(entry) { return entry.key === item.key; });
-          var leida = state.read.indexOf(item.key) >= 0;
-          var fecha = _fmtFecha(item.sesion.Fecha);
-          var tipo = item.registro.TipoJustificacion || 'Justificación';
-          return '<article class="notification-item' + (leida ? ' read' : ' unread') + '" data-notification-index="' + idx + '">' +
-            '<button type="button" class="notification-open" onclick="App.notifications.openItem(\'' + teamId + '\',' + idx + ')">' +
-              '<span class="notification-icon" aria-hidden="true">&#x1F4EC;</span>' +
-              '<span class="notification-copy"><strong data-no-i18n>' + _esc(item.jugador.Apellidos + ', ' + item.jugador.Nombre) + '</strong>' +
-              '<span>' + _esc(tipo) + ' · ' + _esc(fecha.dn + ' ' + fecha.d + ' ' + fecha.m) + ' · ' + _esc(item.sesion.HoraInicio) + '</span></span>' +
-              '<span class="notification-unread-dot" aria-hidden="true"></span>' +
-            '</button>' +
-            (!leida ? '<button type="button" class="notification-action" aria-label="Marcar como leída" title="Marcar como leída" onclick="App.notifications.markRead(\'' + teamId + '\',' + idx + ')">&#x2713;</button>' : '') +
-            '<button type="button" class="notification-action notification-delete" aria-label="Borrar notificación" title="Borrar" onclick="App.notifications.deleteOne(\'' + teamId + '\',' + idx + ')">&#x1F5D1;</button>' +
+        html += '<div class="notification-list">' + all.map(function(item, i) {
+          var leida = state.read.indexOf(item.key) >= 0, abierta = self._abierta === item.key;
+          var justif = abierta ? self.justificacion(item.registro) : null;
+          var args = _statsArgumento(teamId) + ',' + _statsArgumento(item.key);
+          var fecha = _fmtFecha(item.sesion.Fecha), detalleId = 'notification-detail-' + i;
+          var tipo = self._tipo(item.registro);
+          var lectura = leida ? 'Marcar como no leída' : 'Marcar como leída';
+          return '<article class="notification-item ' + (leida ? 'read' : 'unread') + (abierta ? ' is-open' : '') + '" data-notification-key="' + _statsTexto(item.key) + '">' +
+            '<div class="notification-row">' +
+              '<button type="button" class="notification-open" aria-expanded="' + abierta + '"' + (justif ? ' aria-controls="' + detalleId + '"' : '') + ' onclick="App.notifications.toggle(' + args + ')">' +
+                App.avatarHtml(item.jugador.FotoURL, item.jugador.Nombre + ' ' + item.jugador.Apellidos, 40) +
+                '<span class="notification-copy"><strong data-no-i18n>' + _statsTexto(item.jugador.Apellidos + ', ' + item.jugador.Nombre) + '</strong>' +
+                '<span>' + tipo + ' · ' + _statsTexto(fecha.dn + ' ' + fecha.d + ' ' + fecha.m) + ' · ' + _statsTexto(item.sesion.HoraInicio) + '</span></span>' +
+                '<span class="notification-unread-dot" aria-hidden="true"></span>' +
+              '</button>' +
+              '<button type="button" class="notification-action" aria-label="' + lectura + '" title="' + lectura + '" onclick="App.notifications.toggleRead(' + args + ')">' + (leida ? icons.noLeida : icons.leida) + '</button>' +
+              '<button type="button" class="notification-action notification-delete" aria-label="Borrar notificación" title="Borrar" onclick="App.notifications.deleteOne(' + args + ')">' + icons.borrar + '</button>' +
+            '</div>' +
+            (justif ? '<div class="notification-detail" id="' + detalleId + '">' + self.detalleHtml(justif) +
+              '<button type="button" class="btn btn-primary btn-sm notification-session" onclick="App.notifications.verSesion(' + args + ')">Ver sesión</button></div>' : '') +
           '</article>';
         }).join('') + '</div>';
       }
       container.innerHTML = html;
       container.querySelectorAll('.notification-item').forEach(function(row) {
-        var startX = null;
+        var key = row.dataset.notificationKey, startX = null;
+        if (key === focusKey) row.querySelector('.notification-open').focus({ preventScroll: true });
         row.addEventListener('touchstart', function(event) {
           startX = event.changedTouches[0].clientX;
         }, { passive: true });
         row.addEventListener('touchend', function(event) {
-          if (startX !== null && event.changedTouches[0].clientX - startX > 70) {
-            App.notifications.deleteOne(teamId, Number(row.dataset.notificationIndex));
-          }
+          if (startX !== null && event.changedTouches[0].clientX - startX > 70) App.notifications.deleteOne(teamId, key);
           startX = null;
         }, { passive: true });
       });
@@ -1587,7 +1643,7 @@ const App = {
                 '<div style="flex:1;min-width:0"><div class="jug-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
                 '<div class="jug-tipo">' + (inv ? 'Invitado' : (j.Tipo || '')) + '</div>' +
                 (preaviso ? '<div class="preaviso-tag">Avisó: ' + (preaviso === 'A' ? 'Ausencia' : 'Retraso') + (item.motivoJustif ? ' · ' + _esc(item.motivoJustif) : '') + '</div>' : '') +
-                (item.tieneJustif ? '<div class="jug-justif-aviso">\u26a0\ufe0f ' + (item.tipoJustif || 'Justif.') + (item.motivoJustif ? ': ' + _esc(item.motivoJustif) : '') + '</div>' : '') +
+                (item.tieneJustif ? '<button type="button" class="jug-justif-aviso" aria-label="Ver justificación de ' + _statsTexto(j.Nombre + ' ' + j.Apellidos) + '" onclick="event.stopPropagation();App.views.sesion.verJustificacion(' + _statsArgumento(j.ID) + ')">' + App.notifications._icons.justificada + '<span>Justificada</span>' + (item.motivoJustif && !preaviso ? '<span class="jug-justif-motivo" data-no-i18n>· ' + _statsTexto(item.motivoJustif) + '</span>' : '') + '</button>' : '') +
                 '</div>' +
                 App.views.sesion._htmlMinutos(item.minutosRetraso) +
                 '<div class="estado-chip">' + _iconEstado(estado) + '</div></div>';
@@ -1667,6 +1723,13 @@ const App = {
         if (cancelar) cancelar.style.display = sesion.AsistenciaGuardada === true || sesion.AsistenciaGuardada === 'TRUE' ? 'none' : '';
         App.views.sesion._bindSwipeRows();
         App.views.sesion._startAutoSave();
+      },
+
+      // El chip «Justificada» abre el mismo mensaje que la familia vio antes de enviar.
+      verJustificacion: function(jugadorId) {
+        App.notifications.verJustificacion(App.cache.asistJugadores.find(function(r) {
+          return r.ID_Sesion === App.state.sesionId && r.ID_Jugador === jugadorId && (r.TieneJustificacion === true || r.TieneJustificacion === 'TRUE');
+        }));
       },
 
       toggleEstado: function(card) {
@@ -6774,7 +6837,10 @@ App.i18n = {
   "Incidencias justificadas": "Explained incidents",
   "Sin ausencias ni retrasos registrados": "No recorded absences or late arrivals",
   "Marcar como leída": "Mark as read",
-  "Marcar todas como leídas": "Mark all as read"
+  "Marcar todas como leídas": "Mark all as read",
+  "Marcar como no leída": "Mark as unread",
+  "Ver sesión": "View session",
+  "Borrar": "Delete"
 },
   originales: new WeakMap(),
   atributos: new WeakMap(),
@@ -6881,7 +6947,7 @@ App.i18n = {
         if (row.Nombre && row.Apellidos) protectedValues.add(row.Nombre + ' ' + row.Apellidos);
       });
     });
-    function skip(el) { return !el || el.closest('script,style,[data-no-i18n],[translate="no"],.jug-nombre,.li-name,.detalle-nombre,.eq-perfil-nombre,.jug-justif-aviso,#user-badge-name'); }
+    function skip(el) { return !el || el.closest('script,style,[data-no-i18n],[translate="no"],.jug-nombre,.li-name,.detalle-nombre,.eq-perfil-nombre,#user-badge-name'); }
     function traducir(node) {
       if (skip(node.parentElement) || node.parentElement.closest('textarea')) return;
       var current = node.nodeValue, saved = self.originales.get(node);
@@ -7038,6 +7104,7 @@ App.i18n.patrones.push(
   [/^Última asistencia: (.+)$/, 'Last attended: $1'],
   [/^(\d+) justificadas?$/, '$1 excused'],
   [/^Contactados \((\d+)\)$/, 'Contacted ($1)'],
+  [/^Ver justificación de (.+)$/, 'View explanation for $1'],
   [/^Jugadores con (\d+) o más entrenos seguidos sin venir\. Las faltas justificadas también cuentan\.$/, 'Players who have missed $1 or more training sessions in a row. Excused absences count too.'],
   [/^Ningún jugador acumula (\d+) entrenos seguidos sin venir\.$/, 'No player has missed $1 training sessions in a row.'],
   [/^(\d+) ausencias seguidas en cualquiera de sus equipos, aunque estén justificadas; un retraso corta la racha y las faltas como invitado no cuentan\. También: tendencia de −20 pp o inferior, o al menos 3 ausencias sin justificar en los últimos 28 días\. La tendencia necesita al menos 4 registros recientes y solo se calcula para la temporada activa completa\.$/, '$1 absences in a row across any of their teams, even if explained; a late arrival breaks the run and absences as a guest do not count. Also: a trend of −20 percentage points or lower, or at least 3 unexplained absences in the last 28 days. Trend requires at least 4 valid recent records and applies only to the full active season.'],

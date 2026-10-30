@@ -88,6 +88,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - El formulario de asistencia muestra todos los jugadores del equipo en lista; el usuario toca el nombre para ciclar entre estados.
 - Si un jugador no tiene registro en `Asist_Jugadores` para esa sesión, se considera **sin registrar** (gris).
 - **Alertas de ausencias seguidas**: `Estadisticas.alertasAusencias` (sin tabla) avisa en la tarjeta de equipo cuando un jugador suma `CONFIG.ESTADISTICAS.AUSENCIAS_SEGUIDAS` faltas seguidas en la temporada activa, mirando todos sus equipos; las justificadas cuentan, una P o R corta la racha y las casillas sin marcar y las faltas como invitado no cuentan. Solo admin y entrenadores de ese equipo; «Contactado» vive en `localStorage`. Detalle en `docs/modelo-datos.md`.
+- **Mensaje de justificación**: el buzón de notificaciones (cada entrada se despliega; «Ver sesión» es lo único que navega) y el chip «Justificada» del pase de lista muestran `App.notifications.justificacion`, que formatea con `App.views.justificacion.mensaje`: el mismo texto que la familia ve antes de enviar. Leídas y borradas viven en `localStorage`.
 
 ### Temporadas
 - Una sola temporada activa (`Activa = true`) en cada momento.

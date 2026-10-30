@@ -589,27 +589,38 @@ input, select, textarea { font-family: inherit; }
 
 /* -- Bandeja de notificaciones -- */
 .notification-toolbar { display: flex; justify-content: space-between; gap: 8px; padding: 4px 12px 10px; }
-.notification-toolbar button { min-height: 34px; padding: 0 8px; color: var(--morado); font-size: .72rem; font-weight: 750; }
+.notification-toolbar button { min-height: 40px; padding: 0 8px; color: var(--morado); font-size: .72rem; font-weight: 750; }
 .notification-toolbar button:last-child { color: var(--rojo); }
-.notification-list { display: grid; gap: 1px; }
-.notification-item {
-  display: flex; align-items: center; gap: 6px; min-height: 68px; padding: 8px 10px;
-  border-bottom: 1px solid var(--borde); background: var(--blanco); touch-action: pan-y;
-}
-.notification-item.unread { border-left: 3px solid var(--ambar); background: var(--fondo); }
-.notification-open {
-  display: flex; align-items: center; flex: 1; min-width: 0; gap: 10px; text-align: left;
-}
-.notification-icon { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; background: var(--ambar-s); font-size: 1rem; }
+.notification-list { display: grid; gap: 8px; padding: 0 10px 6px; }
+.notification-item { border: 1px solid var(--borde); border-radius: 14px; background: var(--blanco); touch-action: pan-y; overflow: hidden; }
+.notification-item.unread { box-shadow: inset 3px 0 0 var(--ambar); }
+.notification-item.is-open { border-color: var(--morado-m); }
+.notification-row { display: flex; align-items: center; gap: 2px; min-height: 64px; padding: 6px 4px 6px 12px; }
+.notification-open { display: flex; align-items: center; flex: 1; min-width: 0; min-height: 48px; gap: 10px; color: inherit; text-align: left; }
+.notification-open .club-avatar { flex-shrink: 0; }
+.notification-open:focus-visible { outline: 2px solid var(--morado); outline-offset: 2px; border-radius: 10px; }
 .notification-copy { display: grid; flex: 1; min-width: 0; gap: 3px; }
-.notification-copy strong, .notification-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.notification-copy strong { color: var(--texto); font-size: .8rem; }
-.notification-copy span { color: var(--texto-sec); font-size: .68rem; }
-.notification-unread-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--ambar); }
+.notification-copy strong { overflow: hidden; color: var(--texto); font-size: .82rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.notification-item.unread .notification-copy strong { font-weight: 800; }
+.notification-copy span { color: var(--texto-sec); font-size: .7rem; line-height: 1.35; }
+.notification-unread-dot { flex: 0 0 8px; width: 8px; height: 8px; margin-right: 2px; border-radius: 50%; background: var(--ambar); }
 .notification-item.read .notification-unread-dot { background: transparent; }
-.notification-action { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; border-radius: 50%; color: var(--morado); font-size: .92rem; }
-.notification-action:active { background: var(--fondo); }
-.notification-delete { color: var(--rojo); }
+.notification-action { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; color: var(--texto-sec); transition: background-color .15s, color .15s, transform .1s; }
+.notification-action svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.notification-action:hover, .notification-action:focus-visible { background: var(--morado-s); color: var(--morado); }
+.notification-delete:hover, .notification-delete:focus-visible { background: var(--rojo-s); color: var(--rojo); }
+.notification-action:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+.notification-action:active { transform: scale(.92); }
+.notification-detail { display: grid; gap: 12px; padding: 2px 12px 12px; }
+.notification-session { justify-self: end; min-height: 40px; }
+.justif-detail { display: grid; gap: 10px; }
+.justif-detail-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.justif-detail-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 10px; border: 1px solid var(--borde); border-radius: 999px; background: var(--fondo); color: var(--texto-sec); font-size: .7rem; font-weight: 700; }
+.justif-detail-chip.is-absent { border-color: transparent; background: var(--rojo-s); color: var(--rojo); }
+.justif-detail-chip.is-late { border-color: transparent; background: var(--naranja-s); color: var(--naranja); }
+.justif-detail-msg { padding: 12px 14px; border-left: 3px solid var(--morado-m); border-radius: 10px; background: var(--fondo); color: var(--texto); font-size: .84rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.justif-detail-modal { display: grid; gap: 14px; padding: 4px 16px 16px; }
+.justif-detail-name { color: var(--texto); font-size: .9rem; font-weight: 750; }
 .notification-empty { padding: 30px 16px; color: var(--texto-sec); font-size: .82rem; text-align: center; }
 .notification-empty p + p { margin-top: 6px; font-size: .74rem; }
 
@@ -753,7 +764,12 @@ input, select, textarea { font-family: inherit; }
 }
 .jug-nombre { font-size: .88rem; font-weight: 600; }
 .jug-tipo   { font-size: .7rem; color: var(--texto-sec); }
-.jug-justif-aviso { font-size: .68rem; color: var(--rojo); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jug-justif-aviso { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; min-height: 32px; margin-top: 5px; padding: 4px 11px 4px 8px; border: 1px solid var(--borde); border-radius: 999px; background: var(--blanco); color: var(--morado); font-size: .72rem; font-weight: 750; line-height: 1.2; }
+.jug-justif-aviso svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.jug-justif-aviso span { white-space: nowrap; }
+.jug-justif-aviso .jug-justif-motivo { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--texto-sec); font-weight: 600; }
+.jug-justif-aviso:hover { border-color: var(--morado-m); }
+.jug-justif-aviso:focus-visible { outline: 2px solid var(--morado); outline-offset: 2px; }
 .estado-chip {
   margin-left: auto; width: 36px; height: 36px; border-radius: 50%;
   flex-shrink: 0; display: flex; align-items: center; justify-content: center;
