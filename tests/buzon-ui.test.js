@@ -25,7 +25,7 @@ function cliente() {
     { ID: 'r2', ID_Sesion: 's1', ID_Jugador: 'j2', Estado: 'A', TieneJustificacion: true, TipoJustificacion: 'Ausencia',
       MotivoCategoria: 'Enfermedad', FechaJustificacion: '2026-10-25 10:00' },
   ];
-  return { app, host, modals, abiertas };
+  return { app, host, modals, abiertas, document };
 }
 
 const MENSAJE_ANA = 'Los padres/tutores de Ana García han notificado una llegada con retraso al entrenamiento del Lunes 26/10/2026 a las 18:00 del equipo Cadete. Motivo: Médico. Llegará con unos 15 minutos de retraso. Información adicional: &quot;Dentista&quot;.';
@@ -70,4 +70,59 @@ test('el chip «Justificada» de la sesión abre el mismo mensaje sin escapar ma
   assert.match(modals[1].html, /Ruiz, &lt;b&gt;Leo&lt;\/b&gt;/);
   assert.match(modals[1].html, /han notificado una ausencia/);
   assert.doesNotMatch(modals[1].html, /min</);
+});
+
+// Registros migrados: TipoJustificacion guarda el momento ('pre'/'post') y MensajeGenerado el texto "false".
+function clienteHeredado() {
+  const c = cliente();
+  c.app.cache.equipos = [{ ID: 'sm', Nombre: 'Senior Masculino' }];
+  c.app.cache.jugadores = [{ ID: 'raul', Nombre: 'Raúl', Apellidos: 'Delgado Martínez' }, { ID: 'leo', Nombre: 'Leo', Apellidos: 'Ruiz' }];
+  c.app.cache.jugadoresEquipos = [{ ID_Jugador: 'raul', ID_Equipo: 'sm', Tipo: 'Principal', Activo: true },
+    { ID_Jugador: 'leo', ID_Equipo: 'sm', Tipo: 'Principal', Activo: true }];
+  c.app.cache.sesiones = [{ ID: 's12', ID_Equipo: 'sm', Fecha: '2026-05-12', HoraInicio: '20:00', HoraFin: '22:00', AsistenciaGuardada: true }];
+  c.app.cache.asistJugadores = [
+    { ID: 'h1', ID_Sesion: 's12', ID_Jugador: 'raul', Estado: 'A', TieneJustificacion: true, TipoJustificacion: 'pre',
+      MotivoCategoria: 'Lesión', MotivoDetalle: 'Esguince tobillo derecho', JustificadoPor: 'padres', MensajeGenerado: 'false' },
+    { ID: 'h2', ID_Sesion: 's12', ID_Jugador: 'leo', Estado: 'R', MinutosRetraso: 20, TieneJustificacion: true, TipoJustificacion: 'post',
+      MotivoCategoria: 'Estudios', MotivoDetalle: '', JustificadoPor: 'padres', MensajeGenerado: 'false' },
+  ];
+  c.app.state.sesionId = 's12';
+  return c;
+}
+
+test('el mensaje se formatea desde tipo, minutos, motivo y detalle, nunca desde MensajeGenerado ni TipoJustificacion heredados', () => {
+  const { app } = clienteHeredado();
+  const ausencia = app.notifications.justificacion(app.cache.asistJugadores[0]);
+  assert.equal(ausencia.tipo, 'Ausencia');
+  assert.equal(ausencia.minutos, null);
+  assert.equal(ausencia.mensaje, 'Los padres/tutores de Raúl Delgado Martínez han notificado una ausencia al entrenamiento del Martes 12/05/2026 a las 20:00 ' +
+    'del equipo Senior Masculino. Motivo: Lesión. Información adicional: "Esguince tobillo derecho".');
+  const retraso = app.notifications.justificacion(app.cache.asistJugadores[1]);
+  assert.equal(retraso.tipo, 'Retraso');
+  assert.equal(retraso.minutos, 20);
+  assert.equal(retraso.mensaje, 'Los padres/tutores de Leo Ruiz han notificado una llegada con retraso al entrenamiento del Martes 12/05/2026 a las 20:00 ' +
+    'del equipo Senior Masculino. Motivo: Estudios. Llegará con unos 20 minutos de retraso.');
+});
+
+test('la sesión guardada muestra el chip «Justificada» y abre la misma hoja que el pase de lista', () => {
+  const { app, modals, document } = clienteHeredado();
+  const elementos = new Map();
+  document.getElementById = id => {
+    if (!elementos.has(id)) elementos.set(id, { innerHTML: '', style: {} });
+    return elementos.get(id);
+  };
+  app.views['sesion-guardada'].render();
+  const lista = elementos.get('sesion-ro-justif-lista').innerHTML;
+  assert.match(lista, /class="jug-justif-aviso"[^>]*verJustif\(&quot;raul&quot;\)[\s\S]*?<span>Justificada<\/span>/);
+  assert.match(elementos.get('sesion-ro-jugs').innerHTML, /<span>Justificada<\/span>/);
+  assert.doesNotMatch(lista + elementos.get('sesion-ro-jugs').innerHTML, /justif-badge/);
+
+  app.views['sesion-guardada'].verJustif('raul');
+  app.views.sesion.verJustificacion('raul');
+  const [hoja, paseDeLista] = modals;
+  assert.ok(hoja.html.includes('Información adicional: &quot;Esguince tobillo derecho&quot;.'));
+  assert.match(hoja.html, /is-absent">Ausencia</);
+  assert.doesNotMatch(hoja.html, />false<|\bpre\b/);
+  assert.equal(hoja.title, paseDeLista.title);
+  assert.equal(hoja.html.replace(/<button[^>]*descargarPDF[\s\S]*?<\/button>/, ''), paseDeLista.html);
 });

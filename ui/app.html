@@ -549,11 +549,19 @@ const App = {
         '<p class="justif-detail-msg" data-no-i18n>' + _statsTexto(justif.mensaje) + '</p></div>';
     },
 
-    verJustificacion: function(registro) {
+    // `acciones`: botones extra (HTML) antes de «Cerrar»; el contenido es siempre el del buzón.
+    verJustificacion: function(registro, acciones) {
       var justif = this.justificacion(registro);
       if (!justif) return;
       App.openModal('Justificación', '<div class="justif-detail-modal"><p class="justif-detail-name" data-no-i18n>' + _statsTexto(justif.jugador.Apellidos + ', ' + justif.jugador.Nombre) + '</p>' +
-        this.detalleHtml(justif) + '<button type="button" class="btn btn-secondary btn-full" onclick="App.closeModal()">Cerrar</button></div>');
+        this.detalleHtml(justif) + (acciones || '') + '<button type="button" class="btn btn-secondary btn-full" onclick="App.closeModal()">Cerrar</button></div>');
+    },
+
+    // Chip «Justificada» de la sesión (pase de lista y sesión guardada); `accion` es el JS que abre verJustificacion.
+    chipHtml: function(jugador, accion, motivo) {
+      return '<button type="button" class="jug-justif-aviso" aria-label="Ver justificación de ' + _statsTexto(jugador.Nombre + ' ' + jugador.Apellidos) + '" onclick="event.stopPropagation();' + accion + '">' +
+        this._icons.justificada + '<span>Justificada</span>' +
+        (motivo ? '<span class="jug-justif-motivo" data-no-i18n>· ' + _statsTexto(motivo) + '</span>' : '') + '</button>';
     },
 
     _find: function(teamId, key) {
@@ -1590,8 +1598,9 @@ const App = {
             esInvitado: !!reg && (reg.EsInvitado === true || reg.EsInvitado === 'TRUE'),
             tieneJustif: tieneJustif,
             tipoJustif: reg ? (reg.TipoJustificacion || '') : '',
+            // Tipo legible (Ausencia/Retraso): los registros heredados guardan 'pre'/'post' en TipoJustificacion.
+            tipoAviso: tieneJustif ? App.notifications._tipo(reg) : '',
             motivoJustif: reg ? (reg.MotivoCategoria || '') : '',
-            mensajeJustif: reg ? (reg.MensajeGenerado || '') : '',
           };
         });
 
@@ -1638,12 +1647,12 @@ const App = {
               var estado = item.estado || (item.tieneJustif ? App.views.sesion._estadoJustificacion(item.tipoJustif) : '') || '';
               var preaviso = item.preaviso || '';
               var inv = item.esInvitado;
-              return '<div class="jug-card ' + estado + (preaviso ? ' has-preaviso' : '') + '" data-id="' + j.ID + '" data-estado="' + estado + '" data-preaviso="' + preaviso + '" data-min="' + (item.minutosRetraso || '') + '" data-inv="' + inv + '" data-justif="' + (item.tieneJustif ? 'true' : 'false') + '" data-tipo-justif="' + _esc(item.tipoJustif || '') + '" onclick="App.views.sesion.toggleEstado(this)">' +
+              return '<div class="jug-card ' + estado + (preaviso ? ' has-preaviso' : '') + '" data-id="' + j.ID + '" data-estado="' + estado + '" data-preaviso="' + preaviso + '" data-min="' + (item.minutosRetraso || '') + '" data-inv="' + inv + '" data-justif="' + (item.tieneJustif ? 'true' : 'false') + '" data-tipo-justif="' + _esc(item.tipoAviso) + '" onclick="App.views.sesion.toggleEstado(this)">' +
                 '<div class="jug-dorsal has-avatar">' + App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,32) + (j.Dorsal ? '<span class="jug-dorsal-num">' + _esc(String(j.Dorsal)) + '</span>' : '') + '</div>' +
                 '<div style="flex:1;min-width:0"><div class="jug-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
                 '<div class="jug-tipo">' + (inv ? 'Invitado' : (j.Tipo || '')) + '</div>' +
                 (preaviso ? '<div class="preaviso-tag">Avisó: ' + (preaviso === 'A' ? 'Ausencia' : 'Retraso') + (item.motivoJustif ? ' · ' + _esc(item.motivoJustif) : '') + '</div>' : '') +
-                (item.tieneJustif ? '<button type="button" class="jug-justif-aviso" aria-label="Ver justificación de ' + _statsTexto(j.Nombre + ' ' + j.Apellidos) + '" onclick="event.stopPropagation();App.views.sesion.verJustificacion(' + _statsArgumento(j.ID) + ')">' + App.notifications._icons.justificada + '<span>Justificada</span>' + (item.motivoJustif && !preaviso ? '<span class="jug-justif-motivo" data-no-i18n>· ' + _statsTexto(item.motivoJustif) + '</span>' : '') + '</button>' : '') +
+                (item.tieneJustif ? App.notifications.chipHtml(j, 'App.views.sesion.verJustificacion(' + _statsArgumento(j.ID) + ')', preaviso ? '' : item.motivoJustif) : '') +
                 '</div>' +
                 App.views.sesion._htmlMinutos(item.minutosRetraso) +
                 '<div class="estado-chip">' + _iconEstado(estado) + '</div></div>';
@@ -1725,11 +1734,15 @@ const App = {
         App.views.sesion._startAutoSave();
       },
 
-      // El chip «Justificada» abre el mismo mensaje que la familia vio antes de enviar.
-      verJustificacion: function(jugadorId) {
-        App.notifications.verJustificacion(App.cache.asistJugadores.find(function(r) {
+      _registroJustificacion: function(jugadorId) {
+        return App.cache.asistJugadores.find(function(r) {
           return r.ID_Sesion === App.state.sesionId && r.ID_Jugador === jugadorId && (r.TieneJustificacion === true || r.TieneJustificacion === 'TRUE');
-        }));
+        });
+      },
+
+      // Chip «Justificada» (pase de lista y sesión guardada): abre el mismo mensaje que el buzón.
+      verJustificacion: function(jugadorId, acciones) {
+        App.notifications.verJustificacion(this._registroJustificacion(jugadorId), acciones);
       },
 
       toggleEstado: function(card) {
@@ -2268,34 +2281,23 @@ const App = {
         var justificadas = data.jugadores.filter(function(item) {
           return (item.estado === 'A' || item.estado === 'R') && item.tieneJustif;
         });
-        App.views['sesion-guardada']._justifItems = justificadas.map(function(item) {
-          var j = item.jugador;
-          return {
-            nombre: j.Apellidos + ', ' + j.Nombre,
-            fecha: sesion.Fecha,
-            tipo: item.tipoJustif || (item.estado === 'A' ? 'Ausencia' : 'Retraso'),
-            motivo: item.motivoJustif || '',
-            mensaje: item.mensajeJustif || '(Sin mensaje generado)',
-          };
-        });
         var justifBloque = document.getElementById('sesion-ro-justif-bloque');
         var justifLista  = document.getElementById('sesion-ro-justif-lista');
         if (justifBloque && justifLista) {
           if (justificadas.length) {
             justifBloque.style.display = '';
-            justifLista.innerHTML = justificadas.map(function(item, idx) {
-              var j = item.jugador;
+            justifLista.innerHTML = justificadas.map(function(item) {
+              var j = item.jugador, id = _statsArgumento(j.ID);
               var chipClass = item.estado === 'A' ? 'A' : 'R';
               var tipoLabel = item.estado === 'A' ? 'Ausente' : 'Retraso';
-              return '<div class="justif-ro-item" onclick="App.views[\'sesion-guardada\'].verJustif(' + idx + ')">' +
+              return '<div class="justif-ro-item" onclick="App.views[\'sesion-guardada\'].verJustif(' + id + ')">' +
                 App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,28) +
                 '<div style="flex:1;min-width:0">' +
-                  '<div class="li-name" style="font-size:.86rem">' + _esc(j.Apellidos) + ', ' + _esc(j.Nombre) + '</div>' +
-                  (item.motivoJustif ? '<div style="font-size:.73rem;color:var(--texto-sec)">' + _esc(item.motivoJustif) + '</div>' : '') +
+                  '<div class="li-name" style="font-size:.86rem">' + _statsTexto(j.Apellidos + ', ' + j.Nombre) + '</div>' +
+                  App.notifications.chipHtml(j, 'App.views[\'sesion-guardada\'].verJustif(' + id + ')', item.motivoJustif) +
                 '</div>' +
                 '<span class="ro-chip ' + chipClass + '" style="font-size:.65rem;flex-shrink:0">' + tipoLabel + '</span>' +
-                '<span class="justif-badge" style="flex-shrink:0"></span>' +
-                '<button class="btn-justif-pdf" onclick="event.stopPropagation();App.views[\'sesion-guardada\'].descargarPDF(' + idx + ')" title="Descargar justificación en PDF">&#x21E9;&nbsp;PDF</button>' +
+                '<button class="btn-justif-pdf" onclick="event.stopPropagation();App.views[\'sesion-guardada\'].descargarPDF(' + id + ')" title="Descargar justificación en PDF">&#x21E9;&nbsp;PDF</button>' +
                 '</div>';
             }).join('');
           } else {
@@ -2314,14 +2316,14 @@ const App = {
               var justifTag = (item.tieneJustif && !esIncidencia) ? '<span class="jrm-tag justif">Pre-just.</span>' : '';
               var alertBadge = (esIncidencia && !item.tieneJustif)
                 ? '<span class="calendar-alert" title="Sin justificar" aria-label="Sin justificar">!</span>' : '';
-              var justifBadge = (esIncidencia && item.tieneJustif)
-                ? '<span class="justif-badge" style="font-size:.6rem;padding:2px 5px"></span>' : '';
+              var justifChip = (esIncidencia && item.tieneJustif)
+                ? App.notifications.chipHtml(j, 'App.views[\'sesion-guardada\'].verJustif(' + _statsArgumento(j.ID) + ')') : '';
               return '<div class="jug-ro-mini ' + estado + '">' +
                 App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,28) +
                 '<div class="jrm-info"><span class="jrm-nombre">' + j.Apellidos + ', ' + j.Nombre + '</span>' +
-                tagHtml + justifTag + '</div>' +
+                tagHtml + justifTag + justifChip + '</div>' +
                 '<span class="ro-chip ' + chipClass + '">' + chipLabel + '</span>' +
-                alertBadge + justifBadge + '</div>';
+                alertBadge + '</div>';
             }).join('')
           : '<div class="empty-state" style="padding:20px"><p>Sin jugadores</p></div>';
 
@@ -2339,30 +2341,19 @@ const App = {
           : '<div class="empty-state" style="padding:20px"><p>Sin entrenadores</p></div>';
       },
 
-      _justifItems: [],
-
-      verJustif: function(idx) {
-        var item = (App.views['sesion-guardada']._justifItems || [])[idx];
-        if (!item) return;
-        App.openModal('Justificaci\u00f3n \u2014 ' + item.nombre,
-          '<div style="padding:0 4px">' +
-          '<div style="font-size:.75rem;color:var(--texto-sec);margin-bottom:12px">' +
-          _esc(item.fecha) + ' &middot; ' + _esc(item.tipo) + (item.motivo ? ' &middot; ' + _esc(item.motivo) : '') +
-          '</div>' +
-          '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.85rem;line-height:1.6;margin:0;padding:12px;background:var(--fondo);border-radius:8px;border:1px solid var(--borde)">' + _esc(item.mensaje) + '</pre>' +
-          '<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">' +
-          '<button class="btn btn-secondary" onclick="App.closeModal()">Cerrar</button>' +
-          '<button class="btn btn-primary" onclick="App.views[\'sesion-guardada\'].descargarPDF(' + idx + ')">&#x21E9;&nbsp;PDF</button>' +
-          '</div></div>'
-        );
+      // Misma hoja que el chip del pase de lista y el buzón, con la descarga en PDF.
+      verJustif: function(jugadorId) {
+        App.views.sesion.verJustificacion(jugadorId, '<button type="button" class="btn btn-primary btn-full" onclick="App.views[\'sesion-guardada\'].descargarPDF(' + _statsArgumento(jugadorId) + ')">&#x21E9;&nbsp;PDF</button>');
       },
 
-      descargarPDF: function(idx) {
-        var item = (App.views['sesion-guardada']._justifItems || [])[idx];
-        if (!item) return;
-        var safeName = (item.nombre + '_' + item.fecha + '_' + item.tipo).replace(/[^a-zA-Z\u00c0-\u024f0-9_\-]/g, '_');
+      descargarPDF: function(jugadorId) {
+        var justif = App.notifications.justificacion(App.views.sesion._registroJustificacion(jugadorId));
+        if (!justif) return;
+        var nombre = justif.jugador.Apellidos + ', ' + justif.jugador.Nombre, fecha = justif.sesion.Fecha;
+        var tipo = justif.tipo + (justif.minutos ? ' (' + justif.minutos + ' min)' : '');
+        var safeName = (nombre + '_' + fecha + '_' + justif.tipo).replace(/[^a-zA-Z\u00c0-\u024f0-9_\-]/g, '_');
         var titulo = 'Justificacion_' + safeName + '.pdf';
-        var msgHtml = _esc(item.mensaje).replace(/\n/g, '<br>');
+        var msgHtml = _statsTexto(justif.mensaje);
         var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + titulo + '</title>' +
           '<style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;max-width:620px;margin:40px auto;color:#222;line-height:1.6;padding:0 16px}' +
           'h2{font-size:1.15rem;border-bottom:2px solid #4CAF50;padding-bottom:8px;color:#2e7d32;margin-top:0}' +
@@ -2374,9 +2365,9 @@ const App = {
           '</head><body>' +
           '<h2>Justificaci\u00f3n de incidencia \u2014 CB Baeza</h2>' +
           '<div class="meta">' +
-          '<strong>Jugador:</strong> ' + _esc(item.nombre) + '<br>' +
-          '<strong>Fecha:</strong> ' + _esc(item.fecha) + '<br>' +
-          '<strong>Tipo:</strong> ' + _esc(item.tipo) + (item.motivo ? '<br><strong>Motivo:</strong> ' + _esc(item.motivo) : '') +
+          '<strong>Jugador:</strong> ' + _statsTexto(nombre) + '<br>' +
+          '<strong>Fecha:</strong> ' + _statsTexto(fecha) + '<br>' +
+          '<strong>Tipo:</strong> ' + _statsTexto(tipo) + '<br><strong>Motivo:</strong> ' + _statsTexto(justif.motivo) +
           '</div>' +
           '<div class="msg">' + msgHtml + '</div>' +
           '<div class="footer">Generado autom\u00e1ticamente \u2014 CB Baeza</div>' +
