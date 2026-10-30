@@ -29,12 +29,15 @@ function client(admin = false, fields = {}) {
 
 const playerData = {Nombre:'Ana',Apellidos:'Baeza',Dorsal:'0',FechaNac:'2010-01-02',Telefono:'600000000',Email:'ana@example.test',NombrePadre1:'Familiar',ApellidosPadre1:'Uno',TelefonoPadre1:'600000001',EmailPadre1:'familia@example.test',NotificarAusenciasPadre1:true,NombrePadre2:'Familiar',ApellidosPadre2:'Dos',TelefonoPadre2:'600000002',EmailPadre2:'otro@example.test',NotificarAusenciasPadre2:false};
 
-test('detalle usa dos acciones SVG compartidas; entrenador ajeno no obtiene permisos y propio usa cuenta personal', () => {
+test('detalle usa tres acciones SVG compartidas (contacto, perfil, seguridad); entrenador ajeno no obtiene permisos y propio usa cuenta personal', () => {
   const {app,calls} = client();
-  const html = app.account.accionesDetalleHtml('jugador','j');
-  assert.equal((html.match(/<button /g) || []).length,2);
-  assert.equal((html.match(/<svg /g) || []).length,2);
-  assert.match(html,/perfil-usuario/); assert.match(html,/seguridad/);
+  const html = app.account.accionesDetalleHtml('jugador','j',true);
+  assert.equal((html.match(/<button /g) || []).length,3);
+  assert.equal((html.match(/<svg class="account-menu-icon"/g) || []).length,3);
+  assert.match(html,/_statsContacto\('jugador','j'\)/); assert.match(html,/perfil-usuario/); assert.match(html,/seguridad/);
+  const soloContacto = app.account.accionesDetalleHtml('entrenador','e',false);
+  assert.equal((soloContacto.match(/<button /g) || []).length,1);
+  assert.doesNotMatch(soloContacto,/perfil-usuario|seguridad/);
   app.state.detalleEntrenadorId='e';
   assert.equal(app.puedeEditarDetalle('entrenador-detalle'),false);
   app.account.open('entrenador','e','perfil-usuario');

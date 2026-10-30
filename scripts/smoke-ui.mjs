@@ -42,7 +42,7 @@ function installShim(fixture, ahora) {
   window.__ahora = ahora;
   window.__role = new URLSearchParams(location.search).get('role') || 'admin';
   localStorage.clear();
-  localStorage.setItem('cb_baeza_prefs', JSON.stringify({ idioma:preferenceParams.get('lang') || 'es', tema:preferenceParams.get('theme') || 'clasico' }));
+  localStorage.setItem('cb_baeza_prefs', JSON.stringify({ idioma:preferenceParams.get('lang') || 'es', tema:preferenceParams.get('theme') || 'claro' }));
   localStorage.setItem('cb_baeza_auth', JSON.stringify(window.__role === 'jugador'
     ? { tipo: 'jugador', usuario: 'bruno', pin: '1234' }
     : { tipo: 'entrenador', email: 'luis@example.test', pin: '1234' }));
@@ -256,7 +256,7 @@ function driveViews() {
             row.click(); await settle();
             if (App.state.currentView !== target || !document.getElementById('btn-back').classList.contains('visible')) throw new Error('La opción no abre una subpantalla con vuelta: ' + target);
             if (target === 'ajustes-idioma' && !document.getElementById('preferencia-idioma')) throw new Error('Falta selector de idioma');
-            if (target === 'ajustes-apariencia' && document.querySelectorAll('#ajustes-apariencia-contenido .theme-option').length !== 5) throw new Error('Faltan temas en apariencia');
+            if (target === 'ajustes-apariencia' && document.querySelectorAll('#ajustes-apariencia-contenido .theme-option').length !== 3) throw new Error('Faltan temas en apariencia');
             App.goBack(); await settle();
             if (App.state.currentView !== 'ajustes') throw new Error('No vuelve al listado de ajustes');
           }
@@ -550,7 +550,7 @@ async function main() {
         console.log('Captura ' + role + '/' + state + ' (412x915): ' + screenshotState);
       }
       url.searchParams.delete('state');
-      for (const theme of ['noche','medianoche']) {
+      for (const theme of ['oscuro','patrimonio']) {
         for (const view of role === 'admin' ? ['equipos','equipos-admin','jugadores-admin','entrenadores-admin','equipo-detalle','jugador-detalle','entrenador-detalle','informes','ajustes','ajustes-idioma','ajustes-apariencia','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'] : ['perfil-jugador','mis-stats','mi-equipo','ajustes','ajustes-idioma','ajustes-apariencia']) {
           const preferenceUrl = new URL(url.href);
           preferenceUrl.searchParams.set('theme',theme);

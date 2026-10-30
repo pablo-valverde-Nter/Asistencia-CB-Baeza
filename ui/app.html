@@ -335,56 +335,66 @@ const App = {
         html += '<div class="calendar-empty">No hay entrenamientos este d&#237;a</div>';
       } else {
         html += '<div class="calendar-events">' + seleccionados.map(function(s) {
-          var label = '';
-          var eventClass = 'scheduled';
-          var subline = s.HoraInicio + ' - ' + s.HoraFin;
-          var tituloEvento = 'Entrenamiento';
-          if (mode === 'player') {
-            var reg = App.cache.asistJugadores.find(function(r) {
-              return r.ID_Sesion === s.ID && r.ID_Jugador === jugadorId;
-            });
-            var justificada = reg && (reg.TieneJustificacion === true || reg.TieneJustificacion === 'TRUE');
-            var estado = App.cache.getEstadoAsistencia(reg) || '';
-            var etiquetas = { P: 'Presente', A: 'Ausente', R: 'Retraso' };
-            label = justificada ? 'Justificada' : (etiquetas[estado] || (s.Fecha >= hoy ? 'Pr&oacute;ximo' : 'Sin registrar'));
-            eventClass = justificada ? 'justified' : (estado ? estado.toLowerCase() : 'unmarked');
-            if (estado === 'A' || estado === 'R') {
-              label = justificada
-                ? '<span class="justif-badge">Justificada</span>'
-                : '<span class="calendar-event-unjustified"><span class="calendar-alert" aria-hidden="true">!</span>' + label + '</span>';
-            }
-            var equipo = App.cache.getEquipoById(s.ID_Equipo);
-            if (equipo) tituloEvento = _esc(equipo.Nombre);
-          } else {
-            var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada;
-            label = s._loading ? 'Creando' : (guardada ? 'Registrada' : (s.Fecha < hoy ? 'Pendiente' : 'Pr&oacute;ximo'));
-            eventClass = s._loading ? 'loading' : (guardada ? 'registered' : (s.Fecha < hoy ? 'pending' : 'scheduled'));
-          }
-          var cancelada = s.Cancelada === true || s.Cancelada === 'TRUE';
-          if (cancelada) { label = 'Cancelada'; eventClass = 'cancelled'; }
-          var stats = mode === 'coach' && !cancelada && s._statsJug
-            ? '<small class="calendar-event-stats"><span class="p">P ' + s._statsJug.P + '</span><span class="a">A ' + s._statsJug.A + '</span><span class="r">R ' + s._statsJug.R + '</span></small>'
-            : '';
-          var click = mode === 'player'
-            ? "App.views['mis-entrenamientos'].abrirDetalle('" + s.ID + "')"
-            : "App.views.sesiones.abrirSesion('" + s.ID + "')";
-          var disabled = s._loading ? ' disabled' : '';
-          var justifCount = mode === 'coach' ? App.notifications.sessionJustificationCount(s) : 0;
-          var justifBadge = justifCount
-            ? '<span class="session-justif-badge" aria-label="' + justifCount + ' justificaciones pendientes de guardar"><span aria-hidden="true">&#x26A0;</span>' + justifCount + '</span>'
-            : '';
-          var unjustifiedCount = mode === 'coach' ? App.notifications.sessionUnjustifiedCount(s) : 0;
-          var unjustifiedBadge = unjustifiedCount
-            ? '<span class="session-unjustified-badge" aria-label="' + unjustifiedCount + ' jugadores con faltas o retrasos sin justificar"><span aria-hidden="true">&#x26A0;</span>' + unjustifiedCount + '</span>'
-            : '';
-          return '<button class="calendar-event ' + eventClass + '" onclick="' + click + '"' + disabled + '>' +
-            '<span class="calendar-event-time"><strong>' + s.HoraInicio + '</strong><small>' + s.HoraFin + '</small></span>' +
-            '<span class="calendar-event-copy"><strong>' + tituloEvento + '</strong>' + stats + '</span>' +
-            justifBadge + unjustifiedBadge + '<span class="calendar-event-status">' + label + '</span><span class="calendar-event-arrow">&#8250;</span></button>';
+          return App.calendar.tarjetaSesion(s, mode, jugadorId, hoy);
         }).join('') + '</div>';
       }
       html += '</div></div></div></div></section></div>';
       container.innerHTML = html;
+    },
+
+    // Tarjeta de sesión compartida por Registrar asistencia (agenda del día) y el Historial de sesiones.
+    // conFecha muestra el día en el recuadro izquierdo y el horario bajo el título.
+    tarjetaSesion: function(s, mode, jugadorId, hoy, conFecha) {
+      var label = '';
+      var eventClass = 'scheduled';
+      var subtitulo = [conFecha ? s.HoraInicio + ' - ' + s.HoraFin : '', s.EsExtra === true || s.EsExtra === 'TRUE' ? 'Extra' : ''].filter(Boolean).join(' · ');
+      var tituloEvento = 'Entrenamiento';
+      if (mode === 'player') {
+        var reg = App.cache.asistJugadores.find(function(r) {
+          return r.ID_Sesion === s.ID && r.ID_Jugador === jugadorId;
+        });
+        var justificada = reg && (reg.TieneJustificacion === true || reg.TieneJustificacion === 'TRUE');
+        var estado = App.cache.getEstadoAsistencia(reg) || '';
+        var etiquetas = { P: 'Presente', A: 'Ausente', R: 'Retraso' };
+        label = justificada ? 'Justificada' : (etiquetas[estado] || (s.Fecha >= hoy ? 'Pr&oacute;ximo' : 'Sin registrar'));
+        eventClass = justificada ? 'justified' : (estado ? estado.toLowerCase() : 'unmarked');
+        if (estado === 'A' || estado === 'R') {
+          label = justificada
+            ? '<span class="justif-badge">Justificada</span>'
+            : '<span class="calendar-event-unjustified"><span class="calendar-alert" aria-hidden="true">!</span>' + label + '</span>';
+        }
+        var equipo = App.cache.getEquipoById(s.ID_Equipo);
+        if (equipo) tituloEvento = _esc(equipo.Nombre);
+      } else {
+        var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada;
+        label = s._loading ? 'Creando' : (guardada ? 'Registrada' : (s.Fecha < hoy ? 'Pendiente' : 'Pr&oacute;ximo'));
+        eventClass = s._loading ? 'loading' : (guardada ? 'registered' : (s.Fecha < hoy ? 'pending' : 'scheduled'));
+      }
+      var cancelada = s.Cancelada === true || s.Cancelada === 'TRUE';
+      if (cancelada) { label = 'Cancelada'; eventClass = 'cancelled'; }
+      var stats = mode === 'coach' && !cancelada && s._statsJug
+        ? '<small class="calendar-event-stats"><span class="p">P ' + s._statsJug.P + '</span><span class="a">A ' + s._statsJug.A + '</span><span class="r">R ' + s._statsJug.R + '</span></small>'
+        : '';
+      var click = mode === 'player'
+        ? "App.views['mis-entrenamientos'].abrirDetalle('" + s.ID + "')"
+        : "App.views.sesiones.abrirSesion('" + s.ID + "')";
+      var disabled = s._loading ? ' disabled' : '';
+      var justifCount = mode === 'coach' ? App.notifications.sessionJustificationCount(s) : 0;
+      var justifBadge = justifCount
+        ? '<span class="session-justif-badge" aria-label="' + justifCount + ' justificaciones pendientes de guardar"><span aria-hidden="true">&#x26A0;</span>' + justifCount + '</span>'
+        : '';
+      var unjustifiedCount = mode === 'coach' ? App.notifications.sessionUnjustifiedCount(s) : 0;
+      var unjustifiedBadge = unjustifiedCount
+        ? '<span class="session-unjustified-badge" aria-label="' + unjustifiedCount + ' jugadores con faltas o retrasos sin justificar"><span aria-hidden="true">&#x26A0;</span>' + unjustifiedCount + '</span>'
+        : '';
+      var fecha = new Date(s.Fecha + 'T12:00:00');
+      var recuadro = conFecha
+        ? '<span class="calendar-event-time calendar-event-date"><small>' + fecha.toLocaleDateString(App.preferences.locale(), { weekday: 'short' }) + '</small><strong>' + fecha.getDate() + '</strong></span>'
+        : '<span class="calendar-event-time"><strong>' + s.HoraInicio + '</strong><small>' + s.HoraFin + '</small></span>';
+      return '<button class="calendar-event ' + eventClass + '" onclick="' + click + '"' + disabled + '>' + recuadro +
+        '<span class="calendar-event-copy"><strong>' + tituloEvento + '</strong>' +
+        (subtitulo ? '<small class="calendar-event-hours">' + subtitulo + '</small>' : '') + stats + '</span>' +
+        justifBadge + unjustifiedBadge + '<span class="calendar-event-status">' + label + '</span><span class="calendar-event-arrow">&#8250;</span></button>';
     },
 
     // Hoy si tiene entrenamientos; si no, el más cercano de esta semana (a igual distancia, el próximo); si no hay, hoy.
@@ -1189,8 +1199,12 @@ const App = {
       },
 
       _renderListas: function(sesiones) {
-        var hoy = _hoy();
-        // Pre-computar stats desde caché para sesiones ya guardadas
+        App.views.sesiones._precalcularStats(sesiones);
+        App.calendar.render('team:' + App.state.equipoSesionesId, 'sesiones-calendar', sesiones, 'coach');
+      },
+
+      // Recuentos P/A/R de las sesiones guardadas, leídos de la caché; los usa la tarjeta de sesión.
+      _precalcularStats: function(sesiones) {
         sesiones.forEach(function(s) {
           var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE';
           if (guardada && !s._statsJug) {
@@ -1204,8 +1218,6 @@ const App = {
             }
           }
         });
-
-        App.calendar.render('team:' + App.state.equipoSesionesId, 'sesiones-calendar', sesiones, 'coach');
       },
 
       abrirSesion: function(sesionId) {
@@ -3108,6 +3120,7 @@ const App = {
         var hoy = _hoy();
         var sesiones = App.cache.getSesionesByEquipo(equipoId);
         var pasadas  = sesiones.filter(function(s) { return s.Fecha < hoy; });
+        App.views.sesiones._precalcularStats(pasadas);
 
         // Agrupar pasadas por mes YYYY-MM, orden descendente
         var meses = {};
@@ -3117,63 +3130,20 @@ const App = {
           meses[mes].push(s);
         });
         var mesesOrdenados = Object.keys(meses).sort(function(a, b) { return a < b ? 1 : -1; });
-        var mesesNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-        // Pre-computar stats desde caché para sesiones ya guardadas
-        sesiones.forEach(function(s) {
-          var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE';
-          if (guardada && !s._statsJug) {
-            var rs = App.cache.asistJugadores.filter(function(r) { return r.ID_Sesion === s.ID; });
-            if (rs.length) {
-              s._statsJug = {
-                P: rs.filter(function(r) { return App.cache.getEstadoRegistrado(r) === 'P'; }).length,
-                A: rs.filter(function(r) { return App.cache.getEstadoRegistrado(r) === 'A'; }).length,
-                R: rs.filter(function(r) { return App.cache.getEstadoRegistrado(r) === 'R'; }).length
-              };
-            }
-          }
-        });
+        // Mismo panel y tarjeta de sesión que Registrar asistencia; el recuadro muestra el día.
+        var html = mesesOrdenados.map(function(mes) {
+          var lista = meses[mes];
+          var titulo = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)) - 1, 1).toLocaleDateString(App.preferences.locale(), { month: 'long', year: 'numeric' });
+          return '<section class="calendar-weekly historial-mes" aria-label="' + titulo + '">' +
+            '<div class="calendar-weekly-heading"><div><h2>' + titulo + '</h2><span>' + lista.length + (lista.length === 1 ? ' entrenamiento' : ' entrenamientos') + '</span></div>' +
+            '<span class="calendar-weekly-total">' + lista.length + '</span></div>' +
+            '<div class="calendar-events">' + lista.slice().reverse().map(function(s) { return App.calendar.tarjetaSesion(s, 'coach', null, hoy, true); }).join('') + '</div>' +
+            '</section>';
+        }).join('');
 
-        function htmlSesion(s) {
-          var f = _fmtFecha(s.Fecha);
-          var extra = (s.EsExtra === true || s.EsExtra === 'TRUE') ? '<span class="badge-extra">Extra</span>' : '';
-          var badgeHtml = '';
-          var statsHtml = '';
-          var sinRegistrar = '';
-          var guardada = s.AsistenciaGuardada === true || s.AsistenciaGuardada === 'TRUE' || s._asistRegistrada;
-          if (s.Cancelada === true || s.Cancelada === 'TRUE') {
-            badgeHtml = '<span class="sc-status-badge">Cancelada</span>';
-          } else if (guardada) {
-            badgeHtml = '<span class="sc-status-badge registrada">Registrada</span>';
-            if (s._statsJug) {
-              statsHtml = '<div class="sc-stats">&#10003;' + s._statsJug.P + ' &middot; &#10007;' + s._statsJug.A +
-                (s._statsJug.R ? ' &middot; &#8987;' + s._statsJug.R : '') + '</div>';
-            }
-          } else if (s.Fecha < hoy) {
-            badgeHtml = '<span class="sc-status-badge pendiente">!</span>';
-            sinRegistrar = ' sin-registrar';
-          }
-          return '<div class="sesion-card' + sinRegistrar + '" onclick="App.views.sesiones.abrirSesion(\'' + s.ID + '\')">' +
-            '<div class="sc-fecha"><div class="dia">' + f.d + '</div><div class="mes">' + f.m + '</div></div>' +
-            '<div class="sc-info" style="flex:1"><div class="dia-n">' + f.dn + '</div>' +
-            '<div class="hora">' + s.HoraInicio + '&ndash;' + s.HoraFin + '</div>' +
-            statsHtml + '</div>' +
-            badgeHtml + extra + '</div>';
-        }
-
-        var html = '';
-        mesesOrdenados.forEach(function(mes) {
-          var partes = mes.split('-');
-          var mesNombre = mesesNames[Number(partes[1]) - 1] + ' ' + partes[0];
-          html += '<div class="historial-mes-hdr">' + mesNombre + ' (' + meses[mes].length + ')</div>';
-          html += meses[mes].slice().reverse().map(htmlSesion).join('');
-        });
-
-        if (!html) {
-          html = '<div class="empty-state" style="padding:48px 24px"><p>Sin sesiones registradas</p></div>';
-        }
-
-        document.getElementById('historial-lista').innerHTML = html;
+        document.getElementById('historial-lista').innerHTML = '<div class="calendar-wrap">' +
+          (html || '<p class="calendar-weekly-empty">Sin sesiones registradas</p>') + '</div>';
       },
     },
 
@@ -3197,8 +3167,7 @@ const App = {
           (j.Dorsal ? '<div class="detalle-sub">Dorsal ' + _esc(String(j.Dorsal)) + '</div>' : '') +
           (j.FechaNac ? '<div class="detalle-meta">Nac. ' + j.FechaNac + '</div>' : '') +
           '</div>' +
-          '<button class="detalle-settings" type="button" aria-label="Contacto del jugador" title="Contacto" onclick="_statsContacto(\'jugador\',App.state.detalleJugadorId)">☎</button>' +
-          (App.puedeEditarDetalle('jugador-detalle') ? App.account.accionesDetalleHtml('jugador', id) : '') +
+          App.account.accionesDetalleHtml('jugador', id, App.puedeEditarDetalle('jugador-detalle')) +
           '</div>';
 
 
@@ -3227,11 +3196,9 @@ const App = {
         var html = '<div class="detalle-perfil">' +
           '<div class="detalle-avatar">' + App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,72) + '</div>' +
           '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
-          '<div class="detalle-sub">' + (e.Email || '') + '</div>' +
-          (e.Telefono ? '<div class="detalle-meta">' + e.Telefono + '</div>' : '') +
+          (e.Telefono ? '<div class="detalle-meta">' + _esc(e.Telefono) + '</div>' : '') +
           '</div>' +
-          '<button class="detalle-settings" type="button" aria-label="Contacto del entrenador" title="Contacto" onclick="_statsContacto(\'entrenador\',App.state.detalleEntrenadorId)">☎</button>' +
-          (App.puedeEditarDetalle('entrenador-detalle') ? App.account.accionesDetalleHtml('entrenador', id) : '') +
+          App.account.accionesDetalleHtml('entrenador', id, App.puedeEditarDetalle('entrenador-detalle')) +
           '</div>';
 
         html += _htmlFiltroStats();
@@ -4797,7 +4764,7 @@ App.account = {
   isStaff: function() { return !!this.target; },
   allowed: function() { return !this.target || (App.state.rol !== 'jugador' && (this.target.tipo === 'jugador' || App.state.esAdmin)); },
   icon: function(id) {
-    var paths = {perfil:'<circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>',seguridad:'<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',ajustes:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',idioma:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/>',apariencia:'<path d="M20 14A9 9 0 0 1 10 4a9 9 0 1 0 10 10Z"/>',correo:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/>',privacidad:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',cookies:'<path d="M12 3a9 9 0 1 0 9 9 3 3 0 0 1-4-3 3 3 0 0 1-3-3 3 3 0 0 1-2-3Z"/><path d="M8.5 11.5h.01M12 16h.01M15.5 13.5h.01M8 15.5h.01"/>',salir:'<path d="M10 4H4v16h6m4-12 4 4-4 4m-6-4h13"/>'};
+    var paths = {perfil:'<circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>',seguridad:'<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',contacto:'<path d="M8.2 3.5 10 7.8 7.8 9.6a11 11 0 0 0 6.6 6.6l1.8-2.2 4.3 1.8-.6 3.4a1.6 1.6 0 0 1-1.7 1.3C10.3 19.8 4.2 13.7 3.5 5.8a1.6 1.6 0 0 1 1.3-1.7Z"/>',ajustes:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',idioma:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/>',apariencia:'<path d="M20 14A9 9 0 0 1 10 4a9 9 0 1 0 10 10Z"/>',correo:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/>',privacidad:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',cookies:'<path d="M12 3a9 9 0 1 0 9 9 3 3 0 0 1-4-3 3 3 0 0 1-3-3 3 3 0 0 1-2-3Z"/><path d="M8.5 11.5h.01M12 16h.01M15.5 13.5h.01M8 15.5h.01"/>',salir:'<path d="M10 4H4v16h6m4-12 4 4-4 4m-6-4h13"/>'};
     return '<svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true">' + (paths[id] || paths.ajustes) + '</svg>';
   },
 };
@@ -4806,24 +4773,24 @@ App.accountList = function(entries) {
 };
 
 App.avatars = {
-  balon: ['Balón','<circle cx="32" cy="32" r="18" fill="#d9ad54"/><path d="M14 32h36M32 14v36M19 19c18 4 22 17 26 26M45 19c-18 4-22 17-26 26"/>'],
+  balon: ['Balón','<circle cx="32" cy="32" r="18" fill="var(--avatar-accent)"/><path d="M14 32h36M32 14v36M19 19c18 4 22 17 26 26M45 19c-18 4-22 17-26 26"/>'],
   canasta: ['Canasta','<rect x="13" y="12" width="38" height="25" rx="4"/><path d="M25 25h14v10M19 37h26l-5 15H24zM25 38l7 14 7-14"/>'],
-  camiseta: ['Camiseta','<path d="m23 13-12 8 6 12 6-3v23h24V30l6 3 6-12-12-8c-5 7-19 7-24 0Z" transform="translate(-3 0)"/><path d="M28 29h9l-7 14" stroke="#d9ad54"/>'],
-  zapatilla: ['Zapatilla','<path d="M15 22h12l6 13 16 6c5 2 5 10 0 10H15c-5 0-5-7 0-10Z"/><path d="m30 30 7-3m-4 9 7-3M13 46h39" stroke="#d9ad54"/>'],
+  camiseta: ['Camiseta','<path d="m23 13-12 8 6 12 6-3v23h24V30l6 3 6-12-12-8c-5 7-19 7-24 0Z" transform="translate(-3 0)"/><path d="M28 29h9l-7 14" stroke="var(--avatar-accent)"/>'],
+  zapatilla: ['Zapatilla','<path d="M15 22h12l6 13 16 6c5 2 5 10 0 10H15c-5 0-5-7 0-10Z"/><path d="m30 30 7-3m-4 9 7-3M13 46h39" stroke="var(--avatar-accent)"/>'],
   trofeo: ['Trofeo','<path d="M22 14h20v15c0 15-20 15-20 0ZM22 18H13v7c0 7 9 9 12 9m17-16h9v7c0 7-9 9-12 9M32 40v10m-11 3h22"/>'],
-  silbato: ['Silbato','<path d="m21 25 27-9 4 11-16 7c7 18-21 25-23 7-1-8 3-13 8-16Z"/><circle cx="25" cy="39" r="5"/><path d="m46 13 4-5m3 13 6-2" stroke="#d9ad54"/>'],
-  estrella: ['Estrella','<path d="m32 11 6 14 16 2-12 11 3 16-13-8-13 8 3-16-12-11 16-2Z" fill="#d9ad54"/>'],
+  silbato: ['Silbato','<path d="m21 25 27-9 4 11-16 7c7 18-21 25-23 7-1-8 3-13 8-16Z"/><circle cx="25" cy="39" r="5"/><path d="m46 13 4-5m3 13 6-2" stroke="var(--avatar-accent)"/>'],
+  estrella: ['Estrella','<path d="m32 11 6 14 16 2-12 11 3 16-13-8-13 8 3-16-12-11 16-2Z" fill="var(--avatar-accent)"/>'],
   pista: ['Pista','<rect x="10" y="15" width="44" height="34" rx="4"/><path d="M32 15v34m-22-9h9V24h-9m44 0h-9v16h9"/><circle cx="32" cy="32" r="8"/>'],
-  medalla: ['Medalla','<path d="m18 10 14 23 14-23M25 10l7 12 7-12"/><circle cx="32" cy="41" r="14" fill="#d9ad54"/><path d="m32 33 2 5 5 1-4 3 1 5-4-3-4 3 1-5-4-3 5-1Z"/>'],
+  medalla: ['Medalla','<path d="m18 10 14 23 14-23M25 10l7 12 7-12"/><circle cx="32" cy="41" r="14" fill="var(--avatar-accent)"/><path d="m32 33 2 5 5 1-4 3 1 5-4-3-4 3 1-5-4-3 5-1Z"/>'],
   red: ['Red','<ellipse cx="32" cy="19" rx="23" ry="6"/><path d="m10 21 9 32h26l9-32M18 23l24 30m-16-29 22 23m-2-24L22 53m16-29L16 47M15 35h34M18 45h28"/>'],
-  capitan: ['Capitán','<path d="m14 20 9 9 9-16 9 16 9-9-5 28H19Z" fill="#d9ad54"/><path d="M20 53h24M25 39h14"/>'],
-  rayo: ['Energía','<path d="M35 9 15 36h15l-3 19 23-29H35Z" fill="#d9ad54"/>'],
+  capitan: ['Capitán','<path d="m14 20 9 9 9-16 9 16 9-9-5 28H19Z" fill="var(--avatar-accent)"/><path d="M20 53h24M25 39h14"/>'],
+  rayo: ['Energía','<path d="M35 9 15 36h15l-3 19 23-29H35Z" fill="var(--avatar-accent)"/>'],
 };
 App.avatarHtml = function(fotoURL,nombre,size) {
   size = Number(size) || 40;
   var foto = String(fotoURL || ''), preset = foto.indexOf('avatar:') === 0 && App.avatars[foto.slice(7)];
   var image = /^(https:\/\/|data:image\/[a-z0-9.+-]+;base64,)/i.test(foto);
-  var inside = preset ? '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="#f7edff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">' + preset[1] + '</g></svg>' : image ? '<img src="' + _statsTexto(foto) + '" alt="' + _statsTexto(nombre || 'Foto de perfil') + '" loading="lazy" referrerpolicy="no-referrer">' : '<span>' + _statsTexto(String(nombre || '?').trim().split(/\s+/).slice(0,2).map(function(w) { return w.charAt(0).toUpperCase(); }).join('')) + '</span>';
+  var inside = preset ? '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="var(--avatar-ink)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">' + preset[1] + '</g></svg>' : image ? '<img src="' + _statsTexto(foto) + '" alt="' + _statsTexto(nombre || 'Foto de perfil') + '" loading="lazy" referrerpolicy="no-referrer">' : '<span>' + _statsTexto(String(nombre || '?').trim().split(/\s+/).slice(0,2).map(function(w) { return w.charAt(0).toUpperCase(); }).join('')) + '</span>';
   return '<span class="club-avatar" style="width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size*.34) + 'px"' + (image && !preset ? '' : ' aria-hidden="true"') + '>' + inside + '</span>';
 };
 
@@ -5038,12 +5005,16 @@ function _statsMes(mes) {
 function _statsLeyenda(labels,colores) {
   return '<div class="stats-chart-legend">' + labels.map(function(label,i) { return '<span><i style="background:' + colores[i] + '" aria-hidden="true"></i>' + _statsChartEsc(label) + '</span>'; }).join('') + '</div>';
 }
+// Tinta legible sobre cada color de serie en los tres temas.
+function _statsTinta(color) {
+  return color === 'var(--borde)' ? 'var(--texto)' : /stats-(gold|coral)/.test(color) ? 'var(--chart-ink)' : 'var(--button-ink)';
+}
 function _statsColumnas(filas,labels,colores,titulo,porcentaje) {
   var max = porcentaje ? 100 : Math.max.apply(null,[1].concat(filas.map(function(f) { return f.valores.reduce(function(n,v) { return n+(v || 0); },0); })));
   return '<div class="stats-chart">' + _statsLeyenda(labels,colores) + '<div class="stats-columns-scroll"><div class="stats-columns" role="img" aria-label="' + _statsChartEsc(titulo) + '" style="--stats-columns:' + Math.max(1,filas.length) + '"><div class="stats-yaxis"><span>' + max + (porcentaje ? '%' : '') + '</span><span>' + Math.round(max/2) + '</span><span>0</span></div>' + filas.map(function(f) {
     var total = f.valores.reduce(function(n,v) { return n+(v || 0); },0), texto = f.nombre + ': ' + labels.map(function(label,i) { return label + ' ' + (f.valores[i] == null ? 'sin datos' : f.valores[i] + (porcentaje ? '%' : '')); }).join(' · ') + (f.extra ? ' · ' + f.extra : '');
     var segmentos = f.valores.filter(function(v) { return v > 0; }).length;
-    return '<div class="stats-column"' + _statsChartAttrs(texto) + '><div class="stats-column-plot"><span class="stats-column-value">' + (porcentaje ? _pctTexto(f.valores[0]) : total) + '</span><div class="stats-column-stack" style="height:' + total/max*100 + '%">' + f.valores.map(function(v,i) { return v ? '<span style="height:' + v/total*100 + '%;background:' + colores[i] + ';color:' + (i === 0 ? 'var(--button-ink)' : 'var(--texto)') + '">' + (!porcentaje && segmentos >= 2 && v/max*160 >= 22 ? v : '') + '</span>' : ''; }).join('') + '</div></div><span class="stats-column-label">' + _statsChartEsc(f.nombre) + '</span></div>';
+    return '<div class="stats-column"' + _statsChartAttrs(texto) + '><div class="stats-column-plot"><span class="stats-column-value">' + (porcentaje ? _pctTexto(f.valores[0]) : total) + '</span><div class="stats-column-stack" style="height:' + total/max*100 + '%">' + f.valores.map(function(v,i) { return v ? '<span style="height:' + v/total*100 + '%;background:' + colores[i] + ';color:' + _statsTinta(colores[i]) + '">' + (!porcentaje && segmentos >= 2 && v/max*160 >= 22 ? v : '') + '</span>' : ''; }).join('') + '</div></div><span class="stats-column-label">' + _statsChartEsc(f.nombre) + '</span></div>';
   }).join('') + '</div></div>' + (!filas.length ? '<p class="stats-empty">Sin datos en este periodo</p>' : '') + '</div>';
 }
 function _statsMensual(serie) {
@@ -5288,11 +5259,13 @@ function _statsContacto(tipo,id) {
 
 
 Object.assign(App.account, {
-  accionesDetalleHtml: function(tipo, id) {
-    return ['perfil','seguridad'].map(function(accion) {
-      var titulo = accion === 'perfil' ? 'Perfil' : 'Seguridad';
-      return '<button class="detalle-settings" type="button" aria-label="' + titulo + '" title="' + titulo + '" onclick="App.account.open(\'' + tipo + '\',\'' + _esc(id) + '\',\'' + (accion === 'perfil' ? 'perfil-usuario' : 'seguridad') + '\')">' + App.account.icon(accion) + '</button>';
-    }).join('');
+  // Botones de cabecera de la ficha: contacto siempre; perfil y seguridad solo si se puede editar. Mismo estilo e iconos que el menú de usuario.
+  accionesDetalleHtml: function(tipo, id, editable) {
+    var acciones = [['contacto','Contacto del ' + tipo,'Contacto','_statsContacto(\'' + tipo + '\',\'' + _esc(id) + '\')']];
+    if (editable) acciones.push(['perfil','Perfil','Perfil','App.account.open(\'' + tipo + '\',\'' + _esc(id) + '\',\'perfil-usuario\')'],['seguridad','Seguridad','Seguridad','App.account.open(\'' + tipo + '\',\'' + _esc(id) + '\',\'seguridad\')']);
+    return '<div class="detalle-actions">' + acciones.map(function(a) {
+      return '<button class="detalle-settings" type="button" aria-label="' + a[1] + '" title="' + a[2] + '" onclick="' + a[3] + '">' + App.account.icon(a[0]) + '</button>';
+    }).join('') + '</div>';
   },
   perfilStaffHtml: function(persona) {
     if (!this.isStaff() || !this.allowed()) return '';
@@ -5446,15 +5419,14 @@ Object.assign(App.account, {
 });
 
 App.preferences = {
+  // Debe coincidir con el script de arranque de Index.html (colores de barra y migración de temas retirados).
   temas: [
-    {id:'clasico', nombre:'Morado clásico', colores:['#4A148C','#FFFFFF','#F3E5F5'], barra:'#4A148C'},
-    {id:'lavanda', nombre:'Lavanda', colores:['#65408C','#FFFAFF','#EDE4F5'], barra:'#65408C'},
-    {id:'noche', nombre:'Noche morada', colores:['#BDA0ED','#21142F','#352342'], barra:'#21142F'},
-    {id:'medianoche', nombre:'Medianoche', colores:['#CBACFF','#08060D','#21162E'], barra:'#08060D'},
-    {id:'oro', nombre:'Oro y morado', colores:['#683D86','#FFFCF5','#E7BF65'], barra:'#412253'}
+    {id:'claro', nombre:'Claro', colores:['#4A148C','#FFFFFF','#F3E5F5'], barra:'#4A148C'},
+    {id:'oscuro', nombre:'Oscuro', colores:['#CEADFF','#21142F','#352342'], barra:'#21142F', oscuro:true},
+    {id:'patrimonio', nombre:'Baeza Patrimonio', colores:['#7B1E24','#FFFFFF','#E0DCDC'], barra:'#7B1E24'}
   ],
   idioma: document.documentElement && document.documentElement.lang === 'en' ? 'en' : 'es',
-  tema: document.documentElement && document.documentElement.dataset && document.documentElement.dataset.theme || 'clasico',
+  tema: document.documentElement && document.documentElement.dataset && document.documentElement.dataset.theme || 'claro',
   locale: function() { return this.idioma === 'en' ? 'en-GB' : 'es-ES'; },
   guardar: function(cambios) {
     if (cambios.idioma === 'es' || cambios.idioma === 'en') this.idioma = cambios.idioma;
@@ -5463,7 +5435,7 @@ App.preferences = {
     document.documentElement.dataset.theme = tema.id;
     document.documentElement.lang = this.idioma;
     document.title = this.idioma === 'en' ? 'CB Baeza — Attendance' : 'CB Baeza — Asistencia';
-    document.documentElement.style.colorScheme = /^(noche|medianoche)$/.test(tema.id) ? 'dark' : 'light';
+    document.documentElement.style.colorScheme = tema.oscuro ? 'dark' : 'light';
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = tema.barra;
     try { localStorage.setItem('cb_baeza_prefs', JSON.stringify({idioma:this.idioma,tema:this.tema})); } catch (e) { showToast('No se pudieron guardar los ajustes en este dispositivo','error'); }
@@ -6077,11 +6049,8 @@ App.i18n = {
   "Idioma de la aplicación": "App language",
   "Apariencia": "Appearance",
   "Elige un tema": "Choose a theme",
-  "Morado clásico": "Classic purple",
-  "Lavanda": "Lavender",
-  "Noche morada": "Purple night",
-  "Medianoche": "Midnight",
-  "Oro y morado": "Gold and purple",
+  "Claro": "Light",
+  "Oscuro": "Dark",
   "Seleccionado": "Selected",
   "Seleccionar": "Select",
   "Los cambios se guardan solo en este dispositivo.": "Changes are saved on this device only.",
@@ -6536,6 +6505,7 @@ App.i18n = {
     [/^Datos de (.+) a (.+)$/, 'Data from $1 to $2'],
     [/^Información sobre (.+)$/, 'Information about $1'],
     [/^Contacto del jugador$/, 'Player contact'],
+    [/^Contacto del entrenador$/, 'Coach contact'],
     [/^Aviso enviado: Ausencia$/, 'Notice sent: Absent'],
     [/^Aviso enviado: Retraso$/, 'Notice sent: Late'],
     [/^(\d+) de (\d+)$/, '$1 of $2'],

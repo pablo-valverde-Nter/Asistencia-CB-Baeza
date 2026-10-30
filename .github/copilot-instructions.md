@@ -121,6 +121,8 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - No usar frameworks externos (React, Vue, etc.) — JavaScript vanilla + CSS puro.
 - Los estados de asistencia se renderizan como botones de colores (verde/rojo/amarillo) que el usuario toca para cambiar.
 - Usar `showToast(message, type)` para feedback de acciones (éxito/error).
+- Temas: `claro` (por defecto), `oscuro` y `patrimonio` (Baeza Patrimonio, granate `#7B1E24`). Los componentes usan solo los tokens CSS definidos al inicio de `ui/styles.html` (`--morado`, `--blanco`, `--brand-bg`, `--on-accent`, `--chart-ink`…); un tema nuevo o un color nuevo se declara como token en los tres bloques y mantiene contraste WCAG AA. La lista de temas vive en `App.preferences.temas` y en el script de arranque de `Index.html`, que migra los identificadores retirados.
+- Las tarjetas de sesión (Registrar asistencia e Historial) se generan con `App.calendar.tarjetaSesion`.
 
 ### Nomenclatura
 - Funciones GAS: `camelCase` (ej. `getJugadoresByEquipo`, `registrarAsistencia`).
@@ -143,7 +145,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 | `historico` | `/historico` | Listado y edición del histórico de sesiones |
 | `informes` | `/informes` | Estadísticas y exportaciones |
 | `perfil-usuario` | `/perfil` | Datos personales/contacto y foto (`avatar:<slug>` predefinido o JPEG 128×128 en `FotoURL`) |
-| `ajustes` | `/ajustes` | Idioma (es/en, traductor en cliente) y tema; preferencias en `localStorage.cb_baeza_prefs` |
+| `ajustes` | `/ajustes` | Idioma (es/en, traductor en cliente) y tema (claro, oscuro, Baeza Patrimonio); preferencias en `localStorage.cb_baeza_prefs` |
 | `seguridad` | `/seguridad` | Cambio de PIN/usuario/código con el valor actual, recordatorio por correo y enlace a políticas |
 | `politicas` | `/politicas` | Políticas de privacidad y de cookies |
 

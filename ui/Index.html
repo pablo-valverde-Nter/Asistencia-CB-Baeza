@@ -16,11 +16,18 @@
   (function() {
     var prefs = {};
     try { prefs = JSON.parse(localStorage.getItem('cb_baeza_prefs') || '{}') || {}; } catch (e) {}
-    var colors = { clasico:'#4A148C', lavanda:'#65408C', noche:'#21142F', medianoche:'#08060D', oro:'#412253' };
-    var theme = Object.prototype.hasOwnProperty.call(colors, prefs.tema) ? prefs.tema : 'clasico';
+    // Tres temas; los identificadores retirados se migran al más parecido y se guardan ya migrados.
+    var colors = { claro:'#4A148C', oscuro:'#21142F', patrimonio:'#7B1E24' };
+    var retirados = { clasico:'claro', lavanda:'claro', oro:'claro', noche:'oscuro', medianoche:'oscuro' };
+    var retirado = Object.prototype.hasOwnProperty.call(retirados, prefs.tema);
+    var theme = retirado ? retirados[prefs.tema] : prefs.tema;
+    if (!Object.prototype.hasOwnProperty.call(colors, theme)) theme = 'claro';
+    if (retirado) {
+      try { localStorage.setItem('cb_baeza_prefs', JSON.stringify({ idioma: prefs.idioma === 'en' ? 'en' : 'es', tema: theme })); } catch (e) {}
+    }
     document.documentElement.dataset.theme = theme;
     document.documentElement.lang = prefs.idioma === 'en' ? 'en' : 'es';
-    document.documentElement.style.colorScheme = /^(noche|medianoche)$/.test(theme) ? 'dark' : 'light';
+    document.documentElement.style.colorScheme = theme === 'oscuro' ? 'dark' : 'light';
     document.querySelector('meta[name="theme-color"]').content = colors[theme];
   })();
   </script>

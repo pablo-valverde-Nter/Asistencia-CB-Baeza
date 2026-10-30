@@ -9,7 +9,7 @@ function cliente() {
   const stored = {};
   const elements = { 'ajustes-contenido': { innerHTML: '' }, 'ajustes-idioma-contenido': { innerHTML: '' }, 'ajustes-apariencia-contenido': { innerHTML: '' } };
   const document = {
-    documentElement: { lang: 'es', dataset: { theme: 'clasico' }, style: {} },
+    documentElement: { lang: 'es', dataset: { theme: 'claro' }, style: {} },
     body: {}, addEventListener() {},
     getElementById: id => elements[id],
     querySelector: () => (elements.meta ||= {}),
@@ -22,15 +22,18 @@ function cliente() {
 test('preferences save locally and apply dark theme, language and browser chrome immediately', () => {
   const { app, document, stored } = cliente();
   app.i18n.aplicar = () => {};
-  app.preferences.guardar({ idioma:'en', tema:'medianoche' });
-  assert.deepEqual(JSON.parse(stored.cb_baeza_prefs),{ idioma:'en', tema:'medianoche' });
-  assert.equal(document.documentElement.dataset.theme,'medianoche');
+  app.preferences.guardar({ idioma:'en', tema:'oscuro' });
+  assert.deepEqual(JSON.parse(stored.cb_baeza_prefs),{ idioma:'en', tema:'oscuro' });
+  assert.equal(document.documentElement.dataset.theme,'oscuro');
   assert.equal(document.documentElement.lang,'en');
   assert.equal(document.documentElement.style.colorScheme,'dark');
-  assert.equal(document.querySelector().content,'#08060D');
+  assert.equal(document.querySelector().content,'#21142F');
   assert.equal(app.preferences.locale(),'en-GB');
-  app.preferences.guardar({ idioma:'unexpected', tema:'unknown' });
-  assert.equal(app.preferences.tema,'medianoche');
+  app.preferences.guardar({ tema:'patrimonio' });
+  assert.equal(document.documentElement.style.colorScheme,'light');
+  assert.equal(document.querySelector().content,'#7B1E24');
+  app.preferences.guardar({ idioma:'unexpected', tema:'medianoche' });
+  assert.equal(app.preferences.tema,'patrimonio');
   assert.equal(app.preferences.idioma,'en');
 });
 
@@ -50,12 +53,12 @@ test('translator handles static, decorated and interpolated phrases and restores
 test('settings list shows current choices and opens dedicated controls', () => {
   const { app, elements } = cliente();
   app.preferences.idioma = 'en';
-  app.preferences.tema = 'medianoche';
+  app.preferences.tema = 'patrimonio';
   app.views.ajustes.render();
   const list = elements['ajustes-contenido'].innerHTML;
   assert.match(list,/account-settings-list/);
   assert.match(list,/English/);
-  assert.match(list,/Medianoche/);
+  assert.match(list,/Baeza Patrimonio/);
   assert.match(list,/ajustes-idioma/);
   assert.match(list,/ajustes-apariencia/);
   assert.doesNotMatch(list,/<select|theme-option/);
@@ -66,7 +69,7 @@ test('settings list shows current choices and opens dedicated controls', () => {
   assert.doesNotMatch(idioma,/theme-option/);
   app.views['ajustes-apariencia'].render();
   const temas = elements['ajustes-apariencia-contenido'].innerHTML;
-  assert.equal((temas.match(/class="theme-option"/g) || []).length,5);
+  assert.deepEqual([...temas.matchAll(/guardar\(\{tema:'(\w+)'\}\)/g)].map(m => m[1]),['claro','oscuro','patrimonio']);
   assert.match(temas,/aria-pressed="true"/);
   assert.doesNotMatch(temas,/<select/);
 });
@@ -75,26 +78,47 @@ test('changing a preference keeps its drilldown active and refreshes the selecte
   const { app, elements } = cliente();
   app.i18n.aplicar = () => {};
   app.state.currentView = 'ajustes-apariencia';
-  app.preferences.guardar({tema:'noche'});
+  app.preferences.guardar({tema:'oscuro'});
   assert.equal(app.state.currentView,'ajustes-apariencia');
-  assert.match(elements['ajustes-apariencia-contenido'].innerHTML,/aria-pressed="true" onclick="App.preferences.guardar\(\{tema:'noche'\}\)/);
+  assert.match(elements['ajustes-apariencia-contenido'].innerHTML,/aria-pressed="true" onclick="App.preferences.guardar\(\{tema:'oscuro'\}\)/);
   app.state.currentView = 'ajustes-idioma';
   app.preferences.guardar({idioma:'en'});
   assert.equal(app.state.currentView,'ajustes-idioma');
   assert.match(elements['ajustes-idioma-contenido'].innerHTML,/value="en" translate="no" selected/);
 });
 
-test('prepaint boot restores saved dark theme and English before styles load', () => {
+function arranque(guardado) {
   const index = fs.readFileSync(path.join(__dirname,'../ui/Index.html'),'utf8');
   const script = index.match(/<script>([\s\S]*?)<\/script>/)[1];
-  const html = { dataset:{}, style:{}, lang:'es' }, meta = {};
-  const context = vm.createContext({ document:{ documentElement:html,querySelector:() => meta },localStorage:{ getItem:() => JSON.stringify({tema:'medianoche',idioma:'en'}) } });
-  vm.runInContext(script,context);
-  assert.equal(html.dataset.theme,'medianoche');
+  const html = { dataset:{}, style:{}, lang:'es' }, meta = {}, stored = {};
+  const localStorage = { getItem:() => guardado === undefined ? null : JSON.stringify(guardado), setItem(k,v) { stored[k] = v; } };
+  vm.runInContext(script,vm.createContext({ document:{ documentElement:html,querySelector:() => meta },localStorage }));
+  return { index, html, meta, stored };
+}
+
+test('prepaint boot restores saved dark theme and English before styles load', () => {
+  const { index, html, meta, stored } = arranque({tema:'oscuro',idioma:'en'});
+  assert.equal(html.dataset.theme,'oscuro');
   assert.equal(html.lang,'en');
   assert.equal(html.style.colorScheme,'dark');
-  assert.equal(meta.content,'#08060D');
+  assert.equal(meta.content,'#21142F');
+  assert.deepEqual(stored,{});
   assert.ok(index.indexOf('<script>') < index.indexOf("include('ui/styles')"));
+});
+
+test('prepaint boot migrates retired themes to the closest of the three and saves the migration', () => {
+  for (const [retirado, tema, scheme] of [['clasico','claro','light'],['lavanda','claro','light'],['oro','claro','light'],['noche','oscuro','dark'],['medianoche','oscuro','dark']]) {
+    const { html, stored } = arranque({tema:retirado,idioma:'en'});
+    assert.equal(html.dataset.theme,tema,retirado);
+    assert.equal(html.style.colorScheme,scheme,retirado);
+    assert.deepEqual(JSON.parse(stored.cb_baeza_prefs),{idioma:'en',tema},retirado);
+  }
+  for (const guardado of [undefined,{tema:'desconocido'}]) {
+    const { html, meta, stored } = arranque(guardado);
+    assert.equal(html.dataset.theme,'claro');
+    assert.equal(meta.content,'#4A148C');
+    assert.deepEqual(stored,{});
+  }
 });
 
 test('English covers composite metric labels without changing unfamiliar names', () => {
