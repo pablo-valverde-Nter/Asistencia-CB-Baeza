@@ -35,6 +35,31 @@ test('perfil conserva contacto familiar y ambos interruptores de avisos', () => 
   assert.doesNotMatch(html,/data-perfil="(?:PIN|CodigoPadres|Usuario)"/);
 });
 
+test('campos pendientes: el aviso y el formulario marcan los mismos datos', () => {
+  const fields = { 'perfil-editar-contenido': {}, 'perfil-form': {} };
+  const {app} = client(fields);
+  const pendientes = j => [...app.account.camposPendientes(j)].map(p => p.campo);
+  const familia1 = {NombrePadre1:'Eva', ApellidosPadre1:'Ruiz', TelefonoPadre1:'600000000', EmailPadre1:'eva@example.test'};
+  assert.deepEqual(pendientes({FechaNac:'2012-03-04', ...familia1}), []);
+  assert.deepEqual(pendientes({FechaNac:'  '}), ['FechaNac','NombrePadre1','ApellidosPadre1','TelefonoPadre1','EmailPadre1']);
+  assert.deepEqual(pendientes({FechaNac:'2012-03-04', NombrePadre1:'Eva', NombrePadre2:'Luis', TelefonoPadre2:'611111111'}), ['ApellidosPadre2','EmailPadre2'], 'completa el familiar más avanzado');
+  assert.deepEqual(pendientes({FechaNac:'2012-03-04', NombrePadre1:'Eva', NombrePadre2:'Luis'}), ['ApellidosPadre1','TelefonoPadre1','EmailPadre1'], 'empate: familiar 1');
+  assert.deepEqual(pendientes({NombrePadre2:'Luis', ApellidosPadre2:'Gil', TelefonoPadre2:'611111111', EmailPadre2:'luis@example.test'}), ['FechaNac'], 'basta un familiar completo');
+  assert.equal(app.account.camposPendientes({}).find(p => p.campo === 'TelefonoPadre1').texto, 'Teléfono del familiar 1');
+
+  app.state.rol = 'jugador';
+  app.state.jugador = {ID:'j', Nombre:'Ana', Apellidos:'Baeza', NombrePadre2:'Luis', TelefonoPadre2:'611111111'};
+  app.views['perfil-usuario'].editar();
+  const html = fields['perfil-editar-contenido'].innerHTML;
+  const marcados = [...html.matchAll(/class="form-group perfil-pendiente"><label for="perfil-(\w+)"/g)].map(m => m[1]);
+  assert.deepEqual(marcados, pendientes(app.state.jugador));
+  assert.deepEqual(marcados, ['FechaNac','ApellidosPadre2','EmailPadre2']);
+  assert.match(html, /role="status">Te faltan 3 datos</);
+  assert.match(html, /id="perfil-FechaNac"[^>]*aria-describedby="perfil-FechaNac-pendiente"/);
+  assert.match(html, /id="perfil-FechaNac-pendiente">Falta este dato</);
+  assert.doesNotMatch(html, /id="perfil-NombrePadre2"[^>]*aria-describedby/);
+});
+
 test('foto: el indicador aparece antes de preparar la imagen, que se centra, reduce a 128 y limita el JPEG', async () => {
   const calls = [];
   let image;

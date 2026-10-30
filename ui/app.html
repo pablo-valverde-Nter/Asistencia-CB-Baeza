@@ -2505,12 +2505,7 @@ const App = {
         if (!lista) return;
         var objetivo = Array.prototype.find.call(lista.children, function(el) { return el.dataset.personaId === persona.id; }) || lista.nextElementSibling;
         if (!objetivo) return;
-        var reducido = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        objetivo.scrollIntoView({ block: 'center', behavior: reducido ? 'auto' : 'smooth' });
-        objetivo.classList.remove('resaltado-persona');
-        void objetivo.offsetWidth;
-        objetivo.classList.add('resaltado-persona');
-        setTimeout(function() { objetivo.classList.remove('resaltado-persona'); }, 1900);
+        _resaltarElementos([objetivo]);
       },
 
       _reset: function() {
@@ -3550,36 +3545,13 @@ const App = {
         }
         var perfilAvisoEl = document.getElementById('perfil-configuracion-aviso');
         if (perfilAvisoEl) {
-          var familiares = [
-            { numero: 1, nombre: j.NombrePadre1, apellidos: j.ApellidosPadre1, telefono: j.TelefonoPadre1, email: j.EmailPadre1 },
-            { numero: 2, nombre: j.NombrePadre2, apellidos: j.ApellidosPadre2, telefono: j.TelefonoPadre2, email: j.EmailPadre2 },
-          ];
-          var hayFamiliarCompleto = familiares.some(function(familiar) {
-            return [familiar.nombre, familiar.apellidos, familiar.telefono, familiar.email]
-              .every(function(valor) { return String(valor || '').trim(); });
-          });
-          var faltantesPerfil = [];
-          if (!j.FechaNac) faltantesPerfil.push('Fecha de nacimiento');
-          if (!hayFamiliarCompleto) {
-            var familiarACompletar = familiares.filter(function(familiar) {
-              return [familiar.nombre, familiar.apellidos, familiar.telefono, familiar.email]
-                .some(function(valor) { return String(valor || '').trim(); });
-            }).sort(function(a, b) {
-              var cuenta = function(f) { return [f.nombre, f.apellidos, f.telefono, f.email].filter(function(v) { return String(v || '').trim(); }).length; };
-              return cuenta(b) - cuenta(a);
-            })[0] || familiares[0];
-            var sufijo = ' del familiar ' + familiarACompletar.numero;
-            if (!String(familiarACompletar.nombre || '').trim()) faltantesPerfil.push('Nombre' + sufijo);
-            if (!String(familiarACompletar.apellidos || '').trim()) faltantesPerfil.push('Apellidos' + sufijo);
-            if (!String(familiarACompletar.telefono || '').trim()) faltantesPerfil.push('Teléfono' + sufijo);
-            if (!String(familiarACompletar.email || '').trim()) faltantesPerfil.push('Email' + sufijo);
-          }
+          var faltantesPerfil = App.account.camposPendientes(j);
           perfilAvisoEl.innerHTML = faltantesPerfil.length
             ? '<div class="player-profile-incomplete"><div class="player-profile-incomplete-heading">' +
                 '<span class="player-profile-incomplete-icon" aria-hidden="true">i</span>' +
                 '<strong>Completa la información de tu perfil</strong></div>' +
-                '<ul>' + faltantesPerfil.map(function(texto) { return '<li>' + _esc(texto) + '</li>'; }).join('') + '</ul>' +
-                '<button type="button" onclick="App.navigate(\'perfil-usuario\')">Completar mi perfil <span aria-hidden="true">&#8250;</span></button></div>'
+                '<ul>' + faltantesPerfil.map(function(p) { return '<li>' + _esc(p.texto) + '</li>'; }).join('') + '</ul>' +
+                '<button type="button" onclick="App.navigate(\'perfil-editar\',{pendientes:true})">Completar mi perfil <span aria-hidden="true">&#8250;</span></button></div>'
             : '';
         }
         var statsEl = document.getElementById('perfil-stats');
@@ -3717,7 +3689,7 @@ const App = {
         host.innerHTML = html;
         App.state._formIsDirty = false;
       },
-      editar: function() {
+      editar: function(params) {
         var jugador = App.account.isPlayer(), persona = App.account.persona();
         var host = document.getElementById('perfil-editar-contenido');
         if (!App.account.allowed() || !persona) { host.innerHTML = '<div class="account-card">Sin permiso</div>'; return; }
@@ -3729,8 +3701,16 @@ const App = {
         }
         if (!persona || !persona.ID) { host.innerHTML = '<div class="account-card"><h2>Tu perfil</h2><p>Tu cuenta de administración no tiene ficha de entrenador.</p></div>'; return; }
         this._campos = jugador ? [['FechaNac','Fecha de nacimiento','date'],['Telefono','Teléfono','tel'],['Email','Email','email']] : [['Nombre','Nombre','text'],['Apellidos','Apellidos','text'],['Telefono','Teléfono','tel']];
-        var campo = function(c) { return '<div class="form-group"><label for="perfil-' + c[0] + '">' + c[1] + '</label><input id="perfil-' + c[0] + '" data-perfil="' + c[0] + '" type="' + c[2] + '" value="' + _statsTexto(persona[c[0]] || '') + '"></div>'; };
-        var html = '<form id="perfil-form" class="account-card"><h2>Datos personales</h2>' + this._campos.map(campo).join('');
+        // Campos pendientes: misma regla que el aviso de inicio (App.account.camposPendientes).
+        var pendientes = jugador ? App.account.camposPendientes(persona).map(function(p) { return p.campo; }) : [];
+        var campo = function(c) {
+          var falta = pendientes.indexOf(c[0]) >= 0, pista = 'perfil-' + c[0] + '-pendiente';
+          return '<div class="form-group' + (falta ? ' perfil-pendiente' : '') + '"><label for="perfil-' + c[0] + '">' + c[1] + '</label><input id="perfil-' + c[0] + '" data-perfil="' + c[0] + '" type="' + c[2] + '" value="' + _statsTexto(persona[c[0]] || '') + '"' + (falta ? ' aria-describedby="' + pista + '"' : '') + '>' +
+            (jugador ? '<small class="perfil-pendiente-hint" id="' + pista + '">Falta este dato</small>' : '') + '</div>';
+        };
+        var html = '<form id="perfil-form" class="account-card"><h2>Datos personales</h2>' +
+          (jugador ? '<div id="perfil-pendientes-contador" class="perfil-pendientes-contador" role="status"' + (pendientes.length ? '' : ' hidden') + '>' + this._textoPendientes(pendientes.length) + '</div>' : '') +
+          this._campos.map(campo).join('');
         if (!jugador) html += '<div class="form-group"><label for="perfil-email-lectura">Email de acceso</label><input id="perfil-email-lectura" type="email" readonly value="' + _statsTexto(persona.Email || App.state.auth.email || '') + '"><small>El email identifica tu cuenta y no se puede cambiar aquí.</small></div>';
         if (jugador) {
           html += '<h2>Contacto familiar</h2><p>Estos datos ayudan al club a contactar contigo y con tu familia.</p>';
@@ -3743,8 +3723,28 @@ const App = {
         }
         host.innerHTML = html + '<button class="btn btn-primary btn-full" type="submit">Guardar cambios</button></form>';
         App.state._formIsDirty = false;
-        document.getElementById('perfil-form').oninput = function() { App.state._formIsDirty = true; };
+        document.getElementById('perfil-form').oninput = function() { App.state._formIsDirty = true; if (jugador) App.views['perfil-usuario']._marcarPendientes(); };
         document.getElementById('perfil-form').onsubmit = function(e) { e.preventDefault(); App.views['perfil-usuario'].guardar(); };
+        if (params && params.pendientes && pendientes.length) (window.requestAnimationFrame || setTimeout)(function() {
+          if (App.state.currentView !== 'perfil-editar') return;
+          _resaltarElementos(Array.prototype.slice.call(document.querySelectorAll('#perfil-form .perfil-pendiente > input')));
+        });
+      },
+      _textoPendientes: function(n) { return n === 1 ? 'Te falta 1 dato' : 'Te faltan ' + n + ' datos'; },
+      // Recalcula con los valores escritos: el halo y la pista desaparecen en cuanto el campo deja de faltar.
+      _marcarPendientes: function() {
+        var valores = {};
+        this._campos.forEach(function(c) { var el = document.getElementById('perfil-' + c[0]); if (el) valores[c[0]] = el.value; });
+        var pendientes = App.account.camposPendientes(valores).map(function(p) { return p.campo; });
+        this._campos.forEach(function(c) {
+          var el = document.getElementById('perfil-' + c[0]);
+          if (!el) return;
+          var falta = pendientes.indexOf(c[0]) >= 0;
+          el.parentElement.classList.toggle('perfil-pendiente', falta);
+          if (falta) el.setAttribute('aria-describedby', 'perfil-' + c[0] + '-pendiente'); else el.removeAttribute('aria-describedby');
+        });
+        var contador = document.getElementById('perfil-pendientes-contador');
+        if (contador) { contador.hidden = !pendientes.length; contador.textContent = this._textoPendientes(pendientes.length); }
       },
       guardar: function() {
         var jugador = App.account.isPlayer(), datos = {}, codigo = jugador && !App.account.isStaff() ? document.getElementById('perfil-codigo').value.trim().toUpperCase() : '';
@@ -3857,7 +3857,7 @@ const App = {
       },
     },
 
-    'perfil-editar': { render: function() { App.views['perfil-usuario'].editar(); } },
+    'perfil-editar': { render: function(params) { App.views['perfil-usuario'].editar(params); } },
     'seguridad-opcion': {
       render: function(params) {
         this._opcion = params && params.opcion || this._opcion || 'pin';
@@ -5230,6 +5230,19 @@ function _listaTexto(items) {
   return items.length < 2 ? items.join('') : items.slice(0, -1).join(', ') + ' y ' + items[items.length - 1];
 }
 
+// Lleva el primero a la vista y pulsa en todos el anillo de acento (~1,8 s) de .resaltado-persona.
+function _resaltarElementos(elementos) {
+  if (!elementos.length) return;
+  var reducido = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  elementos[0].scrollIntoView({ block: 'center', behavior: reducido ? 'auto' : 'smooth' });
+  elementos.forEach(function(el) {
+    el.classList.remove('resaltado-persona');
+    void el.offsetWidth;
+    el.classList.add('resaltado-persona');
+    setTimeout(function() { el.classList.remove('resaltado-persona'); }, 1800);
+  });
+}
+
 App.account = {
   target: null,
   open: function(tipo,id,view) {
@@ -5243,6 +5256,20 @@ App.account = {
   isPlayer: function() { return this.target ? this.target.tipo === 'jugador' : App.state.rol === 'jugador'; },
   isStaff: function() { return !!this.target; },
   allowed: function() { return !this.target || (App.state.rol !== 'jugador' && (this.target.tipo === 'jugador' || App.state.esAdmin)); },
+  // Única regla de perfil de jugador incompleto: la usan el aviso de inicio y el formulario de edición.
+  // Pide la fecha de nacimiento y, si ningún familiar está completo, los datos que faltan del más avanzado.
+  camposPendientes: function(j) {
+    var lleno = function(campo) { return !!String(j[campo] || '').trim(); };
+    var datos = [['NombrePadre','Nombre'],['ApellidosPadre','Apellidos'],['TelefonoPadre','Teléfono'],['EmailPadre','Email']];
+    var familiares = [1,2].map(function(n) {
+      return { numero: n, campos: datos.map(function(d) { return { campo: d[0] + n, texto: d[1] + ' del familiar ' + n }; }) };
+    });
+    var rellenos = function(f) { return f.campos.filter(function(c) { return lleno(c.campo); }).length; };
+    var pendientes = lleno('FechaNac') ? [] : [{ campo: 'FechaNac', texto: 'Fecha de nacimiento' }];
+    if (familiares.some(function(f) { return rellenos(f) === datos.length; })) return pendientes;
+    var familiar = rellenos(familiares[1]) > rellenos(familiares[0]) ? familiares[1] : familiares[0];
+    return pendientes.concat(familiar.campos.filter(function(c) { return !lleno(c.campo); }));
+  },
   icon: function(id) {
     var paths = {perfil:'<circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>',seguridad:'<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',contacto:'<path d="M8.2 3.5 10 7.8 7.8 9.6a11 11 0 0 0 6.6 6.6l1.8-2.2 4.3 1.8-.6 3.4a1.6 1.6 0 0 1-1.7 1.3C10.3 19.8 4.2 13.7 3.5 5.8a1.6 1.6 0 0 1 1.3-1.7Z"/>',ajustes:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',idioma:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/>',apariencia:'<path d="M20 14A9 9 0 0 1 10 4a9 9 0 1 0 10 10Z"/>',correo:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/>',privacidad:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',cookies:'<path d="M12 3a9 9 0 1 0 9 9 3 3 0 0 1-4-3 3 3 0 0 1-3-3 3 3 0 0 1-2-3Z"/><path d="M8.5 11.5h.01M12 16h.01M15.5 13.5h.01M8 15.5h.01"/>',salir:'<path d="M10 4H4v16h6m4-12 4 4-4 4m-6-4h13"/>'};
     return '<svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true">' + (paths[id] || paths.ajustes) + '</svg>';
@@ -6465,6 +6492,8 @@ App.i18n = {
 "Sin faltas pendientes de justificar":"No absences awaiting explanation",
 "Completa la información de tu perfil":"Complete your profile information",
 "Completar mi perfil":"Complete my profile",
+"Falta este dato":"This detail is missing",
+"Te falta 1 dato":"1 detail missing",
 "No asignado a ningún equipo":"Not assigned to a team",
 "Tú":"You",
 "Sin datos registrados aún":"No recorded data yet",
@@ -7209,7 +7238,8 @@ App.i18n.patrones.push(
   [/^(\d+) min tarde$/, '$1 min late'],
   [/^(\d+) de (\d+) sesiones$/, '$1 of $2 sessions'],
   [/^de (\d+) jugadores$/, 'of $1 players'],
-  [/^Paso (\d+) de (\d+)$/, 'Step $1 of $2']
+  [/^Paso (\d+) de (\d+)$/, 'Step $1 of $2'],
+  [/^Te faltan (\d+) datos$/, '$1 details missing']
 );
 document.addEventListener('DOMContentLoaded',function() { App.i18n.iniciar(); });
 

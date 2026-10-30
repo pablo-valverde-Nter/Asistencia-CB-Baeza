@@ -70,6 +70,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - En el formulario de asistencia se puede añadir de forma **puntual** cualquier jugador del club como invitado (`EsInvitado = true`). No modifica su `Jugadores_Equipos`.
 - Campos: `ID`, `Nombre`, `Apellidos`, `FechaNac`, `Telefono`, `Email`, `FotoURL`, `Dorsal`.
 - El `Dorsal` es único entre los jugadores activos de cada equipo ("04" equivale a "4"). Se valida en la UI y en Apps Script (`Equipos._validarDorsalUnico_`) al cambiar el dorsal o al asignar el jugador a un equipo; los duplicados ya existentes no impiden editar otros datos. No hay restricción en BD.
+- **Perfil incompleto**: `App.account.camposPendientes` es la única regla (fecha de nacimiento y, si ningún familiar está completo, lo que falta del más avanzado). La usan el aviso de inicio y «Editar perfil», que marca esos campos con halo de acento y «Falta este dato» hasta rellenarlos; al llegar desde el aviso se desplaza al primero y pulsa `.resaltado-persona` (`_resaltarElementos`, el mismo resaltado de Editar equipo).
 
 ### Entrenadores
 - Identificados por su **email de Google** (usado para control de acceso).

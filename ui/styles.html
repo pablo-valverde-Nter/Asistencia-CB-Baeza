@@ -941,6 +941,18 @@ input, select, textarea { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .resaltado-persona { animation: none; background-color: var(--morado-xs); box-shadow: 0 0 0 3px var(--morado); }
 }
+/* Campos pendientes del perfil (misma regla que el aviso de inicio): halo de acento sutil hasta que se rellenan. */
+.perfil-pendiente > input { border-color: var(--morado); box-shadow: 0 0 0 3px color-mix(in srgb, var(--morado) 20%, transparent); }
+.account-card .form-group > .perfil-pendiente-hint { display: none; }
+.account-card .perfil-pendiente > .perfil-pendiente-hint { display: block; margin-top: 6px; color: var(--morado); font-size: .74rem; font-weight: 600; line-height: 1.4; }
+.account-card .perfil-pendientes-contador {
+  align-self: flex-start; margin: 0 0 14px; padding: 4px 10px; border-radius: 999px;
+  background: var(--morado-s); color: var(--morado); font-size: .76rem; font-weight: 700; line-height: 1.4;
+}
+.perfil-pendientes-contador[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .perfil-pendiente > input.resaltado-persona { box-shadow: 0 0 0 3px var(--morado); }
+}
 .btn-rm {
   width: 28px; height: 28px; border-radius: 50%;
   background: var(--rojo-s); color: var(--rojo);
