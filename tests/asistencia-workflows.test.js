@@ -279,14 +279,13 @@ test('el modal precarga una justificacion para editarla o eliminarla con codigo'
   assert.equal(element('justif-submit').classList.hidden, true);
 });
 
-test('el aviso de anulacion llega solo a entrenadores activos, sin visores', () => {
+test('el aviso de anulacion llega a entrenadores activos, incluidas las relaciones Visor antiguas', () => {
   const sent = [];
   const context = vm.createContext({
-    CONFIG: { SHEETS: { ENTRENADORES_EQUIPOS: 'rels', ENTRENADORES: 'trainers' },
-      TIPOS_ROL_ENTRENADOR: { VISOR: 'Visor' } },
+    CONFIG: { SHEETS: { ENTRENADORES_EQUIPOS: 'rels', ENTRENADORES: 'trainers' } },
     findWhere: () => [
       { ID_Entrenador: 'coach', Activo: true, TipoRol: 'Entrenador' },
-      { ID_Entrenador: 'viewer', Activo: true, TipoRol: 'Visor' },
+      { ID_Entrenador: 'legacy', Activo: true, TipoRol: 'Visor' },
       { ID_Entrenador: 'inactive', Activo: false, TipoRol: 'Entrenador' },
     ],
     findWhereIn: (_, __, ids) => ids.map(id => ({ Email: id + '@example.com' })),
@@ -300,7 +299,7 @@ test('el aviso de anulacion llega solo a entrenadores activos, sin visores', () 
     { ID: 'team', Nombre: 'Equipo' }
   ), true);
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].to, 'coach@example.com');
+  assert.equal(sent[0].to, 'coach@example.com,legacy@example.com');
   assert.match(sent[0].subject, /anulada/);
 });
 

@@ -34,21 +34,18 @@ const Auth = {
       return { success: true };
     }
 
-    // tipo === 'entrenador' (incluye admin)
+    // tipo === 'entrenador' (incluye admin). Un admin con ficha de entrenador usa su PIN de entrenador;
+    // el PIN de Administradores solo cuenta para administradores sin ficha.
     const email = String(auth.email || '').toLowerCase().trim();
     if (!email || !pin) return { success: false, error: 'Email y PIN son obligatorios.' };
 
+    const entrenador = Auth.getEntrenadorActual({ tipo: 'entrenador', email });
     const administrador = Auth._getAdministradorByEmail_(email);
-    if (administrador && (administrador.Activo === true || administrador.Activo === 'TRUE')) {
-      if (String(administrador.PIN || '').trim() !== pin) return { success: false, error: 'El PIN de acceso es incorrecto.' };
-      return { success: true };
-    }
+    const registro = entrenador ||
+      (administrador && (administrador.Activo === true || administrador.Activo === 'TRUE') ? administrador : null);
 
-    const entrenadores = getSheetData(CONFIG.SHEETS.ENTRENADORES);
-    const entrenador   = entrenadores.find(e => String(e.Email || '').toLowerCase().trim() === email);
-
-    if (entrenador) {
-      if (String(entrenador.PIN || '').trim() !== pin) return { success: false, error: 'El PIN de acceso es incorrecto.' };
+    if (registro) {
+      if (String(registro.PIN || '').trim() !== pin) return { success: false, error: 'El PIN de acceso es incorrecto.' };
       return { success: true };
     }
 
@@ -95,8 +92,13 @@ const Auth = {
     return { rol, jugador, entrenador, administrador };
   },
 
+  /** Registro que guarda el PIN de la cuenta: jugador, ficha de entrenador o, sin ficha, Administradores. */
+  registroCredenciales_(cuenta) {
+    return cuenta.jugador || cuenta.entrenador || cuenta.administrador;
+  },
+
   destinosRecuperacion_(cuenta) {
-    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
+    const registro = Auth.registroCredenciales_(cuenta);
     const destinos = cuenta.jugador ? [
       { id: 'jugador', etiqueta: 'Jugador', email: registro.Email },
       { id: 'tutor1', etiqueta: 'Tutor 1' + (registro.NombrePadre1 ? ' · ' + registro.NombrePadre1 : ''), email: registro.EmailPadre1 },
@@ -113,7 +115,7 @@ const Auth = {
   },
 
   claveRecuperacion_(cuenta) {
-    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
+    const registro = Auth.registroCredenciales_(cuenta);
     return 'recuperacion:' + cuenta.rol + ':' + registro.ID;
   },
 
@@ -163,8 +165,7 @@ const Auth = {
   },
 
   /**
-   * Requiere que el usuario sea entrenador (rol Entrenador, no Visor) del equipo,
-   * o administrador.
+   * Requiere que el usuario sea entrenador del equipo o administrador.
    */
   requireAccesoGestionEquipo(equipoId, auth) {
     const v = Auth.validate(auth);
@@ -177,9 +178,7 @@ const Auth = {
     const rel = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', ent.ID)
       .find(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
 
-    if (!rel || rel.TipoRol === CONFIG.TIPOS_ROL_ENTRENADOR.VISOR) {
-      throw new Error('No tienes permiso para gestionar este equipo (rol Visor).');
-    }
+    if (!rel) throw new Error('No tienes permiso para gestionar este equipo.');
   },
 
   /**
@@ -233,7 +232,6 @@ const Auth = {
         equipoPrincipal:  equipoPrincipal || null,
         entrenador:       null,
         equipos:          [],
-        equiposVisor:     [],
       };
     }
 
@@ -241,8 +239,7 @@ const Auth = {
     const esAdmin    = rol === CONFIG.ROLES.ADMIN;
     const entrenador = Auth.getEntrenadorActual(auth);
 
-    let equipos      = []; // equipos de gestión (TipoRol=Entrenador)
-    let equiposVisor = []; // equipos solo visibles
+    let equipos = [];
 
     const temporadas = getSheetData(CONFIG.SHEETS.TEMPORADAS);
     const activa     = temporadas.find(t => t.Activa === true || t.Activa === 'TRUE');
@@ -250,29 +247,20 @@ const Auth = {
     if (esAdmin) {
       equipos = activa ? findWhere(CONFIG.SHEETS.EQUIPOS, 'ID_Temporada', activa.ID) : [];
     } else if (entrenador) {
-      const relaciones = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenador.ID)
-        .filter(r => r.Activo === true || r.Activo === 'TRUE');
-
-      const idsEntrenador = relaciones
-        .filter(r => r.TipoRol !== CONFIG.TIPOS_ROL_ENTRENADOR.VISOR)
+      // Cualquier relación activa da gestión (las antiguas 'Visor' cuentan como 'Entrenador').
+      const ids = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenador.ID)
+        .filter(r => r.Activo === true || r.Activo === 'TRUE')
         .map(r => r.ID_Equipo);
-
-      const idsVisor = relaciones
-        .filter(r => r.TipoRol === CONFIG.TIPOS_ROL_ENTRENADOR.VISOR)
-        .map(r => r.ID_Equipo);
-
-      equipos      = findWhereIn(CONFIG.SHEETS.EQUIPOS, 'ID', idsEntrenador);
-      equiposVisor = findWhereIn(CONFIG.SHEETS.EQUIPOS, 'ID', idsVisor);
+      equipos = findWhereIn(CONFIG.SHEETS.EQUIPOS, 'ID', ids);
     }
 
     return {
-      success:      true,
-      rol:          rol,
-      esAdmin:      esAdmin,
-      entrenador:   entrenador || null,
-      jugador:      null,
-      equipos:      equipos,
-      equiposVisor: equiposVisor,
+      success:    true,
+      rol:        rol,
+      esAdmin:    esAdmin,
+      entrenador: entrenador || null,
+      jugador:    null,
+      equipos:    equipos,
     };
   },
 

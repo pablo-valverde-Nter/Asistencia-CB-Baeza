@@ -60,8 +60,8 @@ test('cargarDatos calcula el resumen del personal y no rompe el arranque si fall
   assert.deepEqual(Array.from(fallido.alertasAusencias.jugadores, j => j.jugadorId), ['jugador-gonzalo']);
 });
 
-test('cargarDatos entrega alertas solo de los equipos de gestión y sobrevive a su fallo', () => {
-  const ctx = cargar({ success: true, rol: 'entrenador', jugador: null, equipos: [{ ID: 'equipo-junior' }], equiposVisor: [{ ID: 'equipo-cadete' }] });
+test('cargarDatos entrega alertas solo de los equipos del entrenador y sobrevive a su fallo', () => {
+  const ctx = cargar({ success: true, rol: 'entrenador', jugador: null, equipos: [{ ID: 'equipo-junior' }] });
   const res = ctx.cargarDatos({});
   assert.deepEqual(Array.from(res.alertasAusencias.equipos), ['equipo-junior']);
   assert.equal(res.alertasAusencias.jugadores.length, 0);

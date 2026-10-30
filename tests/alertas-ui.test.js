@@ -55,14 +55,14 @@ test('una racha nueva vuelve a avisar y se olvidan las claves que ya no están e
   assert.deepEqual(JSON.parse(almacen.get('cb-baeza-alertas-v1:entrenador-luis')), {});
 });
 
-test('el botón solo aparece en equipos de gestión y muestra el contador sin escapar mal el nombre', () => {
+test('el botón solo aparece en los equipos del entrenador y muestra el contador sin escapar mal el nombre', () => {
   const { app } = cliente();
   app.alertas.recibir(datos([alerta('j1', 3)]), null);
   const boton = app.alertas.boton('eq1', 'Cadete');
   assert.match(boton, /aria-label="Alertas de ausencias de Cadete: 1 jugador"/);
   assert.match(boton, /eq-alerts-count">1</);
   assert.match(boton, /stroke="currentColor"/);
-  assert.equal(app.alertas.boton('eq2', 'Junior'), '', 'Visor o sustitución: sin botón');
+  assert.equal(app.alertas.boton('eq2', 'Junior'), '', 'sustitución: sin botón');
   app.alertas.recibir(null, 'boom');
   assert.notEqual(app.alertas.boton('eq1', 'Cadete'), '', 'si el cálculo falla se explica en el equipo propio');
   assert.equal(app.alertas.boton('eq2', 'Junior'), '');

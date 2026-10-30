@@ -516,7 +516,7 @@ function cambiarCredenciales(auth, cambios) {
   try {
     const cuenta = Auth.getCuentaActual_(auth);
     cambios = cambios || {};
-    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
+    const registro = Auth.registroCredenciales_(cuenta);
     if (String(cambios.pinActual || '').trim() !== String(registro.PIN || '').trim()) {
       throw new Error('El PIN actual es incorrecto.');
     }
@@ -536,8 +536,10 @@ function cambiarCredenciales(auth, cambios) {
       if (tieneUsuario) nuevoAuth.usuario = usuario;
     } else {
       if (tieneUsuario) throw new Error('Solo los jugadores pueden cambiar su usuario.');
-      const tabla = cuenta.administrador ? CONFIG.SHEETS.ADMINISTRADORES : CONFIG.SHEETS.ENTRENADORES;
-      actualizado = updateRow(tabla, registro.ID, { PIN: pin });
+      // Ficha de entrenador y, si es admin, Administradores quedan con el mismo PIN.
+      actualizado = cuenta.entrenador
+        ? Equipos.actualizarEntrenador(registro.ID, { PIN: pin }, false)
+        : updateRow(CONFIG.SHEETS.ADMINISTRADORES, registro.ID, { PIN: pin });
     }
     if (!actualizado) throw new Error('No se modificaron las credenciales.');
     if (tienePin) nuevoAuth.pin = pin;
@@ -618,7 +620,7 @@ function verificarCodigoRecuperacion(auth, codigo) {
       throw new Error('Código incorrecto.');
     }
     cache.remove(clave);
-    const registro = cuenta.jugador || cuenta.administrador || cuenta.entrenador;
+    const registro = Auth.registroCredenciales_(cuenta);
     const resultado = { success: true, pin: String(registro.PIN || '').trim() };
     if (cuenta.jugador && (desafio.destinoId === 'tutor1' || desafio.destinoId === 'tutor2')) {
       resultado.codigoSeguridad = registro.CodigoPadres;
@@ -683,10 +685,10 @@ function eliminarEntrenador(auth, entrenadorId) {
   }
 }
 
-function asignarEntrenadorAEquipo(auth, entrenadorId, equipoId, tipoRol) {
+function asignarEntrenadorAEquipo(auth, entrenadorId, equipoId) {
   try {
     Auth.requireAdmin(auth);
-    const relacion = Equipos.asignarEntrenadorAEquipo(entrenadorId, equipoId, tipoRol);
+    const relacion = Equipos.asignarEntrenadorAEquipo(entrenadorId, equipoId);
     if (!relacion) throw new Error('No se pudo asignar el entrenador al equipo.');
     return { success: true, relacion: relacion };
   } catch (e) {

@@ -166,20 +166,25 @@ for (const tipo of ['jugador', 'entrenador']) {
     const jugador = tipo === 'jugador';
     const table = s.CONFIG.SHEETS[jugador ? 'JUGADORES_EQUIPOS' : 'ENTRENADORES_EQUIPOS'];
     const field = jugador ? 'ID_Jugador' : 'ID_Entrenador';
-    const tipoField = jugador ? 'Tipo' : 'TipoRol';
-    const valor = jugador ? 'Principal' : 'Entrenador';
-    const nuevoValor = jugador ? 'Secundario' : 'Visor';
     const asignar = jugador ? 'asignarJugadorAEquipo' : 'asignarEntrenadorAEquipo';
     const desasignar = jugador ? 'desasignarJugadorDeEquipo' : 'desasignarEntrenadorDeEquipo';
     s.rows[table] = [{ ID: 'historica', [field]: 'persona', ID_Equipo: 'e1', Activo: false, FechaBaja: '2026-09-01' }];
-    const relacion = s.equipos[asignar]('persona', 'e1', valor);
+    const relacion = s.equipos[asignar]('persona', 'e1', jugador ? 'Principal' : undefined);
     assert.notEqual(relacion.ID, 'historica');
     assert.equal(relacion.FechaAlta, '2026-10-27');
     assert.equal(s.rows[table][0].FechaBaja, '2026-09-01');
-    s.equipos[asignar]('persona', 'e1', nuevoValor);
-    const update = s.writes.find(write => write.op === 'update');
-    assert.deepEqual(Object.keys(update.changes), [tipoField]);
-    assert.equal(update.changes[tipoField], nuevoValor);
+    if (jugador) {
+      s.equipos[asignar]('persona', 'e1', 'Secundario');
+      const update = s.writes.find(write => write.op === 'update');
+      assert.deepEqual(Object.keys(update.changes), ['Tipo']);
+      assert.equal(update.changes.Tipo, 'Secundario');
+    } else {
+      // Reasignar no duplica ni reescribe; una relación Visor antigua se devuelve como Entrenador.
+      s.rows[table][1].TipoRol = 'Visor';
+      const n = s.writes.length;
+      const existente = s.equipos[asignar]('persona', 'e1');
+      assert.deepEqual([existente.ID, existente.TipoRol, s.writes.length, s.rows[table].length], [relacion.ID, 'Entrenador', n, 2]);
+    }
     s.rows[table].push({ ID: 'otra-activa', [field]: 'persona', ID_Equipo: 'e1', Activo: 'TRUE' });
     assert.equal(s.equipos[desasignar]('persona', 'e1'), true);
     assert.ok(s.rows[table].slice(1).every(row => row.Activo === false && row.FechaBaja === '2026-10-27'));

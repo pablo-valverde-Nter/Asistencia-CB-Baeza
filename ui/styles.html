@@ -913,6 +913,18 @@ input, select, textarea { font-family: inherit; }
 .asig-info { flex: 1; }
 .asig-nombre { font-size: .87rem; font-weight: 600; }
 .asig-sub    { font-size: .72rem; color: var(--texto-sec); }
+/* Persona resaltada al llegar desde su perfil: anillo del color de acento que se desvanece. */
+.asig-item.resaltado-persona { margin-inline: -8px; padding-inline: 8px; border-radius: var(--r); }
+.resaltado-persona { animation: resaltado-persona 1.8s ease-out forwards; }
+@keyframes resaltado-persona {
+  0%   { background-color: var(--morado-xs); box-shadow: 0 0 0 0 var(--morado), 0 0 0 0 color-mix(in srgb, var(--morado) 40%, transparent); }
+  15%  { background-color: var(--morado-xs); box-shadow: 0 0 0 3px var(--morado), 0 0 0 6px color-mix(in srgb, var(--morado) 40%, transparent); }
+  65%  { background-color: var(--morado-xs); box-shadow: 0 0 0 3px var(--morado), 0 0 0 14px color-mix(in srgb, var(--morado) 0%, transparent); }
+  100% { background-color: transparent; box-shadow: 0 0 0 3px transparent, 0 0 0 14px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .resaltado-persona { animation: none; background-color: var(--morado-xs); box-shadow: 0 0 0 3px var(--morado); }
+}
 .btn-rm {
   width: 28px; height: 28px; border-radius: 50%;
   background: var(--rojo-s); color: var(--rojo);
@@ -1432,14 +1444,6 @@ input, select, textarea { font-family: inherit; }
   font-size: .6rem; font-weight: 800; padding: 2px 7px;
   border-radius: 10px; text-transform: uppercase; letter-spacing: .4px;
   flex-shrink: 0;
-}
-
-/* ── 3c-3: Chip Visor en tarjetas de equipo ── */
-.chip-visor {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: var(--verde-s); color: var(--morado);
-  font-size: .63rem; font-weight: 700; padding: 2px 8px;
-  border-radius: 10px; margin-left: auto; flex-shrink: 0;
 }
 
 /* ── 4d: Chip Mi equipo en lista gestión ── */
@@ -2057,10 +2061,6 @@ p.person-inline { display:flex; margin:9px 0; }
 .account-team-name { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:.86rem; font-weight:600; line-height:1.3; color:var(--texto); }
 .account-team-chip { flex:0 0 auto; display:inline-flex; align-items:center; min-height:26px; padding:3px 10px; border:1px solid var(--borde); border-radius:999px; background:var(--fondo); color:var(--texto-sec); font-size:.7rem; font-weight:700; line-height:1.2; white-space:nowrap; }
 .account-team-chip.is-main { border-color:transparent; background:var(--verde-s); color:var(--morado); }
-.account-team-role { position:relative; flex:0 0 auto; display:inline-flex; }
-.account-team-role::after { content:''; position:absolute; top:50%; right:11px; width:6px; height:6px; border-right:1.6px solid var(--texto-sec); border-bottom:1.6px solid var(--texto-sec); transform:translateY(-70%) rotate(45deg); pointer-events:none; }
-.account-team-role select { -webkit-appearance:none; appearance:none; width:auto; min-height:36px; padding:4px 28px 4px 12px; color:var(--texto); font-family:inherit; cursor:pointer; }
-.account-team-role select:focus-visible { outline:2px solid var(--morado); outline-offset:2px; }
 .account-team-action { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border:1px solid var(--borde); border-radius:12px; background:var(--fondo); color:var(--morado); }
 .account-team-action .account-menu-icon { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.8; }
 .account-team-action:focus-visible,.account-team-pick:focus-visible { outline:2px solid var(--morado); outline-offset:-2px; }

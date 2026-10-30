@@ -50,7 +50,6 @@ const App = {
     detalleEquipoId:     null,
     // Sistema de 4 roles
     rol:                  null,
-    equiposVisor:         [],
     jugador:              null,
     motivosJustificacion: [],
     _loginTipo:           'entrenador',
@@ -143,7 +142,7 @@ const App = {
       });
       entrenadores.forEach(function(e) {
         var relacion = relacionesEntrenadores.find(function(r) { return r.ID_Equipo === equipoId && r.ID_Entrenador === e.ID && r.Activo !== false && r.Activo !== 'FALSE'; });
-        App.cache.entrenadoresEquipos.push(Object.assign({},relacion || {},{ ID: relacion ? relacion.ID : 'ee_'+e.ID+'_'+equipoId, ID_Equipo: equipoId, ID_Entrenador: e.ID, TipoRol: relacion && relacion.TipoRol || 'Entrenador', Activo: true }));
+        App.cache.entrenadoresEquipos.push(Object.assign({},relacion || {},{ ID: relacion ? relacion.ID : 'ee_'+e.ID+'_'+equipoId, ID_Equipo: equipoId, ID_Entrenador: e.ID, TipoRol: 'Entrenador', Activo: true }));
       });
     },
   },
@@ -646,7 +645,7 @@ const App = {
       if (cambiado) this._save(state);
     },
 
-    // Solo equipos de gestión (el servidor excluye Visor y sustituciones); si el cálculo falló, se ofrece igualmente para explicarlo.
+    // Solo equipos propios (el servidor excluye sustituciones); si el cálculo falló, se ofrece igualmente para explicarlo.
     disponible: function(teamId) {
       var d = App.state.alertasAusencias;
       if (d) return d.equipos.indexOf(teamId) >= 0;
@@ -963,7 +962,6 @@ const App = {
     App.state.equipos = [];
     App.state.rol = null;
     App.state.jugador = null;
-    App.state.equiposVisor = [];
     App.state.motivosJustificacion = [];
     document.getElementById('user-badge-avatar').textContent = '?';
     document.getElementById('user-badge-name').textContent = '...';
@@ -1005,7 +1003,6 @@ const App = {
     App.state.rol          = ctx.rol || 'entrenador';
     App.state.esAdmin      = !!ctx.esAdmin;
     App.state.equipos      = ctx.equipos      || [];
-    App.state.equiposVisor = ctx.equiposVisor || [];
     App.state.motivosJustificacion = res.motivosJustificacion || [];
 
     if (ctx.rol === 'jugador') {
@@ -1248,23 +1245,12 @@ const App = {
         }
 
         var lista = document.getElementById('equipos-lista');
-        var equipos;
-        if (App.state.esAdmin) {
-          equipos = App.cache.equipos;
-        } else {
-          // Combinar equipos principales + equipos de solo lectura (Visor)
-          var mainIds = new Set(App.state.equipos.map(function(e) { return e.ID; }));
-          equipos = App.state.equipos.slice();
-          (App.state.equiposVisor || []).forEach(function(eq) {
-            if (!mainIds.has(eq.ID)) equipos.push(eq);
-          });
-        }
+        var equipos = App.state.esAdmin ? App.cache.equipos : App.state.equipos;
         if (!equipos.length) {
           lista.innerHTML = '<div class="empty-state"><div class="ei">&#x1F3C0;</div><p>No tienes equipos asignados.</p></div>';
           return;
         }
         var hoy = _hoy();
-        var mainEqIds = new Set(App.state.equipos.map(function(e) { return e.ID; }));
         lista.innerHTML = equipos.map(function(eq) {
           var sesiones = App.cache.getSesionesByEquipo(eq.ID);
           var ahora = hoy + ' ' + new Date().toTimeString().slice(0,5);
@@ -1274,16 +1260,13 @@ const App = {
           var plantilla = resumenEquipo ? resumenEquipo.jugadoresActivos : App.cache.getJugadoresByEquipo(eq.ID).length;
           var pendientes = resumenEquipo ? resumenEquipo.pendientes : 0;
           var pendienteLabel = pendientes + (pendientes === 1 ? ' entreno sin registrar' : ' entrenos sin registrar');
-          // Chip Visor: el equipo es de solo lectura
-          var esVisor = !App.state.esAdmin && !mainEqIds.has(eq.ID);
-          var visorHtml = esVisor ? '<span class="chip-visor">&#x1F441; Visor</span>' : '';
           var eqId = eq.ID;
           var eqNombre = _esc(eq.Nombre);
-          var unread = esVisor ? 0 : App.notifications.unreadCount(eq.ID);
-          var alertasHtml = esVisor ? '' : App.alertas.boton(eq.ID, eqNombre);
-          var notificationHtml = esVisor ? '' : '<button type="button" class="eq-notifications" aria-label="Notificaciones de ' + eqNombre + (unread ? ': ' + unread + ' nuevas' : '') + '" title="Notificaciones" onclick="App.notifications.openInbox(\'' + eqId + '\')"><span aria-hidden="true">&#x1F4EC;</span>' + (unread ? '<span class="eq-notifications-count">' + unread + '</span>' : '') + '</button>';
+          var unread = App.notifications.unreadCount(eq.ID);
+          var alertasHtml = App.alertas.boton(eq.ID, eqNombre);
+          var notificationHtml = '<button type="button" class="eq-notifications" aria-label="Notificaciones de ' + eqNombre + (unread ? ': ' + unread + ' nuevas' : '') + '" title="Notificaciones" onclick="App.notifications.openInbox(\'' + eqId + '\')"><span aria-hidden="true">&#x1F4EC;</span>' + (unread ? '<span class="eq-notifications-count">' + unread + '</span>' : '') + '</button>';
           return '<article class="equipo-card-big">' +
-            '<div class="eq-big-hdr"><div class="eq-home-title"><span class="eq-home-eyebrow">Tu equipo</span><h2 class="eq-nombre">' + _statsTexto(eq.Nombre) + '</h2><span class="eq-meta">' + _statsTexto(eq.Categoria) + ' · ' + _statsTexto(eq.Modalidad) + '</span></div>' + visorHtml + alertasHtml + notificationHtml + '</div>' +
+            '<div class="eq-big-hdr"><div class="eq-home-title"><span class="eq-home-eyebrow">Tu equipo</span><h2 class="eq-nombre">' + _statsTexto(eq.Nombre) + '</h2><span class="eq-meta">' + _statsTexto(eq.Categoria) + ' · ' + _statsTexto(eq.Modalidad) + '</span></div>' + alertasHtml + notificationHtml + '</div>' +
             '<div class="eq-big-stats"><div class="eq-home-metrics"><div><span class="eq-home-label">Asistencia ' + (resumenEquipo ? _statsTexto(App.stats.resumen.filtro.temporadaNombre) : '') + _statsInfoBoton('Asistencia') + '</span><strong class="eq-home-percentage">' + _pctTexto(asistencia) + '</strong></div><div class="eq-home-roster"><strong>' + plantilla + '</strong><span>en plantilla</span></div></div>' +
             '<div class="eq-home-bar" role="img" aria-label="Asistencia: ' + _pctTexto(asistencia) + '"><span style="width:' + (asistencia == null ? 0 : asistencia) + '%"></span></div>' +
             '<div class="eq-home-next">' + (proxima ? 'Próximo entreno · <strong>' + _statsTexto(_fmtFecha(proxima.Fecha).d + ' ' + _fmtFecha(proxima.Fecha).m) + ' · ' + _statsTexto(proxima.HoraInicio) + '</strong>' : 'Sin próximos entrenamientos') + '</div></div>' +
@@ -2435,7 +2418,8 @@ const App = {
         document.getElementById('eq-modalidad').onchange = setDirty;
       },
 
-      cargar: function(equipoId) {
+      // resaltar = { tipo: 'jug' | 'ent', id } al llegar desde el perfil de una persona.
+      cargar: function(equipoId, resaltar) {
         App.state.formEquipoId = equipoId;
         App.state._formIsDirty = false;
         var eq = App.cache.getEquipoById(equipoId);
@@ -2457,6 +2441,22 @@ const App = {
           App.state.formJugOriginales = App.state.formJugadores.map(function(j) { return j.ID; });
           App.views['equipo-form']._renderListas();
         }
+        if (resaltar) (window.requestAnimationFrame || setTimeout)(function() { App.views['equipo-form']._resaltar(resaltar); });
+      },
+
+      // Lleva a la persona a la vista y la resalta; si no está en el equipo, resalta el botón de añadir.
+      _resaltar: function(persona) {
+        if (App.state.currentView !== 'equipo-form') return;
+        var lista = document.getElementById(persona.tipo === 'jug' ? 'eq-jugs-lista' : 'eq-ents-lista');
+        if (!lista) return;
+        var objetivo = Array.prototype.find.call(lista.children, function(el) { return el.dataset.personaId === persona.id; }) || lista.nextElementSibling;
+        if (!objetivo) return;
+        var reducido = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        objetivo.scrollIntoView({ block: 'center', behavior: reducido ? 'auto' : 'smooth' });
+        objetivo.classList.remove('resaltado-persona');
+        void objetivo.offsetWidth;
+        objetivo.classList.add('resaltado-persona');
+        setTimeout(function() { objetivo.classList.remove('resaltado-persona'); }, 1900);
       },
 
       _reset: function() {
@@ -2511,7 +2511,7 @@ const App = {
       _renderListas: function() {
         document.getElementById('eq-ents-lista').innerHTML = App.state.formEntrenadores.length
           ? App.state.formEntrenadores.map(function(e) {
-              return '<div class="asig-item">' + App.avatarHtml((App.cache.getEntrenadorById(e.ID) || {}).FotoURL,e.Nombre + ' ' + e.Apellidos,36) + '<div class="asig-info">' +
+              return '<div class="asig-item" data-persona-id="' + _esc(e.ID) + '">' + App.avatarHtml((App.cache.getEntrenadorById(e.ID) || {}).FotoURL,e.Nombre + ' ' + e.Apellidos,36) + '<div class="asig-info">' +
                 '<div class="asig-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div></div>' +
                 '<div class="btn-rm" onclick="App.views[\'equipo-form\']._quitarEnt(\'' + e.ID + '\')">&#x2715;</div></div>';
             }).join('')
@@ -2519,7 +2519,7 @@ const App = {
 
         document.getElementById('eq-jugs-lista').innerHTML = App.state.formJugadores.length
           ? App.state.formJugadores.map(function(j) {
-              return '<div class="asig-item">' + App.avatarHtml((App.cache.getJugadorById(j.ID) || {}).FotoURL,j.Nombre + ' ' + j.Apellidos,36) + '<div class="asig-info">' +
+              return '<div class="asig-item" data-persona-id="' + _esc(j.ID) + '">' + App.avatarHtml((App.cache.getJugadorById(j.ID) || {}).FotoURL,j.Nombre + ' ' + j.Apellidos,36) + '<div class="asig-info">' +
                 '<div class="asig-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
                 '<div class="asig-sub">Dorsal ' + (j.Dorsal || '-') + ' &middot; ' + (j.Tipo || 'Principal') + '</div></div>' +
                 '<div class="btn-rm" onclick="App.views[\'equipo-form\']._quitarJug(\'' + j.ID + '\')">&#x2715;</div></div>';
@@ -5338,7 +5338,7 @@ var _statsMetricas = {
   dia: ['Asistencia por día','Cómo varía la asistencia según el día de la semana.','Se agrupan los registros válidos por el día de la fecha de la sesión, de lunes a domingo. En cada grupo se calcula (P + R) / (P + A + R) × 100.'],
   mes: ['Asistencia mes a mes','Cada barra cuenta cuántas veces estuvo presente, llegó tarde o faltó durante ese mes.','Los registros válidos se agrupan por el mes de la sesión y se cuentan por separado presentes, retrasos y ausentes. En entrenadores, la barra cuenta las veces que estuvo presente de sus sesiones registradas. Solo se incluyen meses con registros.'],
   semana: ['Evolución semanal','Asistencia de jugadores agrupada en semanas que empiezan el lunes.','Se agrupan los registros por el lunes de la semana de la sesión y se calcula (P + R) / (P + A + R) × 100 en cada grupo. Solo se incluyen semanas con registros.'],
-  cobertura: ['Cobertura técnica','Porcentaje de entrenamientos con al menos un entrenador asignado presente.','Sesiones computables con algún entrenador presente cuya relación con el equipo estaba vigente ese día y no era Visor / sesiones computables × 100. Cada sesión cuenta una sola vez.'],
+  cobertura: ['Cobertura técnica','Porcentaje de entrenamientos con al menos un entrenador asignado presente.','Sesiones computables con algún entrenador presente cuya relación con el equipo estaba vigente ese día / sesiones computables × 100. Cada sesión cuenta una sola vez.'],
   suplencias: ['Sesiones con sustituto','Entrenamientos en los que participó al menos un técnico invitado.','Sesiones computables con algún registro de entrenador con Asistio verdadero y EsInvitado verdadero / sesiones computables × 100. Puede coincidir con una sesión cubierta por un técnico asignado.'],
   refuerzos: ['Presencias de refuerzos','Parte de las asistencias de jugadores que corresponde a secundarios o invitados.','Registros P o R de jugadores con relación Secundario vigente ese día o, sin relación, marcados como invitados / todos los P + R del equipo × 100.'],
   latencia: ['Latencia de registro','Tiempo habitual transcurrido desde el fin de una sesión hasta su primer registro de asistencia.','Mediana de máximo(0, FechaPrimerRegistro − fecha y hora de fin), expresada en horas y redondeada a una décima. Solo sesiones computables con FechaPrimerRegistro; sin hora de fin se usa 23:59. No mide la última edición.'],
@@ -5349,7 +5349,7 @@ var _statsMetricas = {
   sesionesEntrenador: ['Sesiones del entrenador','Sesiones computables con un registro válido de asistencia del entrenador.','Se cuentan sus registros no excluidos con Asistio verdadero o falso. No se cuentan todas las sesiones de sus equipos ni se suponen ausencias cuando falta un registro.'],
   horasEntrenador: ['Horas dirigidas','Duración programada de las sesiones a las que asistió el entrenador.','Suma de minutos programados de sus registros con Asistio verdadero / 60, redondeado a una décima. No mide horas de llegada ni descuenta retrasos.'],
   sustituciones: ['Sustituciones dadas','Sesiones en las que el entrenador asistió como invitado.','Se cuentan registros válidos con Asistio verdadero y EsInvitado verdadero en sesiones computables del periodo.'],
-  cubre: ['Coberturas recibidas','Sesiones de sus equipos en las que faltó y hubo otro entrenador presente.','Por cada sesión computable con relación vigente del entrenador distinta de Visor, se cuenta si no tiene presencia propia y sí hay otro técnico con Asistio verdadero. No es necesario que el otro técnico esté marcado como invitado.'],
+  cubre: ['Coberturas recibidas','Sesiones de sus equipos en las que faltó y hubo otro entrenador presente.','Por cada sesión computable con relación vigente del entrenador, se cuenta si no tiene presencia propia y sí hay otro técnico con Asistio verdadero. No es necesario que el otro técnico esté marcado como invitado.'],
   contactabilidad: ['Contactabilidad','Vías disponibles para localizar a los jugadores activos de la temporada. No garantiza que sean válidas ni que el mensaje se entregue.','Se deduplican jugadores con alguna relación Activo verdadera en equipos de la temporada. El gráfico separa, por prioridad: email familiar, teléfono sin email familiar, solo email personal y ningún contacto. No depende del periodo de asistencia. Localizables = jugadores con alguna de esas vías / jugadores activos × 100.'],
   contactoAvisos: ['Avisos activos','Jugadores cuya familia tiene al menos un email con avisos habilitados.','Jugadores activos con EmailPadre1 o EmailPadre2 no vacío y su NotificarAusenciasPadre correspondiente distinto de false / jugadores activos del club × 100. Tener teléfono o email personal no activa los avisos familiares.'],
   contactoTelefono: ['Con teléfono','Jugadores con algún teléfono propio o familiar registrado. Puede coincidir con tener email familiar.','Jugadores activos con Telefono, TelefonoPadre1 o TelefonoPadre2 no vacío / jugadores activos del club × 100. En el gráfico Solo teléfono exige no tener email familiar.'],
@@ -5476,8 +5476,7 @@ Object.assign(App.account, {
         html += '<fieldset class="account-staff-family"><legend>Familiar ' + n + '</legend><div class="form-row">' + campo('NombrePadre'+n,'Nombre') + campo('ApellidosPadre'+n,'Apellidos') + '</div>' + campo('TelefonoPadre'+n,'Teléfono','tel') + campo('EmailPadre'+n,'Email','email') + '<label class="parent-email-notify"><input type="checkbox" data-perfil="NotificarAusenciasPadre' + n + '"' + (activo ? ' checked' : '') + '><span>Enviar avisos de ausencia</span></label></fieldset>';
       });
     } else {
-      html += '<p class="account-hint">Cámbialo solo si el entrenador cambió de cuenta de Google. El cambio afectará a su próximo inicio de sesión.</p><label class="parent-email-notify"><input type="checkbox" data-perfil="EsAdmin"' + (persona.EsAdmin === true || persona.EsAdmin === 'TRUE' ? ' checked' : '') + '><span>Conceder permisos de administrador</span></label>';
-      if (persona.EsAdmin !== true && persona.EsAdmin !== 'TRUE') html += '<label class="form-group">PIN para conceder permisos<input data-perfil="PIN" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label><p class="account-hint">Solo es necesario al conceder permisos de administrador.</p>';
+      html += '<p class="account-hint">Cámbialo solo si el entrenador cambió de cuenta de Google. El cambio afectará a su próximo inicio de sesión.</p><label class="parent-email-notify"><input type="checkbox" data-perfil="EsAdmin"' + (persona.EsAdmin === true || persona.EsAdmin === 'TRUE' ? ' checked' : '') + '><span>Conceder permisos de administrador</span></label><p class="account-hint">Como administrador entrará con su mismo PIN de entrenador.</p>';
     }
     var relaciones = jugador ? App.cache.jugadoresEquipos : App.cache.entrenadoresEquipos;
     var clave = jugador ? 'ID_Jugador' : 'ID_Entrenador';
@@ -5489,15 +5488,12 @@ Object.assign(App.account, {
       else if (editable) otros.push(equipo);
     });
     if (jugador) propios.sort(function(a,b) { return (a.relacion.Tipo === 'Principal' ? 0 : 1) - (b.relacion.Tipo === 'Principal' ? 0 : 1); });
-    function abrir(equipo) { return 'App.views[\'equipo-form\'].cargar(\'' + _esc(equipo.ID) + '\')'; }
+    function abrir(equipo) { return 'App.views[\'equipo-form\'].cargar(\'' + _esc(equipo.ID) + '\',{tipo:\'' + (jugador ? 'jug' : 'ent') + '\',id:\'' + _esc(persona.ID) + '\'})'; }
     function nombre(equipo) { var n = _statsTexto(equipo.Nombre || ''); return '<span class="account-team-name" title="' + n + '">' + n + '</span>'; }
     html += '<h3>Equipos</h3><p class="account-hint">Gestiona las asignaciones y su tipo desde el formulario del equipo.</p>';
     html += propios.length ? '<ul class="account-team-list">' + propios.map(function(p) {
-      var tipo = jugador ? p.relacion.Tipo || '' : p.relacion.TipoRol === 'Visor' ? 'Visor' : 'Entrenador';
-      var principal = tipo === 'Principal' || tipo === 'Entrenador';
-      var rol = !jugador && p.editable
-        ? '<span class="account-team-role"><select class="account-team-chip" aria-label="Rol en el equipo" onchange="App.account.guardarStaffRolEquipo(\'' + _esc(p.equipo.ID) + '\',this.value)"><option value="Entrenador"' + (tipo === 'Entrenador' ? ' selected' : '') + '>Entrenador</option><option value="Visor"' + (tipo === 'Visor' ? ' selected' : '') + '>Visor</option></select></span>'
-        : tipo ? '<span class="account-team-chip' + (principal ? ' is-main' : '') + '">' + _statsTexto(tipo) + '</span>' : '';
+      var tipo = jugador ? p.relacion.Tipo || '' : 'Entrenador';
+      var rol = tipo ? '<span class="account-team-chip' + (tipo === 'Principal' || tipo === 'Entrenador' ? ' is-main' : '') + '">' + _statsTexto(tipo) + '</span>' : '';
       return '<li class="account-team-row">' + nombre(p.equipo) + rol + (p.editable ? '<button class="account-team-action" type="button" aria-label="Gestionar equipo" title="Gestionar equipo" onclick="' + abrir(p.equipo) + '">' + App.account.icon('ajustes') + '</button>' : '') + '</li>';
     }).join('') + '</ul>' : '<p class="account-team-empty">Sin equipos asignados.</p>';
     if (otros.length) {
@@ -5527,8 +5523,6 @@ Object.assign(App.account, {
       }
     } else {
       if (App.cache.entrenadores.some(function(e) { return e.ID !== persona.ID && String(e.Email || '').toLowerCase() === datos.Email.toLowerCase(); })) { showToast('Ya existe un entrenador con ese email','error'); return; }
-      if (!datos.EsAdmin || persona.EsAdmin === true || persona.EsAdmin === 'TRUE') delete datos.PIN;
-      else if (!/^[0-9]{4,6}$/.test(datos.PIN || '')) { showToast('Indica un PIN explícito para habilitar este administrador.','error'); return; }
     }
     var duplicado = (jugador ? App.cache.jugadores : App.cache.entrenadores).some(function(p) { return p.ID !== persona.ID && String(p.Nombre || '').toLowerCase() === datos.Nombre.toLowerCase() && String(p.Apellidos || '').toLowerCase() === datos.Apellidos.toLowerCase(); });
     var self = this;
@@ -5546,23 +5540,12 @@ Object.assign(App.account, {
     }
     var id = persona.ID, tabla = jugador ? 'jugadores' : 'entrenadores';
     return App.operation.run('staff-profile:' + id,jugador ? 'actualizarJugador' : 'actualizarEntrenador',[id,datos],function() {
-      var cambios = Object.assign({},datos); delete cambios.PIN;
-      App.cache.upsert(tabla,Object.assign({},persona,cambios));
+      App.cache.upsert(tabla,Object.assign({},persona,datos));
       App.state._todosJugadores = App.cache.jugadores; App.state._todosEntrenadores = App.cache.entrenadores;
       App.state._formIsDirty = false;
       if (App.state.viewHistory[App.state.viewHistory.length - 1] === 'perfil-usuario') App.state.viewHistory.pop();
       App.navigate('perfil-usuario',{},false);
       showToast('Perfil actualizado','success');
-    }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
-  },
-  guardarStaffRolEquipo: function(equipoId, tipoRol) {
-    if (!this.isStaff() || !this.allowed() || this.isPlayer() || !App.state.esAdmin) return;
-    var persona = this.persona();
-    var relacion = App.cache.entrenadoresEquipos.find(function(r) { return r.ID_Entrenador === persona.ID && r.ID_Equipo === equipoId && r.Activo !== false && r.Activo !== 'FALSE'; });
-    if (!relacion || ['Entrenador','Visor'].indexOf(tipoRol) < 0) return;
-    return App.operation.run('staff-team-role:' + persona.ID + ':' + equipoId,'asignarEntrenadorAEquipo',[persona.ID,equipoId,tipoRol],function(result) {
-      App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.map(function(r) { return r.ID === relacion.ID ? result.relacion : r; });
-      showToast('Rol actualizado','success');
     }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
   },
   seguridadStaffHtml: function(persona) {
@@ -5752,7 +5735,6 @@ App.i18n = {
 "Acción restringida a administradores.":"This action is restricted to administrators.",
 "Acción restringida a entrenadores y administradores.":"This action is restricted to coaches and administrators.",
 "No tienes permiso para gestionar este equipo.":"You do not have permission to manage this team.",
-"No tienes permiso para gestionar este equipo (rol Visor).":"You do not have permission to manage this team (Viewer role).",
 "Solo puedes modificar tus propias credenciales.":"You can only change your own credentials.",
 "Solo un administrador puede cambiar el código de familias.":"Only an administrator can change the family code.",
 "No se modificaron las credenciales.":"The credentials were not changed.",
@@ -5766,8 +5748,6 @@ App.i18n = {
 "El PIN debe tener entre 4 y 6 dígitos numéricos.":"The PIN must contain 4 to 6 digits.",
 "El código de familias debe tener al menos 4 caracteres.":"The family code must contain at least 4 characters.",
 "El jugador ya tiene un equipo principal. Desasígnalo primero o cámbialo a Secundario.":"The player already has a primary team. Remove that assignment first or change it to Secondary.",
-"Indica un PIN explícito para un nuevo administrador.":"Specify a PIN for the new administrator.",
-"Indica un PIN explícito para habilitar este administrador.":"Specify a PIN to enable this administrator.",
 "No se puede desactivar al último administrador activo.":"The last active administrator cannot be deactivated.",
 "Foto de perfil no válida.":"Invalid profile photo.",
 "No se pudo actualizar la foto.":"The photo could not be updated.",
@@ -5964,7 +5944,7 @@ App.i18n = {
 "Se agrupan los registros por el lunes de la semana de la sesión y se calcula (P + R) / (P + A + R) × 100 en cada grupo. Solo se incluyen semanas con registros.":"Group records by the Monday of the session’s week and calculate (present + late) / (present + absent + late) × 100 in each group. Only weeks with records are included.",
 "Cobertura técnica":"Coaching coverage",
 "Porcentaje de entrenamientos con al menos un entrenador asignado presente.":"Percentage of training sessions with at least one assigned coach present.",
-"Sesiones computables con algún entrenador presente cuya relación con el equipo estaba vigente ese día y no era Visor / sesiones computables × 100. Cada sesión cuenta una sola vez.":"Eligible sessions with a present coach whose team membership was valid that day and was not Viewer / eligible sessions × 100. Each session counts once.",
+"Sesiones computables con algún entrenador presente cuya relación con el equipo estaba vigente ese día / sesiones computables × 100. Cada sesión cuenta una sola vez.":"Eligible sessions with a present coach whose team membership was valid that day / eligible sessions × 100. Each session counts once.",
 "Sesiones con sustituto":"Sessions with cover",
 "Entrenamientos en los que participó al menos un técnico invitado.":"Training sessions with at least one guest coach.",
 "Sesiones computables con algún registro de entrenador con Asistio verdadero y EsInvitado verdadero / sesiones computables × 100. Puede coincidir con una sesión cubierta por un técnico asignado.":"Eligible sessions with a present guest coach / eligible sessions × 100. This can overlap with a session covered by an assigned coach.",
@@ -5997,7 +5977,7 @@ App.i18n = {
 "Se cuentan registros válidos con Asistio verdadero y EsInvitado verdadero en sesiones computables del periodo.":"Count valid present guest records in eligible sessions in the period.",
 "Coberturas recibidas":"Cover received",
 "Sesiones de sus equipos en las que faltó y hubo otro entrenador presente.":"Sessions for the coach’s teams where they were absent and another coach was present.",
-"Por cada sesión computable con relación vigente del entrenador distinta de Visor, se cuenta si no tiene presencia propia y sí hay otro técnico con Asistio verdadero. No es necesario que el otro técnico esté marcado como invitado.":"For each eligible session with a valid non-Viewer membership, count it if the coach has no presence record but another coach is present. The other coach need not be marked as a guest.",
+"Por cada sesión computable con relación vigente del entrenador, se cuenta si no tiene presencia propia y sí hay otro técnico con Asistio verdadero. No es necesario que el otro técnico esté marcado como invitado.":"For each eligible session with a valid coach membership, count it if the coach has no presence record but another coach is present. The other coach need not be marked as a guest.",
 "Contactabilidad":"Contact coverage",
 "Vías disponibles para localizar a los jugadores activos de la temporada. No garantiza que sean válidas ni que el mensaje se entregue.":"Available ways to contact active players in the season. This does not guarantee validity or delivery.",
 "Se deduplican jugadores con alguna relación Activo verdadera en equipos de la temporada. El gráfico separa, por prioridad: email familiar, teléfono sin email familiar, solo email personal y ningún contacto. No depende del periodo de asistencia. Localizables = jugadores con alguna de esas vías / jugadores activos × 100.":"Deduplicate players with an active membership in teams for the season. The chart separates, by priority: family email, phone without family email, personal email only and no contact. This is independent of the attendance period. Reachable = players with any contact channel / active players × 100.",
@@ -6417,7 +6397,6 @@ App.i18n = {
   "Invitado": "Guest",
   "Invitados": "Guests",
   "Titular": "Regular",
-  "Visor": "Viewer",
   "Dorsal": "Jersey number",
   "Categoría": "Category",
   "Modalidad": "Gender",
@@ -6777,8 +6756,7 @@ Object.assign(App.i18n.diccionario, {
   'Gestionar en otro equipo':'Manage in another team',
   'Abre el equipo y añádelo a la plantilla.':'Open the team and add them to the roster.',
   'Abre el equipo y añádelo a sus entrenadores.':'Open the team and add them to its coaches.',
-  'PIN para conceder permisos':'PIN to grant permissions',
-  'Solo es necesario al conceder permisos de administrador.':'Only required when granting administrator permissions.',
+  'Como administrador entrará con su mismo PIN de entrenador.':'As an administrator they will sign in with their same coach PIN.',
   'Cámbialo solo si el entrenador cambió de cuenta de Google. El cambio afectará a su próximo inicio de sesión.':'Change it only if the coach changed Google accounts. This will affect their next sign-in.',
   'Compártelo con la familia y cámbialo solo si fue comprometido.':'Share it with the family and change it only if compromised.',
   'Nuevo código familias':'New family code',
@@ -6786,14 +6764,10 @@ Object.assign(App.i18n.diccionario, {
   'No hay cambios que guardar':'There are no changes to save',
   'El usuario ya está en uso':'The username is already in use',
   'Credenciales actualizadas':'Credentials updated',
-  'Indica un PIN explícito para habilitar este administrador.':'Enter an explicit PIN to enable this administrator.',
   'El usuario debe tener al menos 3 caracteres.':'The username must contain at least 3 characters.',
   'El código de familias debe tener al menos 4 caracteres.':'The family code must contain at least 4 characters.',
   'Datos personales':'Personal details',
   'Cambio de email':'Email change',
-  'Rol en el equipo':'Team role',
-  'Visor':'Viewer',
-  'Rol actualizado':'Role updated',
   'Modificar credenciales':'Change credentials',
   'Modificar código familias':'Change family code',
   'Ya existe una persona llamada':'A person already exists named',

@@ -70,7 +70,6 @@ function backendStubs() {
           entrenador: jugador ? null : fixture.entrenadores[0],
           equipoPrincipal: jugador ? fixture.equipos[0] : null,
           equipos: jugador ? [] : fixture.equipos.filter(e => e.ID_Temporada === 'temp-actual'),
-          equiposVisor: [],
         };
       },
     },

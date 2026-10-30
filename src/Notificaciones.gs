@@ -150,7 +150,7 @@ CB Baeza — Gestión de Asistencia`;
 
   _emailsEntrenadoresEquipo_(equipoId) {
     const relaciones = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Equipo', equipoId)
-      .filter(r => (r.Activo === true || r.Activo === 'TRUE') && r.TipoRol !== CONFIG.TIPOS_ROL_ENTRENADOR.VISOR);
+      .filter(r => r.Activo === true || r.Activo === 'TRUE');
     const entrenadores = findWhereIn(CONFIG.SHEETS.ENTRENADORES, 'ID', relaciones.map(r => r.ID_Entrenador));
     return entrenadores.map(e => String(e.Email || '').trim()).filter(e => e && e.includes('@'));
   },

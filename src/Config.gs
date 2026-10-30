@@ -28,9 +28,9 @@ const CONFIG = {
   },
 
   // ── Tipos de rol entrenador-equipo ────────────────────────────────────────────
+  // Único rol. Las relaciones antiguas con TipoRol 'Visor' se tratan como 'Entrenador'.
   TIPOS_ROL_ENTRENADOR: {
     ENTRENADOR: 'Entrenador',  // aparece en sesiones, gestiona asistencia
-    VISOR:      'Visor',       // solo ve el equipo en su dashboard
   },
 
   // ── Categorías válidas del club ───────────────────────────────────────────────

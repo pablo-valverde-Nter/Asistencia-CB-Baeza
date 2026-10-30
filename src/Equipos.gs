@@ -319,7 +319,6 @@ const Equipos = {
       throw new Error(`Ya existe un entrenador con el email: ${datos.Email}`);
     }
     const esAdmin = datos.EsAdmin === true || datos.EsAdmin === 'TRUE';
-    if (esAdmin && !datos.PIN) throw new Error('Indica un PIN explícito para un nuevo administrador.');
     const pin = datos.PIN || '1234';
     const entrenador = appendRow(CONFIG.SHEETS.ENTRENADORES, {
       Nombre:    datos.Nombre,
@@ -342,7 +341,7 @@ const Equipos = {
   eliminarEntrenador(entrenadorId) {
     const entrenador = findById(CONFIG.SHEETS.ENTRENADORES, entrenadorId);
     if (entrenador && (entrenador.EsAdmin === true || entrenador.EsAdmin === 'TRUE')) {
-      Equipos._syncAdministrador_(entrenador.Email, entrenador.PIN, false);
+      Equipos._syncAdministrador_(entrenador.Email, null, false);
     }
     deleteWhere(CONFIG.SHEETS.ASIST_ENTRENADORES,  'ID_Entrenador', entrenadorId);
     deleteWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS,'ID_Entrenador', entrenadorId);
@@ -381,17 +380,15 @@ const Equipos = {
     const esAdminFinal = datos.EsAdmin !== undefined
       ? campos.EsAdmin
       : Boolean(administradorActual && (administradorActual.Activo === true || administradorActual.Activo === 'TRUE'));
-    if (datos.EsAdmin === true && !administradorActual && !datos.PIN) {
-      throw new Error('Indica un PIN explícito para habilitar este administrador.');
-    }
     const emailFinal = campos.Email || actual.Email;
-    const pinFinal = campos.PIN || (administradorActual && administradorActual.PIN) || actual.PIN;
+    // El administrador usa el mismo PIN que su ficha de entrenador.
+    const pinFinal = campos.PIN || actual.PIN;
 
     if (esAdminFinal) {
-      if (emailFinal !== actual.Email) Equipos._syncAdministrador_(actual.Email, actual.PIN, false);
+      if (emailFinal !== actual.Email) Equipos._syncAdministrador_(actual.Email, null, false);
       Equipos._syncAdministrador_(emailFinal, pinFinal, true);
     } else if (administradorActual) {
-      Equipos._syncAdministrador_(actual.Email, actual.PIN, false);
+      Equipos._syncAdministrador_(actual.Email, null, false);
     }
 
     return updateRow(CONFIG.SHEETS.ENTRENADORES, entrenadorId, campos);
@@ -421,31 +418,17 @@ const Equipos = {
   },
 
   /**
-   * Asigna un entrenador a un equipo. Si ya existe la relación la reactiva.
+   * Asigna un entrenador a un equipo con el único rol 'Entrenador'. Si ya tiene una relación activa
+   * (incluidas las antiguas 'Visor'), la devuelve sin crear otra.
    * @param {string} entrenadorId
    * @param {string} equipoId
    * @returns {Object}
    */
-  /**
-   * Asigna un entrenador a un equipo con el rol indicado.
-   * @param {string} entrenadorId
-   * @param {string} equipoId
-   * @param {string} [tipoRol='Entrenador'] - 'Entrenador' | 'Visor'
-   */
-  asignarEntrenadorAEquipo(entrenadorId, equipoId, tipoRol) {
-    tipoRol = tipoRol || CONFIG.TIPOS_ROL_ENTRENADOR.ENTRENADOR;
-    if (!Object.values(CONFIG.TIPOS_ROL_ENTRENADOR).includes(tipoRol)) {
-      throw new Error(`TipoRol inválido: ${tipoRol}.`);
-    }
-
-    const existentes = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
-      .filter(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
-
-    if (existentes.length > 0) {
-      const actualizado = updateRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, existentes[0].ID, { TipoRol: tipoRol });
-      if (!actualizado) throw new Error('No se pudo actualizar la asignación del entrenador.');
-      return { ...existentes[0], TipoRol: tipoRol };
-    }
+  asignarEntrenadorAEquipo(entrenadorId, equipoId) {
+    const tipoRol = CONFIG.TIPOS_ROL_ENTRENADOR.ENTRENADOR;
+    const existente = findWhere(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, 'ID_Entrenador', entrenadorId)
+      .find(r => r.ID_Equipo === equipoId && (r.Activo === true || r.Activo === 'TRUE'));
+    if (existente) return { ...existente, TipoRol: tipoRol };
 
     return appendRow(CONFIG.SHEETS.ENTRENADORES_EQUIPOS, {
       ID_Entrenador: entrenadorId,

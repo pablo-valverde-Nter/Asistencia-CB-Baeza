@@ -49,7 +49,7 @@ function servidor() {
   }
   const jugador = { tipo: 'jugador', usuario: 'ana', pin: '1234' };
   const entrenador = { tipo: 'entrenador', email: 'coach@example.com', pin: '2345' };
-  const admin = { tipo: 'entrenador', email: 'admin@example.com', pin: '3456' };
+  const admin = { tipo: 'entrenador', email: 'admin@example.com', pin: '1111' };
   return { rows, writes, mails, cache, logs, jugador, entrenador, admin,
     avanzar: ms => { ahora += ms; },
     call(name, ...args) { return context[name](...args); } };
@@ -71,19 +71,36 @@ test('PIN actual incorrecto no escribe; cambiar usuario/PIN devuelve auth nuevo 
   assert.equal(s.call('actualizarFotoPerfil', s.jugador, 'avatar:balon').success, false);
 });
 
-test('admin cambia PIN en Administradores y el entrenador en Entrenadores', () => {
-  for (const rol of ['admin', 'entrenador']) {
-    const s = servidor();
-    const result = s.call('cambiarCredenciales', s[rol], { pinActual: s[rol].pin, pinNuevo: '7890' });
-    assert.equal(result.success, true);
-    assert.equal(result.auth.pin, '7890');
-    assert.equal(s.writes[0].table, rol === 'admin' ? 'Administradores' : 'Entrenadores');
-    assert.equal(s.call('actualizarFotoPerfil', result.auth, '').success, true);
-    if (rol === 'admin') {
-      assert.equal(s.call('actualizarEntrenador', result.auth, 'e2', { Nombre: 'Nuevo nombre' }).success, true);
-      assert.equal(s.rows.Administradores[0].PIN, '7890');
-    }
-  }
+test('admin con ficha entra y cambia el PIN de entrenador, que se copia a Administradores', () => {
+  const s = servidor();
+  assert.equal(s.call('opcionesRecuperacion', { ...s.admin, pin: '3456' }).success, false, 'el PIN administrativo antiguo ya no vale');
+  const result = s.call('cambiarCredenciales', s.admin, { pinActual: '1111', pinNuevo: '7890' });
+  assert.equal(result.success, true);
+  assert.equal(result.auth.pin, '7890');
+  assert.deepEqual([s.rows.Entrenadores[1].PIN, s.rows.Administradores[0].PIN], ['7890', '7890']);
+  assert.equal(s.call('actualizarFotoPerfil', result.auth, '').success, true);
+  assert.equal(s.call('actualizarFotoPerfil', s.admin, '').success, false);
+});
+
+test('el entrenador cambia PIN en Entrenadores y el admin sin ficha en Administradores', () => {
+  const s = servidor();
+  const entrenador = s.call('cambiarCredenciales', s.entrenador, { pinActual: '2345', pinNuevo: '7890' });
+  assert.equal(entrenador.success, true);
+  assert.deepEqual(s.writes.map(w => w.table), ['Entrenadores']);
+  s.rows.Entrenadores = s.rows.Entrenadores.filter(row => row.ID !== 'e2');
+  const admin = { ...s.admin, pin: '3456' };
+  const result = s.call('cambiarCredenciales', admin, { pinActual: '3456', pinNuevo: '4321' });
+  assert.equal(result.success, true);
+  assert.deepEqual([s.writes.at(-1).table, s.rows.Administradores[0].PIN], ['Administradores', '4321']);
+});
+
+test('conceder admin a un entrenador no pide PIN y usa el suyo', () => {
+  const s = servidor();
+  s.rows.Administradores.push({ ID: 'a2', Email: 'coach@example.com', PIN: '0000', Activo: false });
+  assert.equal(s.call('actualizarEntrenador', s.admin, 'e1', { EsAdmin: true }).success, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(s.rows.Administradores[1])), { ID: 'a2', Email: 'coach@example.com', PIN: '2345', Activo: true });
+  assert.equal(s.call('opcionesRecuperacion', s.entrenador).success, true);
+  assert.equal(s.call('opcionesRecuperacion', { ...s.entrenador, pin: '0000' }).success, false);
 });
 
 test('código de seguridad requiere antiguo y seis caracteres alfanuméricos; normaliza mayúsculas', () => {
@@ -114,7 +131,7 @@ test('foto valida prefijo, tamaño y slug, y permite avatar, JPEG y eliminación
     }
   }
   s.rows.Entrenadores = s.rows.Entrenadores.filter(row => row.ID !== 'e2');
-  assert.equal(s.call('actualizarFotoPerfil', s.admin, '').error, 'Tu cuenta de administración no tiene ficha de entrenador.');
+  assert.equal(s.call('actualizarFotoPerfil', { ...s.admin, pin: '3456' }, '').error, 'Tu cuenta de administración no tiene ficha de entrenador.');
 });
 
 test('perfil jugador conserva autorización familiar; perfil entrenador solo actualiza datos personales', () => {

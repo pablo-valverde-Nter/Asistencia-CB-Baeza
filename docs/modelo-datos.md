@@ -95,12 +95,12 @@ Registro global de entrenadores. Identificados por su email de Google.
 | `Telefono` | String | Teléfono de contacto |
 | `FotoURL` | String | Avatar o JPEG de perfil, con el mismo formato y límite que `Jugadores.FotoURL`; aplicar `supabase/perfil.sql` en instalaciones existentes |
 
-**Reglas:** El acceso usa email y PIN, sin depender de la sesión Google. Los administradores se validan en `Administradores`, no mediante `Entrenadores.EsAdmin`. No hay distinción de roles entre entrenadores.
+**Reglas:** El acceso usa email y PIN, sin depender de la sesión Google. Los administradores se validan en `Administradores`, no mediante `Entrenadores.EsAdmin`. Un administrador con ficha de entrenador entra con el PIN de su ficha (`Entrenadores.PIN`); al darle permisos y cada vez que cambia ese PIN se copia a `Administradores.PIN`, que solo valida a administradores sin ficha. No hay distinción de roles entre entrenadores.
 
 ### Cuenta propia
 
 - `actualizarFotoPerfil` modifica la foto propia; `actualizarMiPerfil` conserva la verificación familiar de jugadores y limita al personal a nombre, apellidos y teléfono. Un administrador sin ficha de entrenador no puede editar su perfil ni su foto.
-- `cambiarCredenciales` exige el PIN actual y devuelve las nuevas credenciales de sesión. El PIN administrativo se modifica en `Administradores`; el del entrenador en `Entrenadores`. El usuario de jugador sigue siendo único.
+- `cambiarCredenciales` exige el PIN actual y devuelve las nuevas credenciales de sesión. Con ficha de entrenador se modifica `Entrenadores.PIN` (y `Administradores.PIN` si es administrador); un administrador sin ficha lo cambia en `Administradores`. El usuario de jugador sigue siendo único.
 - `cambiarCodigoSeguridad` exige el código familiar anterior y guarda uno de seis letras o números en mayúsculas.
 - Recuperación: `opcionesRecuperacion` devuelve destinos con correo enmascarado. `solicitarCodigoRecuperacion` envía un número de seis dígitos únicamente al correo elegido (jugador, tutor o cuenta del personal); nunca envía PIN ni código familiar. Se guarda solo su hash SHA-256 por cuenta durante diez minutos y se permite una solicitud por minuto. `verificarCodigoRecuperacion` consume el número una sola vez; cinco errores lo invalidan. Devuelve el PIN y, únicamente si se eligió un tutor, el código familiar. No se registran secretos en logs.
 - `actualizarEntrenador` valida email y PIN antes de autorizar; los no administradores solo pueden modificar su nombre, apellidos y teléfono, nunca Email, PIN ni EsAdmin.
@@ -118,6 +118,7 @@ Relación entrenador ↔ equipo (asignación permanente).
 | `Activo` | Boolean | Para desasignar sin borrar historial |
 | `FechaAlta` | String (YYYY-MM-DD) | Alta en el equipo; `null` en relaciones anteriores a su registro |
 | `FechaBaja` | String (YYYY-MM-DD) | Baja en el equipo |
+| `TipoRol` | String | Siempre `Entrenador`. Las filas antiguas con `Visor` (rol retirado) se tratan como `Entrenador` |
 
 **Reglas:** Un entrenador puede estar asignado a varios equipos. Los sustitutos puntuales se registran en `Asist_Entrenadores` con `EsInvitado = true`.
 
@@ -208,5 +209,5 @@ Temporadas ──< Equipos ──< Horarios
   - Umbral `CONFIG.ESTADISTICAS.AUSENCIAS_SEGUIDAS` (3), el mismo de la alerta `seguidas` de las estadísticas (`Estadisticas.rachaAusencias_` es la única definición).
   - Solo la temporada activa y sesiones terminadas, guardadas y no canceladas hasta hoy (aunque la temporada activa ya haya pasado su `FechaFin`); se ignoran filas `Excluido`, preavisos sin `Estado` y casillas sin marcar (ni cuentan ni cortan).
   - Se recorre la línea de tiempo del jugador en todos sus equipos, de la sesión más reciente hacia atrás: cada `A` con relación vigente con el equipo suma (también las justificadas, que se indican aparte); una `P` o `R` corta la racha, también como invitado; una `A` como invitado se ignora.
-  - La alerta sale en cada equipo de la temporada activa donde el jugador tiene hoy relación activa. El admin ve todos los equipos; el entrenador, solo los de rol `Entrenador` (`equiposGestion`); Visor, sustitución puntual y jugadores no reciben nada.
+  - La alerta sale en cada equipo de la temporada activa donde el jugador tiene hoy relación activa. El admin ve todos los equipos; el entrenador, solo los suyos (`equiposGestion`); sustitución puntual y jugadores no reciben nada.
   - «Contactado» se guarda solo en el navegador (`localStorage['cb-baeza-alertas-v1:' + identidad]`) con la clave `jugadorId:primeraSesionDeLaRacha` y el número de faltas al marcar; reaparece cuando la racha suma otras `umbral` faltas y se olvida cuando la racha termina.

@@ -68,7 +68,7 @@ test('perfil staff muestra solo los equipos propios y ofrece el resto tras «Ges
   assert.ok(propios.indexOf('Cadete') < propios.indexOf('Junior'), 'Principal primero');
   assert.match(propios,/>Principal</); assert.match(propios,/>Secundario</);
   assert.doesNotMatch(propios,/Senior|'free'/);
-  assert.match(otros,/Gestionar en otro equipo/); assert.match(otros,/equipo-form'\]\.cargar\('free'\)/);
+  assert.match(otros,/Gestionar en otro equipo/); assert.match(otros,/equipo-form'\]\.cargar\('free',\{tipo:'jug',id:'j'\}\)/);
   assert.doesNotMatch(otros,/'team'|'sec'/);
   const coach = client(); coach.app.account.open('jugador','j');
   coach.app.cache.equipos.push({ID:'free',Nombre:'Senior'});
@@ -128,17 +128,16 @@ test('PIN inválido, confirmación distinta y usuario duplicado no envían crede
   assert.equal(confirmations.length,0); assert.equal(calls.filter(c=>c.fn).length,0);
 });
 
-test('admin edita entrenador, avisa cambio email y exige PIN explícito para promoción', () => {
-  const {app,calls,confirmations,notices}=client(true); app.account.open('entrenador','e');
+test('admin edita entrenador, avisa cambio email y lo promueve sin PIN aparte', () => {
+  const {app,calls,confirmations}=client(true); app.account.open('entrenador','e');
   const html=app.account.perfilStaffHtml(app.account.persona());
   for (const key of ['Nombre','Apellidos','Email','Telefono','EsAdmin']) assert.match(html,new RegExp('data-perfil="'+key+'"'));
-  assert.doesNotMatch(html,/FotoURL|recuper/);
+  assert.doesNotMatch(html,/FotoURL|recuper|data-perfil="PIN"/);
   const data={Nombre:'Luis',Apellidos:'Coach',Email:'nuevo@example.test',Telefono:'600000000',EsAdmin:true};
-  app.account.guardarStaffPerfil({...data}); assert.match(notices.at(-1).message,/PIN explícito/);
-  app.account.guardarStaffPerfil({...data,PIN:'9876'});
+  app.account.guardarStaffPerfil({...data});
   assert.equal(confirmations.at(-1).title,'Cambio de email'); confirmations.pop().confirm();
-  const sent=calls.find(c=>c.fn); assert.equal(sent.fn,'actualizarEntrenador'); assert.equal(sent.args[1].EsAdmin,true); assert.equal(sent.args[1].PIN,'9876');
-  assert.equal(app.cache.getEntrenadorById('e').PIN,undefined);
+  const sent=calls.find(c=>c.fn); assert.equal(sent.fn,'actualizarEntrenador'); assert.deepEqual(sent.args[1],data);
+  assert.equal(app.cache.getEntrenadorById('e').EsAdmin,true);
 });
 
 test('admin cambia PIN entrenador mediante actualizarEntrenador y borra desde perfil unificado', () => {
@@ -186,20 +185,13 @@ test('fallo de perfil conserva caché y borrador sin navegar a resumen', async (
   assert.match(notices.at(-1).message,/No se pudo actualizar/);
 });
 
-test('admin cambia rol Entrenador/Visor sin duplicar la relación y formulario equipo lo conserva', async () => {
-  const {app,calls}=client(true); app.account.open('entrenador','e');
-  app.cache.entrenadoresEquipos=[{ID:'ee_e_team',ID_Entrenador:'e',ID_Equipo:'team',TipoRol:'Entrenador',Activo:true}];
-  assert.match(app.account.perfilStaffHtml(app.account.persona()),/guardarStaffRolEquipo/);
-  app.operation.run=(_key,fn,args,success)=>{
-    calls.push({fn,args:JSON.parse(JSON.stringify(args))});
-    success({success:true,relacion:{ID:'real',ID_Entrenador:'e',ID_Equipo:'team',TipoRol:'Visor',Activo:true}});
-    return Promise.resolve();
-  };
-  await app.account.guardarStaffRolEquipo('team','Visor');
-  const sent=calls.find(c=>c.fn); assert.equal(sent.fn,'asignarEntrenadorAEquipo'); assert.deepEqual(sent.args,['e','team','Visor']);
-  assert.equal(app.cache.entrenadoresEquipos.length,1); assert.equal(app.cache.entrenadoresEquipos[0].ID,'real');
+test('una relación Visor antigua se muestra como Entrenador sin selector y el formulario de equipo la conserva', () => {
+  const {app}=client(true); app.account.open('entrenador','e');
+  app.cache.entrenadoresEquipos=[{ID:'real',ID_Entrenador:'e',ID_Equipo:'team',TipoRol:'Visor',Activo:true}];
+  const html=app.account.perfilStaffHtml(app.account.persona());
+  assert.match(html,/account-team-chip is-main">Entrenador</); assert.doesNotMatch(html,/<select|Visor/);
+  assert.match(html,/equipo-form'\]\.cargar\('team',\{tipo:'ent',id:'e'\}\)/);
   app.cache._setRelacionesEquipo('team',[],[{ID:'e'}]);
-  assert.equal(app.cache.entrenadoresEquipos[0].ID,'real'); assert.equal(app.cache.entrenadoresEquipos[0].TipoRol,'Visor');
-  app.state.esAdmin=false; app.account.guardarStaffRolEquipo('team','Entrenador');
-  assert.equal(calls.filter(c=>c.fn).length,1);
+  assert.equal(app.cache.entrenadoresEquipos.length,1); assert.equal(app.cache.entrenadoresEquipos[0].ID,'real');
+  assert.equal(app.cache.entrenadoresEquipos[0].TipoRol,'Entrenador');
 });

@@ -213,7 +213,7 @@ const Estadisticas = {
     return racha;
   },
   /** Jugadores con al menos AUSENCIAS_SEGUIDAS faltas seguidas en la temporada activa, en sus equipos vigentes hoy.
-   *  El admin recibe todos los equipos de la temporada; el entrenador, solo `equiposGestion` (sin Visor). */
+   *  El admin recibe todos los equipos de la temporada; el entrenador, solo `equiposGestion` (sus equipos). */
   alertasAusencias(datos, contexto, ahora, indices) {
     contexto = contexto || {};
     const umbral = CONFIG.ESTADISTICAS.AUSENCIAS_SEGUIDAS;
@@ -383,7 +383,7 @@ const Estadisticas = {
       for (const r of x.tecnicosSesion.get(s.ID) || []) {
         if (!r.fila.Asistio) continue;
         const rel = this.relacion_(x.relacionesEntrenador, r.fila.ID_Entrenador, s.ID_Equipo, s.Fecha);
-        if (rel && rel.TipoRol !== 'Visor') con = true;
+        if (rel) con = true;
         if (this.verdadero_(r.fila.EsInvitado)) invitado = true;
       }
       if (con) conEntrenador++;
@@ -482,7 +482,7 @@ const Estadisticas = {
     // Las relaciones se recorren por equipo, sin buscar entre todas las filas de asistencia.
     for (const equipoId of x.equiposPeriodo.keys()) {
       for (const rel of x.relacionesEntrenador.get(id + ':' + equipoId) || []) {
-        if (rel.desde <= x.filtro.hasta && rel.hasta >= x.filtro.desde) equipos.set(equipoId, rel.TipoRol);
+        if (rel.desde <= x.filtro.hasta && rel.hasta >= x.filtro.desde) equipos.set(equipoId, CONFIG.TIPOS_ROL_ENTRENADOR.ENTRENADOR);
       }
     }
     let coberturasRecibidas = 0;
@@ -494,7 +494,7 @@ const Estadisticas = {
       for (const r of registros) if (r.fila.Asistio) presentesEquipo++;
       for (const s of sesiones) {
         const rel = this.relacion_(x.relacionesEntrenador, id, equipoId, s.Fecha);
-        if (!rel || rel.TipoRol === 'Visor') continue;
+        if (!rel) continue;
         let propio = false;
         let otro = false;
         for (const r of x.tecnicosSesion.get(s.ID) || []) {

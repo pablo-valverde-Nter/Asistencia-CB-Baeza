@@ -114,7 +114,7 @@ test('mientras la temporada siga activa cuentan las sesiones posteriores a su Fe
   assert.equal(jugador(alertas(f), 'jugador-ana').ausencias, 3);
 });
 
-test('permisos: entrenador solo sus equipos de gestión; Visor y jugador nada; las bajas no salen', () => {
+test('permisos: entrenador solo sus equipos; jugador nada; las bajas no salen', () => {
   assert.equal(alertas(datos, { rol: 'entrenador', equiposGestion: ['equipo-cadete'] }).jugadores.length, 1);
   const junior = alertas(datos, { rol: 'entrenador', equiposGestion: ['equipo-junior'] });
   assert.deepEqual([junior.equipos, junior.jugadores], [['equipo-junior'], []]);
