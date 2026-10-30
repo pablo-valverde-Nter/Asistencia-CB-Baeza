@@ -33,7 +33,6 @@ const App = {
     _formIsDirty:            false,
     _pendingDirtyNavigation: null,
     _equipoFormDirty:        false,
-    _jugadorDraftRestore:    false,
     _entrenadorDraftRestore: false,
     _sesionAutoSaveTimer:    null,
     _sesionAutoSaving:       false,
@@ -1147,7 +1146,7 @@ const App = {
   navigate(view, params, push) {
     App.closeUserMenu();
     var currentView = App.state.currentView;
-    var nestedTeamForm = currentView === 'equipo-form' && (view === 'jugador-form' || view === 'entrenador-form');
+    var nestedTeamForm = currentView === 'equipo-form' && view === 'entrenador-form';
     if (currentView !== view && App.state._formIsDirty && push !== false && !nestedTeamForm) {
       App.state._pendingDirtyNavigation = { view: view, params: params, push: push };
       App.openModal('Cambios sin guardar',
@@ -1206,7 +1205,6 @@ const App = {
       'equipos-admin':     'Equipos',
       'equipo-form':       App.state.formEquipoId ? 'Editar equipo' : 'Nuevo equipo',
       'jugadores-admin':   'Jugadores',
-      'jugador-form':      'Nuevo jugador',
       'entrenadores-admin':'Entrenadores',
       'entrenador-form':   'Nuevo entrenador',
       'historial-equipo':  'Historial',
@@ -1252,7 +1250,7 @@ const App = {
 
     if (App.views[view] && App.views[view].render) App.views[view].render(params || {});
     _statsQueueMotion();
-    if (view === 'equipo-form' && (currentView === 'jugador-form' || currentView === 'entrenador-form')) {
+    if (view === 'equipo-form' && currentView === 'entrenador-form') {
       App.state._formIsDirty = App.state._equipoFormDirty;
     }
     if (App.realtime) App.realtime.flushPending();
@@ -1272,7 +1270,7 @@ const App = {
   },
 
   goBack() {
-    var _dirtyViews = ['equipo-form', 'jugador-form', 'entrenador-form', 'sesion', 'perfil-editar', 'seguridad-opcion'];
+    var _dirtyViews = ['equipo-form', 'entrenador-form', 'sesion', 'perfil-editar', 'seguridad-opcion'];
     if (_dirtyViews.indexOf(App.state.currentView) >= 0 && App.state._formIsDirty) {
       App.openModal('Cambios sin guardar',
         '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
@@ -1317,7 +1315,7 @@ const App = {
       // Para equipo nuevo: resetear estado ANTES de navegar para que render()
       // no mezcle datos de una edición anterior.
       'equipos-admin':      function() { App.state.formEquipoId = null; App.views['equipo-form']._reset(); App.navigate('equipo-form'); },
-      'jugadores-admin':    function() { App.navigate('jugador-form'); },
+      'jugadores-admin':    function() { App.views.altaJugador.abrir(false); },
       'entrenadores-admin': function() { App.navigate('entrenador-form'); },
     };
     if (acciones[App.state.currentView]) acciones[App.state.currentView]();
@@ -2724,11 +2722,11 @@ const App = {
 
       _crearNuevo: function(tipo) {
         App.closeModal();
-        App.state._volverAEquipoFormDespues = true;
         if (tipo === 'ent') {
+          App.state._volverAEquipoFormDespues = true;
           App.navigate('entrenador-form');
         } else {
-          App.navigate('jugador-form');
+          App.views.altaJugador.abrir(true);
         }
       },
 
@@ -3089,143 +3087,250 @@ const App = {
       },
     },
 
-    // -- Form jugador ---------------------------------------
-    'jugador-form': {
-      render: function() {
-        if (!App.state._jugadorDraftRestore) App.views['jugador-form']._reset();
-        App.state._jugadorDraftRestore = false;
-        var setDirty = function() { App.state._formIsDirty = true; };
-        ['jug-nombre','jug-apellidos','jug-dorsal','jug-fechanac','jug-tel','jug-email',
-         'jug-padre1-nombre','jug-padre1-apellidos','jug-padre1-tel','jug-padre1-email','jug-padre1-notificar',
-         'jug-padre2-nombre','jug-padre2-apellidos','jug-padre2-tel','jug-padre2-email','jug-padre2-notificar'].forEach(function(id) {
-          var field = document.getElementById(id);
-          if (!field) return;
-          field.oninput = setDirty;
-          field.onchange = setDirty;
-        });
+    // -- Alta de jugador (entrenador/admin): asistente paso a paso ------------
+    // Mismos componentes que App.views.justificacion. Solo el nombre es obligatorio; el resto de
+    // pasos se omiten. Crea con crearJugador y termina mostrando las credenciales para compartir.
+    altaJugador: {
+      PASOS: ['nombre', 'dorsal', 'datos', 'familia', 'completar'],
+      // Campos de cada paso omitible: «Omitir» los vacía para no guardar datos a medias.
+      CAMPOS_PASO: {
+        dorsal: ['alta-dorsal'],
+        datos: ['alta-fechanac', 'alta-tel', 'alta-email'],
+        familia: ['alta-p1-nombre', 'alta-p1-apellidos', 'alta-p1-tel', 'alta-p1-email', 'alta-p2-nombre', 'alta-p2-apellidos', 'alta-p2-tel', 'alta-p2-email'],
       },
-      _reset: function() {
-        App.state._formIsDirty = false;
-        ['jug-nombre','jug-apellidos','jug-tel','jug-email'].forEach(function(id) {
-          document.getElementById(id).value = '';
+      _paso: 'nombre',
+      _desdeEquipo: false,   // true: el jugador nuevo se añade a la plantilla del formulario de equipo abierto
+      _familiares: { 1: false, 2: false },
+      _jugador: null,        // jugador creado (con Usuario, PIN y CodigoPadres)
+
+      abrir: function(desdeEquipo) {
+        this._desdeEquipo = !!desdeEquipo;
+        this._familiares = { 1: false, 2: false };
+        this._jugador = null;
+        ['alta-nombre', 'alta-apellidos'].concat(this.CAMPOS_PASO.dorsal, this.CAMPOS_PASO.datos, this.CAMPOS_PASO.familia).forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.value = '';
         });
-        document.getElementById('jug-dorsal').value   = '';
-        document.getElementById('jug-fechanac').value = '';
-        ['jug-padre1-nombre','jug-padre1-apellidos','jug-padre1-tel','jug-padre1-email','jug-padre2-nombre','jug-padre2-apellidos','jug-padre2-tel','jug-padre2-email'].forEach(function(id) {
-          var el = document.getElementById(id); if (el) el.value = '';
+        ['alta-p1-notificar', 'alta-p2-notificar'].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.checked = true;
         });
-        ['jug-padre1-notificar','jug-padre2-notificar'].forEach(function(id) {
-          var el = document.getElementById(id); if (el) el.checked = true;
-        });
-      },
-      guardar: function(force, emailWarningConfirmed) {
-        var _n = document.getElementById('jug-nombre');
-        if (!_n) { showToast('Error: recarga la página (formulario no encontrado)', 'error'); return; }
-        var datos = {
-          Nombre:    _n.value.trim(),
-          Apellidos: document.getElementById('jug-apellidos').value.trim(),
-          Dorsal:    document.getElementById('jug-dorsal').value,
-          FechaNac:  document.getElementById('jug-fechanac').value,
-          Telefono:  document.getElementById('jug-tel').value.trim(),
-          Email:     document.getElementById('jug-email').value.trim(),
-          NombrePadre1:    (document.getElementById('jug-padre1-nombre') || {value:''}).value.trim(),
-          ApellidosPadre1: (document.getElementById('jug-padre1-apellidos') || {value:''}).value.trim(),
-          TelefonoPadre1: (document.getElementById('jug-padre1-tel')    || {value:''}).value.trim(),
-          EmailPadre1:    (document.getElementById('jug-padre1-email')  || {value:''}).value.trim(),
-          NotificarAusenciasPadre1: !!(document.getElementById('jug-padre1-notificar') || {checked:true}).checked,
-          NombrePadre2:    (document.getElementById('jug-padre2-nombre') || {value:''}).value.trim(),
-          ApellidosPadre2: (document.getElementById('jug-padre2-apellidos') || {value:''}).value.trim(),
-          TelefonoPadre2: (document.getElementById('jug-padre2-tel')    || {value:''}).value.trim(),
-          EmailPadre2:    (document.getElementById('jug-padre2-email')  || {value:''}).value.trim(),
-          NotificarAusenciasPadre2: !!(document.getElementById('jug-padre2-notificar') || {checked:true}).checked,
-        };
-        if (!datos.Nombre || !datos.Apellidos) { showToast('Nombre y apellidos son obligatorios', 'error'); return; }
-        if (datos.Email && !_validarEmail(datos.Email)) { showToast('El email no tiene un formato válido', 'error'); return; }
-        if (datos.Telefono && !_validarTel(datos.Telefono)) { showToast('El teléfono no tiene un formato válido (mín. 9 dígitos)', 'error'); return; }
-        if (datos.FechaNac && datos.FechaNac > _hoy()) { showToast('La fecha de nacimiento no puede ser futura', 'error'); return; }
-        if (datos.EmailPadre1 && !_validarEmail(datos.EmailPadre1)) { showToast('El email del familiar 1 no es válido', 'error'); return; }
-        if (datos.TelefonoPadre1 && !_validarTel(datos.TelefonoPadre1)) { showToast('El teléfono del familiar 1 no es válido', 'error'); return; }
-        if (datos.EmailPadre2 && !_validarEmail(datos.EmailPadre2)) { showToast('El email del familiar 2 no es válido', 'error'); return; }
-        if (datos.TelefonoPadre2 && !_validarTel(datos.TelefonoPadre2)) { showToast('El teléfono del familiar 2 no es válido', 'error'); return; }
-        if (App.state._volverAEquipoFormDespues) {
-          var errorDorsal = _errorDorsalFormEquipo(null, datos.Dorsal);
-          if (errorDorsal) { showToast(errorDorsal, 'error'); return; }
-        }
-        if (!force) {
-          var dup = App.cache.jugadores.find(function(j) {
-            return String(j.Nombre || '').toLowerCase() === datos.Nombre.toLowerCase() &&
-                   String(j.Apellidos || '').toLowerCase() === datos.Apellidos.toLowerCase();
-          });
-          if (dup) {
-            App.openModal('Jugador duplicado',
-              _htmlWarnModal('Ya existe un jugador llamado <strong>' + _esc(datos.Nombre + ' ' + datos.Apellidos) + '</strong>.',
-                '¿Deseas guardarlo igualmente?', 'Guardar igualmente', "App.closeModal();App.views['jugador-form'].guardar(true)")
-            );
-            return;
-          }
-        }
-        if (!emailWarningConfirmed &&
-            !(datos.EmailPadre1 && datos.NotificarAusenciasPadre1) &&
-            !(datos.EmailPadre2 && datos.NotificarAusenciasPadre2)) {
-          var confirmCall = 'App.closeModal();App.views[\'jugador-form\'].guardar(' + (!!force) + ',true)';
-          App.openModal('Aviso de notificaciones', _htmlWarnModal(
-            'No se enviarán avisos de ausencia por email.',
-            'No hay ningún email familiar informado y activado para recibirlos. Puedes guardar igualmente y configurar los contactos más adelante.',
-            'Guardar igualmente', confirmCall
-          ));
-          return;
-        }
-          var crearDesdeEquipo = !!App.state._volverAEquipoFormDespues;
-          var historyAntesCrear = App.state.viewHistory.slice();
-          var operationToken = App.operation.begin('player-create');
-          if (!operationToken) return;
-          var parentIndex = App.state.viewHistory.lastIndexOf('jugadores-admin');
-          if (!crearDesdeEquipo && parentIndex >= 0) App.state.viewHistory = App.state.viewHistory.slice(0, parentIndex);
-          App.state._formIsDirty = false;
-          App.navigate(crearDesdeEquipo ? 'equipo-form' : 'jugadores-admin', {}, false);
-          server('crearJugador', datos)
-            .then(function(res) {
-              if (!res || res.success === false || !res.jugador) throw new Error(res && res.error || 'No se pudo crear el jugador');
-              if (res.jugador) App.cache.upsert('jugadores', res.jugador);
-              App.state._todosJugadores = App.cache.jugadores;
-              App.state._volverAEquipoFormDespues = false;
-              App.state._formIsDirty = false;
-              if (crearDesdeEquipo) {
-                var nuevoJug = res.jugador;
-                App.state.formJugadores.push({ID:nuevoJug.ID,Nombre:nuevoJug.Nombre,Apellidos:nuevoJug.Apellidos,Dorsal:nuevoJug.Dorsal,Tipo:'Principal'});
-                App._goBackReal();
-                App.state._formIsDirty = true;
-                App.views['equipo-form'].render();
-              } else {
-                App.views['jugadores-admin'].render();
-              }
-              App.operation.succeed(operationToken);
-              // Mostrar credenciales generadas automáticamente
-              if (res.jugador && res.jugador.Usuario) {
-                setTimeout(function() {
-                  App.openModal('Credenciales del jugador',
-                    '<div style="padding:20px 16px">' +
-                    '<p style="margin-bottom:12px;font-size:.88rem;color:var(--texto-sec)">Comparte estas credenciales con el jugador y su familia:</p>' +
-                    '<div class="form-group"><label>Usuario</label><input type="text" class="form-control" readonly value="' + _esc(res.jugador.Usuario) + '"></div>' +
-                    '<div class="form-group"><label>Código familias</label><input type="text" class="form-control" readonly value="' + _esc(res.jugador.CodigoPadres || '') + '" style="letter-spacing:4px;font-weight:700"></div>' +
-                    '<div class="form-group"><label>PIN inicial</label><input type="text" class="form-control" readonly value="' + _esc(res.jugador.PIN || '') + '" style="letter-spacing:4px;font-weight:700;font-size:1.1rem"></div>' +
-                    '<p style="font-size:.72rem;color:var(--texto-sec);margin-top:4px">Comparte tambi\u00e9n el C\u00f3digo familias con los padres. El jugador puede cambiar su PIN desde la app.</p>' +
-                    '<button class="btn btn-primary btn-full" style="margin-top:16px" onclick="App.closeModal()">Entendido</button>' +
-                    '</div>'
-                  );
-                }, 50);
-              }
-            })
-            .catch(function(err) {
-              App.state._volverAEquipoFormDespues = crearDesdeEquipo;
-              App.state.viewHistory = historyAntesCrear;
-              App.state._jugadorDraftRestore = true;
-              App.state._formIsDirty = true;
-              App.navigate('jugador-form', {}, false);
-              App.operation.fail(operationToken, (err && err.message) || 'Error al crear jugador');
-            });
+        this._irA('nombre', 0);
+        document.getElementById('modal-alta-jugador').classList.remove('hidden');
       },
 
+      // Con evento solo cierra al tocar el fondo; sin él (X, «Entendido») cierra siempre.
+      cerrar: function(e) {
+        var modal = document.getElementById('modal-alta-jugador');
+        if (e && e.target !== modal) return;
+        App.account.cerrarAvisosInfo();
+        modal.classList.add('hidden');
+      },
+
+      _valor: function(id) {
+        var el = document.getElementById(id);
+        return el ? String(el.value == null ? '' : el.value).trim() : '';
+      },
+
+      // Datos con la forma que espera crearJugador; un familiar no elegido se envía vacío.
+      _leer: function() {
+        var self = this, v = function(id) { return self._valor(id); };
+        var datos = { Nombre: v('alta-nombre'), Apellidos: v('alta-apellidos'), Dorsal: v('alta-dorsal'),
+          FechaNac: v('alta-fechanac'), Telefono: v('alta-tel'), Email: v('alta-email') };
+        [1, 2].forEach(function(n) {
+          var p = 'alta-p' + n + '-', activo = self._familiares[n], aviso = document.getElementById(p + 'notificar');
+          datos['NombrePadre' + n] = activo ? v(p + 'nombre') : '';
+          datos['ApellidosPadre' + n] = activo ? v(p + 'apellidos') : '';
+          datos['TelefonoPadre' + n] = activo ? v(p + 'tel') : '';
+          datos['EmailPadre' + n] = activo ? v(p + 'email') : '';
+          datos['NotificarAusenciasPadre' + n] = activo && aviso ? !!aviso.checked : true;
+        });
+        return datos;
+      },
+
+      // Mensaje del primer dato no válido del paso, o null.
+      _errorPaso: function(paso, d) {
+        if (paso === 'nombre') return !d.Nombre || !d.Apellidos ? 'Escribe el nombre y los apellidos del jugador' : null;
+        if (paso === 'dorsal') return this._desdeEquipo ? _errorDorsalFormEquipo(null, d.Dorsal) : null;
+        if (paso === 'datos') {
+          if (d.FechaNac && d.FechaNac > _hoy()) return 'La fecha de nacimiento no puede ser futura';
+          if (d.Telefono && !_validarTel(d.Telefono)) return 'El tel\u00e9fono no tiene un formato v\u00e1lido (m\u00edn. 9 d\u00edgitos)';
+          if (d.Email && !_validarEmail(d.Email)) return 'El email no tiene un formato v\u00e1lido';
+        }
+        if (paso === 'familia') {
+          for (var n = 1; n <= 2; n++) {
+            if (d['TelefonoPadre' + n] && !_validarTel(d['TelefonoPadre' + n])) return 'El tel\u00e9fono del familiar ' + n + ' no es v\u00e1lido';
+            if (d['EmailPadre' + n] && !_validarEmail(d['EmailPadre' + n])) return 'El email del familiar ' + n + ' no es v\u00e1lido';
+          }
+        }
+        return null;
+      },
+
+      continuar: function() {
+        var error = this._errorPaso(this._paso, this._leer());
+        if (error) { showToast(error, 'error'); return false; }
+        this._mover(1);
+        return true;
+      },
+
+      omitir: function() {
+        var campos = this.CAMPOS_PASO[this._paso];
+        if (!campos) return;
+        campos.forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.value = '';
+        });
+        if (this._paso === 'familia') this._familiares = { 1: false, 2: false };
+        this._mover(1);
+      },
+
+      atras: function() {
+        if (this._paso !== 'credenciales') this._mover(-1);
+      },
+
+      _mover: function(direccion) {
+        var destino = this.PASOS[this.PASOS.indexOf(this._paso) + direccion];
+        if (destino) this._irA(destino, direccion);
+      },
+
+      alternarFamiliar: function(n) {
+        this._familiares[n] = !this._familiares[n];
+        this._pintarFamiliares();
+        var campo = this._familiares[n] && document.getElementById('alta-p' + n + '-nombre');
+        if (campo && campo.focus) campo.focus();
+      },
+
+      _pintarFamiliares: function() {
+        var familiares = this._familiares;
+        [1, 2].forEach(function(n) {
+          var bloque = document.getElementById('alta-familiar-' + n);
+          if (bloque) bloque.hidden = !familiares[n];
+        });
+        document.querySelectorAll('#alta-steps [data-familiar]').forEach(function(b) {
+          b.setAttribute('aria-pressed', String(!!familiares[b.dataset.familiar]));
+        });
+      },
+
+      // Muestra el paso indicado. direccion: 1 avanza, -1 retrocede, 0 sin animación.
+      _irA: function(paso, direccion) {
+        this._paso = paso;
+        var indice = this.PASOS.indexOf(paso), final = paso === 'credenciales';
+        if (paso === 'completar') this._pintarResumen();
+        App.account.cerrarAvisosInfo();
+        document.querySelectorAll('#alta-steps .justif-step').forEach(function(step) {
+          var activo = step.dataset.step === paso;
+          step.hidden = !activo;
+          step.classList.remove('enter-forward', 'enter-back');
+          if (activo && direccion) {
+            void step.offsetWidth;
+            step.classList.add(direccion > 0 ? 'enter-forward' : 'enter-back');
+          }
+        });
+        this._pintarFamiliares();
+        document.getElementById('alta-progress').classList.toggle('hidden', final);
+        document.getElementById('alta-progress-text').textContent = 'Paso ' + (indice + 1) + ' de ' + this.PASOS.length;
+        document.getElementById('alta-progress-fill').style.width = Math.round((indice + 1) * 100 / this.PASOS.length) + '%';
+        document.getElementById('alta-atras').style.visibility = indice > 0 && !final ? 'visible' : 'hidden';
+        var contenedor = document.getElementById('alta-steps');
+        contenedor.scrollTop = 0;
+        if (!direccion || !contenedor.querySelector) return;
+        var foco = contenedor.querySelector('.justif-step[data-step="' + paso + '"] .justif-question');
+        if (foco) foco.focus({ preventScroll: true });
+      },
+
+      // Avisos que antes pedían confirmación: ahora se leen en el resumen antes de guardar.
+      _avisos: function(d) {
+        var avisos = [], nombre = (d.Nombre + ' ' + d.Apellidos).toLowerCase();
+        if (App.cache.jugadores.some(function(j) { return (String(j.Nombre || '') + ' ' + String(j.Apellidos || '')).toLowerCase() === nombre; })) {
+          avisos.push('Ya existe un jugador llamado ' + d.Nombre + ' ' + d.Apellidos + '. Se guardar\u00e1 como un jugador nuevo.');
+        }
+        if (!(d.EmailPadre1 && d.NotificarAusenciasPadre1) && !(d.EmailPadre2 && d.NotificarAusenciasPadre2)) {
+          avisos.push('No se enviar\u00e1n avisos de ausencia por email: no hay ning\u00fan email familiar con los avisos activados. Puedes a\u00f1adirlo m\u00e1s adelante.');
+        }
+        return avisos;
+      },
+
+      _pintarResumen: function() {
+        var d = this._leer(), filas = [['Nombre', d.Nombre + ' ' + d.Apellidos]];
+        if (d.Dorsal) filas.push(['Dorsal', d.Dorsal]);
+        if (d.FechaNac) filas.push(['Fecha de nacimiento', d.FechaNac.split('-').reverse().join('/')]);
+        if (d.Telefono) filas.push(['Tel\u00e9fono', d.Telefono]);
+        if (d.Email) filas.push(['Email', d.Email]);
+        [1, 2].forEach(function(n) {
+          var partes = [(d['NombrePadre' + n] + ' ' + d['ApellidosPadre' + n]).trim(), d['TelefonoPadre' + n], d['EmailPadre' + n]].filter(Boolean);
+          if (partes.length) filas.push(['Familiar ' + n, partes.join(' \u00b7 ')]);
+        });
+        document.getElementById('alta-resumen').innerHTML = '<dl>' + filas.map(function(f) {
+          return '<dt>' + _esc(f[0]) + '</dt><dd>' + _esc(f[1]) + '</dd>';
+        }).join('') + '</dl>' + this._avisos(d).map(function(a) { return '<p class="alta-aviso" role="note">' + _esc(a) + '</p>'; }).join('');
+      },
+
+      guardar: function() {
+        var d = this._leer(), self = this, desdeEquipo = this._desdeEquipo;
+        for (var i = 0; i < this.PASOS.length; i++) {
+          var error = this._errorPaso(this.PASOS[i], d);
+          if (error) { this._irA(this.PASOS[i], -1); showToast(error, 'error'); return Promise.resolve(false); }
+        }
+        var boton = document.getElementById('alta-guardar');
+        if (boton) boton.disabled = true;
+        return App.operation.run('player-create', 'crearJugador', [d], function(res) {
+          var j = res.jugador;
+          if (!j) throw new Error('No se pudo crear el jugador');
+          App.cache.upsert('jugadores', j);
+          App.state._todosJugadores = App.cache.jugadores;
+          if (desdeEquipo) {
+            App.state.formJugadores.push({ID:j.ID,Nombre:j.Nombre,Apellidos:j.Apellidos,Dorsal:j.Dorsal,Tipo:'Principal'});
+            App.state._formIsDirty = true;
+            if (App.state.currentView === 'equipo-form') App.views['equipo-form']._renderListas();
+          } else if (App.state.currentView === 'jugadores-admin') {
+            App.views['jugadores-admin'].render();
+          }
+          self._jugador = j;
+          if (!j.Usuario) { self.cerrar(); return true; }
+          self._pintarCredenciales();
+          document.getElementById('modal-alta-jugador').classList.remove('hidden');
+          self._irA('credenciales', 1);
+          return true;
+        }).catch(function() { return false; /* App.operation ya muestra el error */ })
+          .then(function(ok) { if (boton) boton.disabled = false; return ok; });
+      },
+
+      _pintarCredenciales: function() {
+        var j = this._jugador || {};
+        var campo = function(id, etiqueta, valor, clase) {
+          return '<div class="form-group"><label for="' + id + '">' + etiqueta + '</label><input type="text" id="' + id + '" class="form-control' + (clase ? ' ' + clase : '') + '" readonly value="' + _esc(valor || '') + '"></div>';
+        };
+        document.getElementById('alta-credenciales').innerHTML =
+          '<p class="justif-hint">Comparte estas credenciales con el jugador y su familia:</p>' +
+          campo('alta-cred-usuario', 'Usuario', j.Usuario) +
+          campo('alta-cred-codigo', 'C\u00f3digo familias', j.CodigoPadres, 'alta-credencial') +
+          campo('alta-cred-pin', 'PIN inicial', j.PIN, 'alta-credencial') +
+          '<p class="form-hint">Comparte tambi\u00e9n el C\u00f3digo familias con los padres. El jugador puede cambiar su PIN desde la app.</p>';
+      },
+
+      textoCredenciales: function(j) {
+        j = j || {};
+        return 'Usuario: ' + (j.Usuario || '') + '\nPIN: ' + (j.PIN || '') + '\nC\u00f3digo de padres: ' + (j.CodigoPadres || '');
+      },
+
+      copiar: function() {
+        return _copiarTexto(this.textoCredenciales(this._jugador)).then(function(ok) {
+          showToast(ok ? 'Credenciales copiadas' : 'No se pudo copiar; mant\u00e9n pulsado el texto para copiarlo', ok ? 'success' : 'error');
+          return ok;
+        });
+      },
+
+      // Copia el texto y abre WhatsApp sin chat concreto (la app en móvil; wa.me si no se abre o en escritorio).
+      whatsapp: function() {
+        var copia = _copiarTexto(this.textoCredenciales(this._jugador));
+        var agente = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
+        var ventana = /Android|iPhone|iPad|iPod/i.test(agente) ? window.open('whatsapp://', '_blank') : null;
+        if (!ventana) window.open('https://wa.me/', '_blank');
+        return copia.then(function(ok) {
+          showToast(ok ? 'Mensaje copiado, p\u00e9galo en el chat' : 'No se pudo copiar el mensaje', ok ? 'success' : 'error');
+          return ok;
+        });
+      },
     },
 
     // -- Lista entrenadores (admin) -------------------------
@@ -5181,6 +5286,26 @@ function confirmarYGuardar(titulo, msgHtml, callback) {
   );
 }
 
+// Copia texto al portapapeles; si la Clipboard API falla o no existe, usa un textarea temporal. Resuelve true/false.
+function _copiarTexto(texto) {
+  var respaldo = function() {
+    var area = document.createElement('textarea'), previo = document.activeElement, ok = false;
+    area.value = texto;
+    area.setAttribute('readonly', '');
+    area.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+    document.body.appendChild(area);
+    area.select();
+    try { ok = !!document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(area);
+    if (previo && previo.focus) previo.focus({ preventScroll: true });
+    return ok;
+  };
+  var portapapeles = typeof navigator !== 'undefined' && navigator.clipboard;
+  if (portapapeles && portapapeles.writeText) {
+    try { return portapapeles.writeText(texto).then(function() { return true; }, respaldo); } catch (e) { /* respaldo */ }
+  }
+  return Promise.resolve(respaldo());
+}
 function _validarEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
@@ -7063,6 +7188,24 @@ App.i18n = {
   "Volver": "Back",
   "Cerrar": "Close",
   "Continuar": "Continue",
+  "Omitir": "Skip",
+  "Copiar": "Copy",
+  "¿Cómo se llama el jugador?": "What is the player's name?",
+  "Es el único dato obligatorio.": "It is the only required field.",
+  "Es obligatorio porque con él se genera el usuario del jugador": "It is required because the player's username is generated from it",
+  "¿Qué dorsal lleva?": "Which jersey number?",
+  "Opcional. No puede repetirse en el mismo equipo.": "Optional. It cannot be repeated within the same team.",
+  "Opcionales. Puedes completarlos más adelante.": "Optional. You can complete them later.",
+  "¿Quieres añadir algún familiar?": "Do you want to add a family contact?",
+  "Uno, ambos o ninguno. Recibirán los avisos de ausencia por email.": "One, both or none. They will receive absence notifications by email.",
+  "Revisa y guarda": "Review and save",
+  "Jugador creado": "Player created",
+  "Comparte también el Código familias con los padres. El jugador puede cambiar su PIN desde la app.": "Also share the family code with the parents. The player can change their PIN from the app.",
+  "Escribe el nombre y los apellidos del jugador": "Enter the player's first and last name",
+  "Credenciales copiadas": "Credentials copied",
+  "Mensaje copiado, pégalo en el chat": "Message copied, paste it into the chat",
+  "No se pudo copiar el mensaje": "The message could not be copied",
+  "No se pudo copiar; mantén pulsado el texto para copiarlo": "Could not copy; press and hold the text to copy it",
   "Siguiente": "Next",
   "Anterior": "Previous",
   "Hoy": "Today",

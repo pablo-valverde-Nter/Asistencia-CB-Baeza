@@ -242,7 +242,7 @@ function driveViews() {
       }
       const state = new URLSearchParams(location.search).get('state');
       const preferenceView = new URLSearchParams(location.search).get('prefsView');
-      if (['ajustes','ajustes-idioma','ajustes-apariencia','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'].includes(preferenceView)) {
+      if (['ajustes','ajustes-idioma','ajustes-apariencia','login','sesiones','sesion','historial-equipo','gestion','equipo-form','entrenador-form'].includes(preferenceView)) {
         App.state.equipoSesionesId = 'equipo-cadete';
         App.state._equipoNombre = App.cache.getEquipoById('equipo-cadete').Nombre;
         App.state.sesionId = App.cache.sesiones.find(s => s.ID_Equipo === 'equipo-cadete' && !s.Cancelada).ID;
@@ -348,8 +348,8 @@ function driveViews() {
         if (accountState === 'menu') {
           App.toggleUserMenu();
           const menu = document.getElementById('user-menu');
-          if (menu.classList.contains('hidden') || menu.querySelectorAll('[role="menuitem"]').length !== 6) throw new Error('Menú de cuenta incompleto');
-          if (!/(?:Privacidad|Privacy)\s*·\s*Cookies/.test(menu.querySelector('.user-menu-legal')?.textContent || '')) throw new Error('Falta el enlace Privacidad · Cookies del menú');
+          if (menu.classList.contains('hidden') || menu.querySelectorAll('[role="menuitem"]').length !== 4) throw new Error('Menú de cuenta incompleto');
+          if (/Privacidad|Privacy|Cookies/.test(menu.textContent)) throw new Error('Las políticas no deben estar en el menú; viven en Seguridad');
           if (document.activeElement !== menu.querySelector('button')) throw new Error('El menú no recibe el foco');
           document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
           if (document.activeElement !== document.getElementById('user-badge')) throw new Error('Escape no devuelve el foco');
@@ -586,12 +586,12 @@ async function main() {
       }
       url.searchParams.delete('state');
       for (const theme of ['oscuro','patrimonio']) {
-        for (const view of role === 'admin' ? ['equipos','equipos-admin','jugadores-admin','entrenadores-admin','equipo-detalle','jugador-detalle','entrenador-detalle','informes','ajustes','ajustes-idioma','ajustes-apariencia','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'] : ['perfil-jugador','mis-stats','mi-equipo','ajustes','ajustes-idioma','ajustes-apariencia']) {
+        for (const view of role === 'admin' ? ['equipos','equipos-admin','jugadores-admin','entrenadores-admin','equipo-detalle','jugador-detalle','entrenador-detalle','informes','ajustes','ajustes-idioma','ajustes-apariencia','login','sesiones','sesion','historial-equipo','gestion','equipo-form','entrenador-form'] : ['perfil-jugador','mis-stats','mi-equipo','ajustes','ajustes-idioma','ajustes-apariencia']) {
           const preferenceUrl = new URL(url.href);
           preferenceUrl.searchParams.set('theme',theme);
           preferenceUrl.searchParams.set('lang','en');
           preferenceUrl.searchParams.set('final',view);
-          if (['ajustes','ajustes-idioma','ajustes-apariencia','login','sesiones','sesion','historial-equipo','gestion','equipo-form','jugador-form','entrenador-form'].includes(view)) preferenceUrl.searchParams.set('prefsView',view);
+          if (['ajustes','ajustes-idioma','ajustes-apariencia','login','sesiones','sesion','historial-equipo','gestion','equipo-form','entrenador-form'].includes(view)) preferenceUrl.searchParams.set('prefsView',view);
           const name = role + '-' + theme + '-en-' + view;
           await captureMobile(browser,preferenceUrl.href,output,name,join(output,name + '-412x915.png'));
           check(name + ': captura de tema e idioma',true);

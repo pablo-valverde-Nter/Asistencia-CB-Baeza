@@ -78,9 +78,6 @@
         <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.account.target=null;App.navigate('perfil-usuario')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg>Perfil</button>
         <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('ajustes')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.7 2.4-2.2 1L3.8 6l-2 3.5 1.8 1.8v2.4L1.8 15.5l2 3.5 2.3-.4 2.2 1L9 22h4l.7-2.4 2.2-1 2.3.4 2-3.5-1.8-1.8v-2.4l1.8-1.8-2-3.5-2.3.4-2.2-1L13 3Z" transform="translate(1 -1) scale(.95)"/><circle cx="12" cy="12" r="3"/></svg>Ajustes</button>
         <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.account.target=null;App.navigate('seguridad')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Seguridad</button>
-        <div class="user-menu-legal" role="group" aria-label="Privacidad y cookies">
-          <button type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('politica-privacidad')">Privacidad</button><span aria-hidden="true">&middot;</span><button type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('politica-cookies')">Cookies</button>
-        </div>
         <div class="user-menu-divider"></div>
         <button class="user-menu-item user-menu-logout" type="button" role="menuitem" onclick="event.stopPropagation();App.closeUserMenu();App.confirmarCerrarSesion()">
           <svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4v16h6m4-12 4 4-4 4m-6-4h13"/></svg>Cerrar sesión
@@ -350,51 +347,6 @@
       <div id="jugadores-admin-lista"></div>
     </section>
 
-    <!-- JUGADOR FORM -->
-    <section id="view-jugador-form" class="view">
-      <div class="form-section">
-        <div class="form-section-title">Datos del jugador</div>
-        <div class="form-row">
-          <div class="form-group"><label>Nombre *</label><input type="text" id="jug-nombre" placeholder="Nombre"></div>
-          <div class="form-group"><label>Apellidos *</label><input type="text" id="jug-apellidos" placeholder="Apellidos"></div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>Dorsal</label><input type="number" id="jug-dorsal" placeholder="0" min="0" max="99"></div>
-          <div class="form-group"><label>F. nacimiento</label><input type="date" id="jug-fechanac"></div>
-        </div>
-        <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="jug-tel" placeholder="+34 600 000 000"></div>
-        <div class="form-group"><label>Email</label><input type="email" id="jug-email" placeholder="email@ejemplo.com"></div>
-      </div>
-      <div class="form-section">
-        <div class="form-section-title">Contacto familiar</div>
-        <p class="form-subtitle">Familiar 1</p>
-        <div class="form-row">
-          <div class="form-group"><label>Nombre</label><input type="text" id="jug-padre1-nombre" placeholder="Nombre"></div>
-          <div class="form-group"><label>Apellidos</label><input type="text" id="jug-padre1-apellidos" placeholder="Apellidos"></div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="jug-padre1-tel" placeholder="+34 600 000 000"></div>
-          <div class="form-group"><label>Email</label><input type="email" id="jug-padre1-email" placeholder="padre@ejemplo.com">
-            <label class="parent-email-notify"><input type="checkbox" id="jug-padre1-notificar" checked><span>Enviar avisos de ausencia</span></label>
-          </div>
-        </div>
-        <p class="form-subtitle">Familiar 2</p>
-        <div class="form-row">
-          <div class="form-group"><label>Nombre</label><input type="text" id="jug-padre2-nombre" placeholder="Nombre"></div>
-          <div class="form-group"><label>Apellidos</label><input type="text" id="jug-padre2-apellidos" placeholder="Apellidos"></div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>Tel&eacute;fono</label><input type="tel" id="jug-padre2-tel" placeholder="+34 600 000 000"></div>
-          <div class="form-group"><label>Email</label><input type="email" id="jug-padre2-email" placeholder="madre@ejemplo.com">
-            <label class="parent-email-notify"><input type="checkbox" id="jug-padre2-notificar" checked><span>Enviar avisos de ausencia</span></label>
-          </div>
-        </div>
-      </div>
-      <div class="p-16" style="padding-bottom:32px">
-        <button class="btn btn-primary btn-full" onclick="App.views['jugador-form'].guardar()">Guardar jugador</button>
-      </div>
-    </section>
-
     <!-- ENTRENADORES ADMIN -->
     <section id="view-entrenadores-admin" class="view">
       <div class="search-wrap" style="padding-top:16px">
@@ -630,6 +582,111 @@
           </form>
         </section>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- Asistente paso a paso de alta de jugador (entrenador/admin): mismos componentes que el de justificación -->
+  <div id="modal-alta-jugador" class="modal-justif-overlay hidden" onclick="App.views.altaJugador.cerrar(event)">
+    <div class="modal-justif-sheet justif-wizard alta-wizard" role="dialog" aria-modal="true" aria-labelledby="alta-titulo">
+      <div class="modal-handle"></div>
+      <div class="modal-hdr justif-wizard-hdr">
+        <button type="button" id="alta-atras" class="justif-back" onclick="App.views.altaJugador.atras()" aria-label="Paso anterior">&#8249; Atr&aacute;s</button>
+        <h3 id="alta-titulo">Nuevo jugador</h3>
+        <button type="button" class="modal-x" onclick="App.views.altaJugador.cerrar()" aria-label="Cerrar">&#x2715;</button>
+      </div>
+      <div id="alta-progress" class="justif-progress">
+        <div class="justif-progress-track" aria-hidden="true"><span id="alta-progress-fill" class="justif-progress-fill"></span></div>
+        <span id="alta-progress-text" class="justif-progress-text" aria-live="polite">Paso 1 de 5</span>
+      </div>
+      <div id="alta-steps" class="modal-body justif-steps">
+
+        <section class="justif-step" data-step="nombre">
+          <h4 class="justif-question" tabindex="-1">&iquest;C&oacute;mo se llama el jugador?</h4>
+          <p class="justif-hint">Es el &uacute;nico dato obligatorio.</p>
+          <div class="alta-label-row">
+            <span class="alta-label">Nombre y apellidos</span>
+            <span class="avisos-info"><button type="button" class="avisos-info-btn" aria-label="Por qu&eacute; es obligatorio" aria-expanded="false" aria-controls="alta-nombre-info" onclick="App.account.toggleAvisosInfo(this)"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5m0-8v1"/></svg></button><span class="avisos-popover" id="alta-nombre-info" role="note" hidden>Es obligatorio porque con &eacute;l se genera el usuario del jugador</span></span>
+          </div>
+          <div class="form-group"><label for="alta-nombre">Nombre</label><input type="text" id="alta-nombre" placeholder="Nombre" autocomplete="off"></div>
+          <div class="form-group"><label for="alta-apellidos">Apellidos</label><input type="text" id="alta-apellidos" placeholder="Apellidos" autocomplete="off"></div>
+          <div class="justif-actions">
+            <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
+          </div>
+        </section>
+
+        <section class="justif-step" data-step="dorsal" hidden>
+          <h4 class="justif-question" tabindex="-1">&iquest;Qu&eacute; dorsal lleva?</h4>
+          <p class="justif-hint">Opcional. No puede repetirse en el mismo equipo.</p>
+          <div class="form-group"><label for="alta-dorsal">Dorsal</label><input type="number" id="alta-dorsal" placeholder="0" min="0" max="99" inputmode="numeric"></div>
+          <div class="justif-actions">
+            <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
+            <button type="button" class="btn btn-secondary btn-full" onclick="App.views.altaJugador.omitir()">Omitir</button>
+          </div>
+        </section>
+
+        <section class="justif-step" data-step="datos" hidden>
+          <h4 class="justif-question" tabindex="-1">Datos del jugador</h4>
+          <p class="justif-hint">Opcionales. Puedes completarlos m&aacute;s adelante.</p>
+          <div class="form-group"><label for="alta-fechanac">Fecha de nacimiento</label><input type="date" id="alta-fechanac"></div>
+          <div class="form-group"><label for="alta-tel">Tel&eacute;fono</label><input type="tel" id="alta-tel" placeholder="+34 600 000 000"></div>
+          <div class="form-group"><label for="alta-email">Email</label><input type="email" id="alta-email" placeholder="email@ejemplo.com"></div>
+          <div class="justif-actions">
+            <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
+            <button type="button" class="btn btn-secondary btn-full" onclick="App.views.altaJugador.omitir()">Omitir</button>
+          </div>
+        </section>
+
+        <section class="justif-step" data-step="familia" hidden>
+          <h4 class="justif-question" tabindex="-1">&iquest;Quieres a&ntilde;adir alg&uacute;n familiar?</h4>
+          <p class="justif-hint">Uno, ambos o ninguno. Recibir&aacute;n los avisos de ausencia por email.</p>
+          <div class="justif-chips alta-familiares" role="group" aria-label="Familiares">
+            <button type="button" class="justif-chip" data-familiar="1" aria-pressed="false" aria-controls="alta-familiar-1" onclick="App.views.altaJugador.alternarFamiliar(1)">Familiar 1</button>
+            <button type="button" class="justif-chip" data-familiar="2" aria-pressed="false" aria-controls="alta-familiar-2" onclick="App.views.altaJugador.alternarFamiliar(2)">Familiar 2</button>
+          </div>
+          <fieldset id="alta-familiar-1" class="alta-familiar" hidden>
+            <legend>Familiar 1</legend>
+            <div class="form-group"><label for="alta-p1-nombre">Nombre</label><input type="text" id="alta-p1-nombre" placeholder="Nombre"></div>
+            <div class="form-group"><label for="alta-p1-apellidos">Apellidos</label><input type="text" id="alta-p1-apellidos" placeholder="Apellidos"></div>
+            <div class="form-group"><label for="alta-p1-tel">Tel&eacute;fono</label><input type="tel" id="alta-p1-tel" placeholder="+34 600 000 000"></div>
+            <div class="form-group"><label for="alta-p1-email">Email</label><input type="email" id="alta-p1-email" placeholder="familia@ejemplo.com">
+              <label class="parent-email-notify"><input type="checkbox" id="alta-p1-notificar" checked><span>Enviar avisos de ausencia</span></label>
+            </div>
+          </fieldset>
+          <fieldset id="alta-familiar-2" class="alta-familiar" hidden>
+            <legend>Familiar 2</legend>
+            <div class="form-group"><label for="alta-p2-nombre">Nombre</label><input type="text" id="alta-p2-nombre" placeholder="Nombre"></div>
+            <div class="form-group"><label for="alta-p2-apellidos">Apellidos</label><input type="text" id="alta-p2-apellidos" placeholder="Apellidos"></div>
+            <div class="form-group"><label for="alta-p2-tel">Tel&eacute;fono</label><input type="tel" id="alta-p2-tel" placeholder="+34 600 000 000"></div>
+            <div class="form-group"><label for="alta-p2-email">Email</label><input type="email" id="alta-p2-email" placeholder="familia@ejemplo.com">
+              <label class="parent-email-notify"><input type="checkbox" id="alta-p2-notificar" checked><span>Enviar avisos de ausencia</span></label>
+            </div>
+          </fieldset>
+          <div class="justif-actions">
+            <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
+            <button type="button" class="btn btn-secondary btn-full" onclick="App.views.altaJugador.omitir()">Omitir</button>
+          </div>
+        </section>
+
+        <section class="justif-step" data-step="completar" hidden>
+          <h4 class="justif-question" tabindex="-1">Revisa y guarda</h4>
+          <div id="alta-resumen" class="alta-resumen"></div>
+          <div class="justif-actions">
+            <button type="button" id="alta-guardar" class="btn btn-primary btn-full" onclick="App.views.altaJugador.guardar()">Guardar jugador</button>
+          </div>
+        </section>
+
+        <section class="justif-step" data-step="credenciales" hidden>
+          <h4 class="justif-question" tabindex="-1">Jugador creado</h4>
+          <div id="alta-credenciales"></div>
+          <div class="justif-actions">
+            <div class="alta-compartir">
+              <button type="button" class="btn btn-secondary" onclick="App.views.altaJugador.copiar()">Copiar</button>
+              <button type="button" class="btn btn-whatsapp" onclick="App.views.altaJugador.whatsapp()">WhatsApp</button>
+            </div>
+            <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.cerrar()">Entendido</button>
+          </div>
+        </section>
       </div>
     </div>
   </div>

@@ -155,9 +155,8 @@ test('admin cambia PIN entrenador mediante actualizarEntrenador y borra desde pe
 
 test('formularios anteriores solo crean y ya no contienen credenciales ni eliminación de edición', () => {
   const {app}=client();
-  for (const view of ['jugador-form','entrenador-form']) {
-    assert.equal(app.views[view].cargar,undefined); assert.equal(app.views[view].eliminar,undefined);
-  }
+  assert.equal(app.views['jugador-form'],undefined,'el alta de jugador es el asistente App.views.altaJugador');
+  assert.equal(app.views['entrenador-form'].cargar,undefined); assert.equal(app.views['entrenador-form'].eliminar,undefined);
   const source=fs.readFileSync(path.join(__dirname,'../ui/app.html'),'utf8');
   assert.doesNotMatch(source,/formJugadorId|formEntrenadorId/);
   const markup=fs.readFileSync(path.join(__dirname,'../ui/Index.html'),'utf8');

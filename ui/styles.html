@@ -165,10 +165,6 @@ input, select, textarea { font-family: inherit; }
 .user-menu-logout { color: var(--rojo); }
 .user-menu-logout > span { color: var(--rojo); }
 .user-menu-divider { height: 1px; margin: 4px 5px; background: var(--borde); }
-/* Enlace «Privacidad · Cookies» del menú de usuario (todos los perfiles) */
-.user-menu-legal { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 2px 10px 4px; color: var(--texto-sec); font-size: .78rem; }
-.user-menu-legal button { min-height: 36px; padding: 4px 6px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-.user-menu-legal button:hover, .user-menu-legal button:focus-visible { background: var(--fondo); color: var(--texto); outline: none; }
 #user-badge-avatar {
   width: 28px; height: 28px; border-radius: 50%;
   background: var(--on-accent-wash); color: var(--on-accent);
@@ -1644,8 +1640,8 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 .justif-wizard .modal-x { flex: 0 0 auto; width: 40px; height: 40px; border: 0; background: transparent; font-size: 1rem; }
 .justif-progress { display: flex; align-items: center; gap: 10px; padding: 10px 16px 2px; flex-shrink: 0; }
 .justif-progress-track { flex: 1; height: 6px; border-radius: 3px; background: var(--borde); overflow: hidden; }
-#justif-progress-fill { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--morado); transition: width .25s ease; }
-#justif-progress-text { flex-shrink: 0; font-size: .74rem; font-weight: 700; color: var(--texto-sec); }
+#justif-progress-fill, .justif-progress-fill { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--morado); transition: width .25s ease; }
+#justif-progress-text, .justif-progress-text { flex-shrink: 0; font-size: .74rem; font-weight: 700; color: var(--texto-sec); }
 .justif-wizard .justif-steps { display: flex; flex-direction: column; padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 0px)); overflow-x: hidden; }
 .justif-step { display: flex; flex-direction: column; flex: 1 0 auto; }
 .justif-step[hidden] { display: none; }
@@ -1704,6 +1700,29 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
   flex: 1; min-width: 0; padding: 10px 12px; border: 1.5px solid var(--borde); border-radius: 8px;
   background: var(--fondo); color: var(--texto); font-size: 1rem;
 }
+/* ── Asistente de alta de jugador: altura fija (no salta entre pasos); el cuerpo desplaza si un paso no cabe. ── */
+.alta-wizard { height: min(86vh, 640px); max-height: min(86vh, 640px); min-height: 0; }
+.alta-wizard .justif-steps { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.alta-wizard .form-group :is(input:not([type="checkbox"])) { min-height: 44px; min-width: 0; }
+.alta-wizard .form-group > label:not(.parent-email-notify) { display: block; margin-bottom: 6px; font-size: .8rem; font-weight: 600; color: var(--texto-sec); }
+.alta-label-row { display: flex; align-items: center; gap: 4px; margin: 0 0 6px; }
+.alta-label { font-size: .86rem; font-weight: 700; color: var(--texto); }
+.alta-familiares { margin-bottom: 14px; }
+.alta-familiares .justif-chip { flex: 1 1 0; }
+.alta-familiar { margin: 0 0 12px; padding: 12px 12px 0; border: 1px solid var(--borde); border-radius: var(--r-lg); }
+.alta-familiar[hidden] { display: none; }
+.alta-familiar legend { padding: 0 6px; font-size: .8rem; font-weight: 700; color: var(--texto); }
+.alta-resumen { display: flex; flex-direction: column; gap: 10px; }
+.alta-resumen dl { margin: 0; padding: 12px; border-radius: 10px; background: var(--fondo); }
+.alta-resumen dt { font-size: .7rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--texto-sec); }
+.alta-resumen dd { margin: 2px 0 10px; font-size: .88rem; color: var(--texto); overflow-wrap: anywhere; }
+.alta-resumen dd:last-child { margin-bottom: 0; }
+.alta-aviso { margin: 0; padding: 10px 12px; border-left: 3px solid var(--naranja); border-radius: 8px; background: var(--naranja-s); color: var(--texto); font-size: .8rem; line-height: 1.45; }
+.alta-credencial { font-family: inherit; letter-spacing: 3px; font-weight: 700; }
+.alta-compartir { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.alta-compartir .btn { min-height: 44px; padding: 10px 12px; }
+.btn-whatsapp { background: var(--verde); color: var(--button-ink); }
+.alta-wizard .btn:focus-visible { outline: 2px solid var(--morado); outline-offset: 2px; }
 .justif-detalle { margin: 12px 0 0; }
 .justif-detalle label { margin-bottom: 4px; }
 .justif-detalle textarea { min-height: 60px; font-size: .88rem; }
@@ -2431,22 +2450,22 @@ p.person-inline { display:flex; margin:9px 0; }
 
 /* Formularios de perfil y seguridad (propios y de staff) y fichas de jugador/entrenador: una escala tipográfica,
    controles de 44px y ritmo vertical comunes. Los campos de dos columnas se apilan cuando no caben. */
-:where(.account-page,#view-jugador-form,#view-entrenador-form) .form-group > label:not(.parent-email-notify,.form-toggle-row),
+:where(.account-page,#view-entrenador-form) .form-group > label:not(.parent-email-notify,.form-toggle-row),
 .account-page label.form-group { font-size:.8rem; font-weight:600; line-height:1.35; color:var(--texto-sec); }
-:where(.account-page,#view-jugador-form,#view-entrenador-form) .form-group > label:not(.parent-email-notify,.form-toggle-row) { margin-bottom:6px; }
+:where(.account-page,#view-entrenador-form) .form-group > label:not(.parent-email-notify,.form-toggle-row) { margin-bottom:6px; }
 .account-page label.form-group { display:flex; flex-direction:column; gap:6px; }
-:where(.account-page,#view-jugador-form,#view-entrenador-form) .form-group :is(input:not([type="checkbox"]):not([type="radio"]),select) { min-height:44px; min-width:0; }
-:where(.account-page,#view-jugador-form,#view-entrenador-form) .form-row { flex-wrap:wrap; gap:0 12px; }
-:where(.account-page,#view-jugador-form,#view-entrenador-form) .form-row > .form-group { flex:1 1 140px; min-width:0; }
-:where(.account-page,#view-jugador-form,#view-entrenador-form) .btn { min-height:44px; }
+:where(.account-page,#view-entrenador-form) .form-group :is(input:not([type="checkbox"]):not([type="radio"]),select) { min-height:44px; min-width:0; }
+:where(.account-page,#view-entrenador-form) .form-row { flex-wrap:wrap; gap:0 12px; }
+:where(.account-page,#view-entrenador-form) .form-row > .form-group { flex:1 1 140px; min-width:0; }
+:where(.account-page,#view-entrenador-form) .btn { min-height:44px; }
 :where(.account-page) .btn-sm { min-height:36px; }
 form.account-card { display:flex; flex-direction:column; }
 form.account-card > :is(h2,h3):not(:first-child) { margin-top:12px; padding-top:20px; border-top:1px solid var(--borde); }
 form.account-card > .btn-primary { margin-top:8px; }
 .account-card .btn-full + .btn-full,.account-card form + .btn-full { margin-top:10px; }
 .account-card .parent-email-notify { min-height:32px; margin:0 0 14px; color:var(--texto) !important; }
-:where(#view-jugador-form,#view-entrenador-form) .form-section { padding:20px 16px 6px; }
-:where(#view-jugador-form,#view-entrenador-form) .form-section + .form-section { border-top:1px solid var(--borde); }
+:where(#view-entrenador-form) .form-section { padding:20px 16px 6px; }
+:where(#view-entrenador-form) .form-section + .form-section { border-top:1px solid var(--borde); }
 .form-subtitle { margin:0 0 10px; font-size:.8rem; font-weight:700; color:var(--texto); }
 .form-row + .form-subtitle { margin-top:2px; padding-top:14px; border-top:1px dashed var(--borde); }
 .form-hint { display:block; margin-top:6px; font-size:.74rem; line-height:1.5; color:var(--texto-sec); }
