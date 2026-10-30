@@ -131,18 +131,34 @@ function cargarDatos(auth) {
     const rol = contexto.rol;
 
     // ── Estadísticas agregadas (antes de sanear; el jugador solo recibe las suyas) ──
+    const datosEstadisticas = {
+      temporadas: temporadasR.data, equipos: equiposR.data, horarios: horariosR.data,
+      jugadores: jugadoresR.data, jugadoresEquipos: jugadoresEquiposR.data,
+      entrenadores: entrenadoresR.data, entrenadoresEquipos: entrenadoresEquiposR.data,
+      sesiones: sesionesR.data, asistJugadores: asistJugadoresR.data, asistEntrenadores: asistEntrenadoresR.data,
+    };
+    const ctxEstadisticas = contextoEstadisticas_(contexto);
+    const ahora = ahoraMadrid_();
+    const indices = new Map();
     let estadisticas = null;
     let estadisticasError = null;
     try {
-      estadisticas = Estadisticas.consultar({
-        temporadas: temporadasR.data, equipos: equiposR.data, horarios: horariosR.data,
-        jugadores: jugadoresR.data, jugadoresEquipos: jugadoresEquiposR.data,
-        entrenadores: entrenadoresR.data, entrenadoresEquipos: entrenadoresEquiposR.data,
-        sesiones: sesionesR.data, asistJugadores: asistJugadoresR.data, asistEntrenadores: asistEntrenadoresR.data,
-      }, { entidad: rol === CONFIG.ROLES.JUGADOR ? 'propio' : 'resumen' }, contextoEstadisticas_(contexto), ahoraMadrid_());
+      estadisticas = Estadisticas.consultar(datosEstadisticas, { entidad: rol === CONFIG.ROLES.JUGADOR ? 'propio' : 'resumen' }, ctxEstadisticas, ahora, indices);
     } catch (e) {
       estadisticasError = e.message;
       Logger.log(`[cargarDatos:${traceId}] fallo estadisticas: ${e.message}`);
+    }
+
+    // ── Alertas de ausencias seguidas (solo personal; un fallo no rompe el arranque) ──
+    let alertasAusencias = null;
+    let alertasAusenciasError = null;
+    if (rol !== CONFIG.ROLES.JUGADOR) {
+      try {
+        alertasAusencias = Estadisticas.alertasAusencias(datosEstadisticas, ctxEstadisticas, ahora, indices);
+      } catch (e) {
+        alertasAusenciasError = e.message;
+        Logger.log(`[cargarDatos:${traceId}] fallo alertas: ${e.message}`);
+      }
     }
 
     // ── Filtrado de datos sensibles según rol ──────────────────────────────────
@@ -211,6 +227,8 @@ function cargarDatos(auth) {
       motivosJustificacion: CONFIG.MOTIVOS_JUSTIFICACION,
       estadisticas:        estadisticas,
       estadisticasError:   estadisticasError,
+      alertasAusencias:    alertasAusencias,
+      alertasAusenciasError: alertasAusenciasError,
     };
   } catch (e) {
     Logger.log(`[cargarDatos:${traceId}] excepcion inesperada: ${e.message}`);
@@ -225,7 +243,10 @@ function cargarDatos(auth) {
 
 function ahoraMadrid_() { return Utilities.formatDate(new Date(), 'Europe/Madrid', 'yyyy-MM-dd HH:mm'); }
 
-function contextoEstadisticas_(contexto) { return { rol: contexto.rol, jugadorId: contexto.jugador ? contexto.jugador.ID : null }; }
+function contextoEstadisticas_(contexto) {
+  return { rol: contexto.rol, jugadorId: contexto.jugador ? contexto.jugador.ID : null,
+    equiposGestion: (contexto.equipos || []).map(e => e.ID) };
+}
 
 /** Una sola ronda paralela a Supabase; Auth y las lecturas posteriores salen de la caché de la ejecución. */
 function precargarTablasSeguro_(traceId) {

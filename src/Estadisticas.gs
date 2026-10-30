@@ -7,12 +7,7 @@ const Estadisticas = {
     const filtro = this.normalizarFiltro_(datos.temporadas || [], consulta, ahora);
     const entidad = contexto.rol === 'jugador' ? 'propio' : (consulta.entidad || 'resumen');
     if (entidad === 'club' && contexto.rol !== 'admin') throw new Error('Consulta de estadísticas no permitida.');
-    const claveIndice = [filtro.temporadaId, filtro.periodo, filtro.desde, filtro.hasta].join('|');
-    let x = indices && indices.get(claveIndice);
-    if (!x) {
-      x = this.indexar_(datos, filtro, ahora);
-      if (indices) indices.set(claveIndice, x);
-    }
+    const x = this.indice_(datos, filtro, ahora, indices);
     let resultado;
     switch (entidad) {
       case 'resumen': resultado = this.resumen_(x, contexto); break;
@@ -32,6 +27,15 @@ const Estadisticas = {
     return { filtro, temporadas: (datos.temporadas || []).map(t => ({ ID: t.ID, Nombre: t.Nombre, Activa: t.Activa })), entidad, datos: resultado };
   },
 
+  indice_(datos, filtro, ahora, indices) {
+    const clave = [filtro.temporadaId, filtro.periodo, filtro.desde, filtro.hasta].join('|');
+    let x = indices && indices.get(clave);
+    if (!x) {
+      x = this.indexar_(datos, filtro, ahora);
+      if (indices) indices.set(clave, x);
+    }
+    return x;
+  },
   verdadero_(valor) { return valor === true || valor === 'TRUE'; },
   fechaMs_(fecha) {
     const f = String(fecha);
@@ -198,6 +202,52 @@ const Estadisticas = {
     return Math.max(0, (fin[0] - inicio[0]) * 60 + fin[1] - inicio[1]);
   },
   ordenarFilas_(filas) { return filas.slice().sort((a, b) => a.clave < b.clave ? 1 : a.clave > b.clave ? -1 : 0); },
+  /** Única definición de «faltas seguidas»: de la más reciente hacia atrás hasta la primera P o R.
+   *  Una falta sin relación vigente con el equipo (invitado) se ignora; una P o R como invitado sí corta. */
+  rachaAusencias_(ordenadas) {
+    const racha = [];
+    for (const r of ordenadas) {
+      if (r.estado !== 'A') break;
+      if (r.tipo === 'Principal' || r.tipo === 'Secundario') racha.push(r);
+    }
+    return racha;
+  },
+  /** Jugadores con al menos AUSENCIAS_SEGUIDAS faltas seguidas en la temporada activa, en sus equipos vigentes hoy.
+   *  El admin recibe todos los equipos de la temporada; el entrenador, solo `equiposGestion` (sin Visor). */
+  alertasAusencias(datos, contexto, ahora, indices) {
+    contexto = contexto || {};
+    const umbral = CONFIG.ESTADISTICAS.AUSENCIAS_SEGUIDAS;
+    const temporadas = datos.temporadas || [];
+    const resultado = { umbral, temporadaId: null, equipos: [], jugadores: [] };
+    if (!['admin', 'entrenador'].includes(contexto.rol) || !temporadas.some(t => this.verdadero_(t.Activa))) return resultado;
+    // Hasta hoy aunque la temporada activa haya pasado su FechaFin: la racha reciente importa mientras siga activa.
+    const filtro = { ...this.normalizarFiltro_(temporadas, {}, ahora), hasta: ahora.slice(0, 10) };
+    const x = this.indice_(datos, filtro, ahora, indices);
+    const gestion = contexto.rol === 'admin' ? null : new Set(contexto.equiposGestion || []);
+    const equipos = Array.from(x.equiposPeriodo.keys()).filter(id => !gestion || gestion.has(id));
+    resultado.temporadaId = filtro.temporadaId;
+    resultado.equipos = equipos;
+    const hoy = ahora.slice(0, 10);
+    for (const [jugadorId, filas] of x.filasJugador) {
+      const ordenadas = this.ordenarFilas_(filas);
+      const racha = this.rachaAusencias_(ordenadas);
+      if (racha.length < umbral) continue;
+      const actuales = equipos.filter(id => {
+        const rel = this.relacion_(x.relacionesJugador, jugadorId, id, hoy);
+        return rel && this.verdadero_(rel.Activo) && !rel.FechaBaja;
+      });
+      if (!actuales.length) continue;
+      const asistencia = ordenadas.find(r => r.estado !== 'A');
+      const primera = racha[racha.length - 1];
+      let justificadas = 0;
+      for (const r of racha) if (this.verdadero_(r.fila.TieneJustificacion)) justificadas++;
+      resultado.jugadores.push({ jugadorId, equipos: actuales, ausencias: racha.length, desde: primera.s.Fecha,
+        ultimaAusencia: racha[0].s.Fecha, ultimaAsistencia: asistencia ? asistencia.s.Fecha : null, justificadas,
+        clave: jugadorId + ':' + primera.s.ID });
+    }
+    resultado.jugadores.sort((a, b) => b.ausencias - a.ausencias || (a.desde < b.desde ? -1 : a.desde > b.desde ? 1 : 0));
+    return resultado;
+  },
   metricas_(x, filas, filasRecientes) {
     const conteo = this.conteo_(filas);
     const porcentajes = this.porcentajes_(conteo);
@@ -220,11 +270,7 @@ const Estadisticas = {
       mejorRacha = Math.max(mejorRacha, racha);
     }
     const alertas = [];
-    if (ordenadas.length >= CONFIG.ESTADISTICAS.AUSENCIAS_SEGUIDAS) {
-      let seguidas = true;
-      for (let i = 0; i < CONFIG.ESTADISTICAS.AUSENCIAS_SEGUIDAS; i++) if (ordenadas[i].estado !== 'A') seguidas = false;
-      if (seguidas) alertas.push('seguidas');
-    }
+    if (this.rachaAusencias_(ordenadas).length >= CONFIG.ESTADISTICAS.AUSENCIAS_SEGUIDAS) alertas.push('seguidas');
     if (tendenciaPp !== null && tendenciaPp <= -CONFIG.ESTADISTICAS.CAIDA_PP) alertas.push('caida');
     if (c28.injustificadasA >= CONFIG.ESTADISTICAS.INJUSTIFICADAS_ALERTA) alertas.push('injustificadas');
     return { conteo, ...porcentajes, tendenciaPp, rachaActual, mejorRacha, alertas };

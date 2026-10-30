@@ -42,6 +42,7 @@ test('cargarDatos entrega al jugador solo sus datos y sus estadísticas propias'
   assert.equal(res.temporadas.length, datos.temporadas.length);
   assert.equal(res.estadisticas.entidad, 'propio');
   assert.equal(res.estadisticasError, null);
+  assert.equal(res.alertasAusencias, null);
 });
 
 test('cargarDatos calcula el resumen del personal y no rompe el arranque si falla', () => {
@@ -56,6 +57,21 @@ test('cargarDatos calcula el resumen del personal y no rompe el arranque si fall
   assert.equal(fallido.success, true);
   assert.equal(fallido.estadisticas, null);
   assert.equal(fallido.estadisticasError, 'boom');
+  assert.deepEqual(Array.from(fallido.alertasAusencias.jugadores, j => j.jugadorId), ['jugador-gonzalo']);
+});
+
+test('cargarDatos entrega alertas solo de los equipos de gestión y sobrevive a su fallo', () => {
+  const ctx = cargar({ success: true, rol: 'entrenador', jugador: null, equipos: [{ ID: 'equipo-junior' }], equiposVisor: [{ ID: 'equipo-cadete' }] });
+  const res = ctx.cargarDatos({});
+  assert.deepEqual(Array.from(res.alertasAusencias.equipos), ['equipo-junior']);
+  assert.equal(res.alertasAusencias.jugadores.length, 0);
+  assert.equal(res.alertasAusenciasError, null);
+  vm.runInContext('Estadisticas.alertasAusencias = () => { throw new Error("sin alertas"); }', ctx);
+  const fallido = ctx.cargarDatos({});
+  assert.equal(fallido.success, true);
+  assert.equal(fallido.alertasAusencias, null);
+  assert.equal(fallido.alertasAusenciasError, 'sin alertas');
+  assert.equal(fallido.estadisticas.entidad, 'resumen');
 });
 
 test('getEstadisticas aplica permisos del motor', () => {

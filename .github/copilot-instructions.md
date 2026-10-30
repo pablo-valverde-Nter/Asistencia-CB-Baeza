@@ -87,6 +87,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - Estados: `P` (Presente → verde), `A` (Ausente → rojo), `R` (Retraso → amarillo).
 - El formulario de asistencia muestra todos los jugadores del equipo en lista; el usuario toca el nombre para ciclar entre estados.
 - Si un jugador no tiene registro en `Asist_Jugadores` para esa sesión, se considera **sin registrar** (gris).
+- **Alertas de ausencias seguidas**: `Estadisticas.alertasAusencias` (sin tabla) avisa en la tarjeta de equipo cuando un jugador suma `CONFIG.ESTADISTICAS.AUSENCIAS_SEGUIDAS` faltas seguidas en la temporada activa, mirando todos sus equipos; las justificadas cuentan, una P o R corta la racha y las casillas sin marcar y las faltas como invitado no cuentan. Solo admin y entrenadores con rol `Entrenador`; «Contactado» vive en `localStorage`. Detalle en `docs/modelo-datos.md`.
 
 ### Temporadas
 - Una sola temporada activa (`Activa = true`) en cada momento.
@@ -123,6 +124,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - Usar `showToast(message, type)` para feedback de acciones (éxito/error).
 - Temas: `claro` (por defecto), `oscuro` y `patrimonio` (Baeza Patrimonio, granate `#7B1E24`). Los componentes usan solo los tokens CSS definidos al inicio de `ui/styles.html` (`--morado`, `--blanco`, `--brand-bg`, `--on-accent`, `--chart-ink`…); un tema nuevo o un color nuevo se declara como token en los tres bloques y mantiene contraste WCAG AA. La lista de temas vive en `App.preferences.temas` y en el script de arranque de `Index.html`, que migra los identificadores retirados.
 - Las tarjetas de sesión (Registrar asistencia e Historial) se generan con `App.calendar.tarjetaSesion`.
+- Los detalles de las gráficas de Estadísticas se generan con `_statsChartAttrs(descripcionAccesible, [etiqueta, valor, secundaria])`: el tooltip muestra solo la etiqueta y el valor (y como mucho una línea secundaria), se ancla al punto tocado y se cierra al tocar fuera.
 
 ### Nomenclatura
 - Funciones GAS: `camelCase` (ej. `getJugadoresByEquipo`, `registrarAsistencia`).

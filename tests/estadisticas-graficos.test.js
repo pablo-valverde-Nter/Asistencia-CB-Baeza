@@ -21,9 +21,9 @@ function elemento() {
 }
 
 function cliente() {
-  const nodos = new Map();
+  const nodos = new Map(), oyentes = {};
   const document = {
-    addEventListener() {},
+    addEventListener(tipo, fn) { oyentes[tipo] = fn; },
     documentElement: { clientWidth: 800, clientHeight: 600 },
     getElementById: id => nodos.get(id) || null,
     createElement: elemento,
@@ -32,7 +32,7 @@ function cliente() {
   const context = vm.createContext({ document, window: { addEventListener() {} }, requestAnimationFrame() {} });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../ui/app.html'), 'utf8').replace(/^<script[^>]*>|<\/script>\s*$/g, ''), context);
   vm.runInContext('_statsInfoBoton = () => "<button>Información</button>"', context);
-  return { context, document, app: vm.runInContext('App', context) };
+  return { context, document, oyentes, app: vm.runInContext('App', context) };
 }
 
 function sinValoresInvalidos(html) {
@@ -141,40 +141,107 @@ test('tooltip ignora otras teclas y Enter/Espacio/Escape gestionan selección y 
   const anterior = elemento(), actual = elemento();
   anterior.classList.add('stats-selected');
   anterior.setAttribute('aria-pressed', 'true');
-  const chart = { querySelectorAll: () => [anterior, actual].filter(el => el.classList.contains('stats-selected')), getBoundingClientRect: () => ({ left: 30, right: 350, top: 90, bottom: 400, width: 320, height: 310 }) };
+  const chart = { querySelectorAll: () => [anterior, actual].filter(el => el.classList.contains('stats-selected')) };
   actual.closest = () => chart;
-  actual.querySelector = () => ({ getBoundingClientRect: () => ({ left: 80, right: 200, top: 180, bottom: 380, width: 120, height: 200 }) });
+  actual.dataset = { statsTip: 'Octubre', statsTipValue: '85%', statsTipSub: '12 registros' };
   let prevenidos = 0;
   const tecla = key => ({ type: 'keydown', key, preventDefault() { prevenidos++; } });
-  context._statsTooltip(actual, 'octubre: 5 presentes', tecla('ArrowRight'));
+  context._statsTooltip(actual, true, tecla('ArrowRight'));
   assert.equal(prevenidos, 0);
   assert.equal(document.getElementById('stats-chart-tooltip'), null);
-  context._statsTooltip(actual, 'octubre: 5 presentes', tecla('Enter'));
+  context._statsTooltip(actual, true, tecla('Enter'));
   const tip = document.getElementById('stats-chart-tooltip');
   assert.equal(prevenidos, 1);
   assert.equal(tip.hidden, false);
-  assert.equal(tip.textContent, 'octubre: 5 presentes');
+  assert.equal(tip.innerHTML, '<span class="stats-tip-main"><span class="stats-tip-label">Octubre</span><strong class="stats-tip-value">85%</strong></span><span class="stats-tip-sub">12 registros</span>');
   assert.equal(actual.classList.contains('stats-selected'), true);
   assert.equal(actual.getAttribute('aria-pressed'), 'true');
   assert.equal(actual.getAttribute('aria-describedby'), 'stats-chart-tooltip');
   assert.equal(anterior.classList.contains('stats-selected'), false);
-  assert.ok(parseFloat(tip.style.top) >= 186, 'tooltip stays below the plot top, not over the heading or legend');
-  assert.ok(parseFloat(tip.style.left) >= 38, 'tooltip stays within the card');
   assert.equal(anterior.getAttribute('aria-pressed'), 'false');
-  context._statsTooltip(actual, 'octubre: 2 retrasos', tecla(' '));
+  context._statsTooltip(actual, ['Octubre', '2 retrasos'], tecla(' '));
   assert.equal(prevenidos, 2);
-  assert.equal(tip.textContent, 'octubre: 2 retrasos');
-  context._statsTooltip(actual, 'octubre: 2 retrasos', tecla('Escape'));
+  assert.match(tip.innerHTML, /2 retrasos/);
+  assert.doesNotMatch(tip.innerHTML, /stats-tip-sub/);
+  context._statsTooltip(actual, true, tecla('Escape'));
   assert.equal(prevenidos, 3);
   assert.equal(tip.hidden, true);
   assert.equal(actual.classList.contains('stats-selected'), false);
   assert.equal(actual.getAttribute('aria-pressed'), 'false');
   assert.equal(actual.getAttribute('aria-describedby'), undefined);
-  context._statsTooltip(actual, 'Detalle al enfocar', { type: 'focus' });
+  context._statsTooltip(actual, true, { type: 'focus' });
   assert.equal(tip.hidden, false);
   assert.equal(actual.classList.contains('stats-selected'), false);
   context._statsTooltip(actual, null, { type: 'blur' });
   assert.equal(tip.hidden, true);
+});
+
+test('tooltip compacto se coloca junto al punto, cambia de lado y se ajusta a los bordes', () => {
+  const { context, document } = cliente();
+  const punto = elemento();
+  punto.closest = () => ({ querySelectorAll: () => [] });
+  // Con teclado: centrado sobre el elemento (80–200 × 100–130) y encima, a 10 px.
+  context._statsTooltip(punto, ['12 oct', '85%'], { type: 'focus' });
+  const tip = document.getElementById('stats-chart-tooltip');
+  tip.getBoundingClientRect = () => ({ width: 100, height: 40 });
+  context._statsTooltip(punto, ['12 oct', '85%'], { type: 'focus' });
+  assert.deepEqual([tip.style.left, tip.style.top, tip.classList.contains('is-below')], ['90px', '50px', false]);
+  // Con el dedo: se ancla al punto tocado aunque el elemento sea grande.
+  punto.getBoundingClientRect = () => ({ left: 0, right: 800, top: 300, bottom: 500, width: 800, height: 200 });
+  context._statsTooltip(punto, ['Presentes', '42 (68%)'], { type: 'click', clientX: 400, clientY: 420 });
+  assert.deepEqual([tip.style.left, tip.style.top], ['350px', '370px']);
+  // Sin sitio arriba: debajo del elemento; pegado al borde derecho sin salirse.
+  punto.getBoundingClientRect = () => ({ left: 760, right: 798, top: 20, bottom: 40, width: 38, height: 20 });
+  context._statsTooltip(punto, ['Dom', '90%'], { type: 'focus' });
+  assert.deepEqual([tip.style.left, tip.style.top, tip.classList.contains('is-below')], ['692px', '50px', true]);
+  // El texto se escapa.
+  context._statsTooltip(punto, ['<b>x</b>', '1'], { type: 'focus' });
+  assert.match(tip.innerHTML, /&lt;b&gt;x&lt;\/b&gt;/);
+});
+
+test('tocar fuera de la gráfica cierra el detalle y quita la selección', () => {
+  const { context, document, oyentes } = cliente();
+  const punto = elemento();
+  punto.closest = () => ({ querySelectorAll: () => [] });
+  context._statsTooltip(punto, ['12 oct', '85%'], { type: 'click', clientX: 100, clientY: 110 });
+  const tip = document.getElementById('stats-chart-tooltip');
+  oyentes.pointerdown({ target: { closest: () => punto } });
+  assert.equal(tip.hidden, false);
+  oyentes.pointerdown({ target: { closest: () => null } });
+  assert.equal(tip.hidden, true);
+  assert.equal(punto.classList.contains('stats-selected'), false);
+  assert.equal(punto.getAttribute('aria-pressed'), 'false');
+});
+
+test('todas las gráficas muestran etiqueta y valor cortos y conservan la descripción completa accesible', () => {
+  const { context } = cliente();
+  const atributos = html => [...html.matchAll(/aria-label="([^"]*)" data-stats-tip="([^"]*)"(?: data-stats-tip-value="([^"]*)")?(?: data-stats-tip-sub="([^"]*)")?/g)]
+    .map(m => ({ aria: m[1], tip: m[2], valor: m[3], sub: m[4] }));
+  const pie = atributos(context._svgPie(6, 3, 1));
+  assert.deepEqual(pie[0], { aria: 'Presentes: 6 · 60% del total', tip: 'Presentes', valor: '6 (60%)', sub: undefined });
+  const semanal = context._svgSerie([{ semana: '2026-10-12', asistenciaPct: 85, base: 13, P: 10, R: 1, A: 2 }], 'Asistencia semanal');
+  assert.doesNotMatch(semanal, /<title>/, 'sin tooltip nativo duplicado');
+  const punto = atributos(semanal)[0];
+  assert.match(punto.tip, /^Semana del 12 oct/);
+  assert.deepEqual([punto.valor, punto.sub], ['85%', '13 registros']);
+  assert.match(punto.aria, /10 presentes, 1 retrasos, 2 ausencias/);
+  const mensual = atributos(context._statsMensual([{ mes: '2026-10', P: 7, R: 1, A: 1, base: 9, asistenciaPct: 89 }]))[0];
+  assert.deepEqual([mensual.tip, mensual.valor, mensual.sub], ['octubre 2026', '89%', '7 presentes · 1 retraso · 1 ausencia']);
+  const calor = atributos(context._htmlHeatmap([{ fecha: '2026-10-12', hora: '18:00', equipoNombre: 'Cadete', estado: 'R', justificada: true, minutosRetraso: 10 }]))[0];
+  assert.deepEqual([calor.valor, calor.sub], ['Retraso', 'Justificada · 10 min tarde · Cadete']);
+  assert.match(calor.tip, /^12 oct · 18:00$/);
+  const motivo = atributos(context._statsMotivos([{ motivo: 'Lesión', A: 1, R: 0 }]))[0];
+  assert.deepEqual([motivo.tip, motivo.valor], ['Lesión', '1 ausencia']);
+  for (const html of [context._statsPorDia([{ dia: 3, base: 10, asistenciaPct: 80 }]), context._statsHorizontales([{ nombre: 'Cadete', base: 20, asistenciaPct: 85 }], 'X'),
+    context._statsCobertura({ cobertura: { conEntrenadorPct: 90, sustitutoPct: 10 }, refuerzosPct: 5 }), context._statsSerieMensual([{ mes: '2026-10', sesiones: 8, presentes: 6 }]),
+    context._statsContactabilidad({ jugadoresActivos: 4, conEmailFamiliar: 2, soloTelefono: 1, soloEmailPersonal: 0, sinContacto: 1, conAvisosActivos: 1, conTelefono: 2, porEquipo: [], sinContactoLista: [] })]) {
+    const lista = atributos(html);
+    assert.ok(lista.length > 0);
+    for (const a of lista) {
+      assert.ok(a.tip && a.valor, 'etiqueta y valor: ' + JSON.stringify(a));
+      assert.ok((a.tip + a.valor + (a.sub || '')).length <= 60, 'texto corto: ' + JSON.stringify(a));
+    }
+  }
 });
 
 test('las barras de un solo segmento no repiten etiquetas interiores y las pequeñas no se amontonan', () => {

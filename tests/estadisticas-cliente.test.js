@@ -149,7 +149,7 @@ test('contactabilidad: segmentos excluyentes, ayudas, equipo y ficha accionable'
   assert.match(html, /Cadete &lt;B&gt;/);
   assert.match(html, /Jugadores sin ningún contacto/);
   assert.match(html, /jugador-detalle/);
-  assert.match(html, /data-stats-tip="Solo teléfono: 1 de 5 jugadores"/);
+  assert.match(html, /aria-label="Solo teléfono: 1 de 5 jugadores" data-stats-tip="Solo teléfono" data-stats-tip-value="1 \(20%\)" data-stats-tip-sub="de 5 jugadores"/);
   assert.match(html, /Información sobre Avisos activos/);
   assert.equal(vm.runInContext('_statsContactoSegmentos(contacto).reduce((n,s) => n+s.n,0)', context), 5);
   context.contacto = { jugadoresActivos: 0, conEmailFamiliar: 0, conAvisosActivos: 0, conTelefono: 0, soloTelefono: 0, soloEmailPersonal: 0, sinContacto: 0, porEquipo: [], sinContactoLista: [] };

@@ -617,6 +617,149 @@ const App = {
     },
   },
 
+  // Alertas de ausencias seguidas: el servidor calcula la lista (Estadisticas.alertasAusencias); aquí solo se filtra por equipo y «contactado».
+  // «Contactado» es local por entrenador y dispositivo: clave de la racha → nº de faltas al marcar; reaparece si suma otras `umbral` faltas.
+  alertas: {
+    _icono: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.5 20h19L12 3.5Z"/><path d="M12 10v4.5M12 17.5v.01"/></svg>',
+
+    _storageKey: function() { return 'cb-baeza-alertas-v1:' + App.notifications._identity(); },
+
+    _state: function() {
+      try {
+        var state = JSON.parse(localStorage.getItem(this._storageKey()) || '{}');
+        return state && typeof state === 'object' && !Array.isArray(state) ? state : {};
+      } catch (e) { return {}; }
+    },
+
+    _save: function(state) {
+      try { localStorage.setItem(this._storageKey(), JSON.stringify(state)); } catch (e) {}
+    },
+
+    // Olvida las rachas que ya no están en alerta (vino, causó baja o cambió la temporada).
+    recibir: function(datos, error) {
+      App.state.alertasAusencias = datos || null;
+      App.state.alertasAusenciasError = error || null;
+      if (!datos) return;
+      var vigentes = {}, state = this._state(), cambiado = false;
+      datos.jugadores.forEach(function(j) { vigentes[j.clave] = true; });
+      Object.keys(state).forEach(function(clave) { if (!vigentes[clave]) { delete state[clave]; cambiado = true; } });
+      if (cambiado) this._save(state);
+    },
+
+    // Solo equipos de gestión (el servidor excluye Visor y sustituciones); si el cálculo falló, se ofrece igualmente para explicarlo.
+    disponible: function(teamId) {
+      var d = App.state.alertasAusencias;
+      if (d) return d.equipos.indexOf(teamId) >= 0;
+      return !!App.state.alertasAusenciasError && (App.state.esAdmin || (App.state.equipos || []).some(function(e) { return e.ID === teamId; }));
+    },
+
+    items: function(teamId) {
+      var d = App.state.alertasAusencias;
+      if (!d) return [];
+      var state = this._state();
+      return d.jugadores.filter(function(j) { return j.equipos.indexOf(teamId) >= 0; }).map(function(j) {
+        var jugador = App.cache.getJugadorById(j.jugadorId), marcado = state[j.clave];
+        return jugador ? Object.assign({}, j, { jugador: jugador, contactado: typeof marcado === 'number' && j.ausencias < marcado + d.umbral }) : null;
+      }).filter(Boolean);
+    },
+
+    count: function(teamId) {
+      return this.items(teamId).filter(function(item) { return !item.contactado; }).length;
+    },
+
+    boton: function(teamId, nombreHtml) {
+      if (!this.disponible(teamId)) return '';
+      var n = this.count(teamId);
+      return '<button type="button" class="eq-notifications eq-alerts" aria-label="Alertas de ausencias de ' + nombreHtml + (n ? ': ' + n + (n === 1 ? ' jugador' : ' jugadores') : '') + '" title="Alertas de ausencias" onclick="App.alertas.open(' + _statsArgumento(teamId) + ')">' + this._icono + (n ? '<span class="eq-notifications-count eq-alerts-count">' + n + '</span>' : '') + '</button>';
+    },
+
+    _item: function(teamId, jugadorId) {
+      return this.items(teamId).find(function(item) { return item.jugadorId === jugadorId; }) || null;
+    },
+
+    _refrescar: function(teamId) {
+      App.notifications._refreshHome();
+      this.render(teamId);
+    },
+
+    marcarContactado: function(teamId, jugadorId) {
+      var item = this._item(teamId, jugadorId);
+      if (!item) return;
+      var state = this._state();
+      state[item.clave] = item.ausencias;
+      this._save(state);
+      this._refrescar(teamId);
+    },
+
+    deshacer: function(teamId, jugadorId) {
+      var item = this._item(teamId, jugadorId);
+      if (!item) return;
+      var state = this._state();
+      delete state[item.clave];
+      this._save(state);
+      this._refrescar(teamId);
+    },
+
+    // Breve y cordial, en nombre del entrenador; no menciona el número de faltas.
+    mensaje: function(item, teamId) {
+      var equipo = App.cache.getEquipoById(teamId), entrenador = App.state.usuario;
+      var origen = (equipo ? equipo.Nombre : 'el equipo') + ' (CB Baeza)';
+      return (entrenador && entrenador.Nombre ? 'Hola, soy ' + entrenador.Nombre + ', del equipo técnico de ' + origen + '.' : 'Hola, os escribimos del equipo técnico de ' + origen + '.') +
+        ' Hemos echado de menos a ' + item.jugador.Nombre + ' en los últimos entrenamientos y queríamos saber si va todo bien. ¡Un saludo!';
+    },
+
+    contactar: function(teamId, jugadorId) {
+      var item = this._item(teamId, jugadorId);
+      if (!item) return;
+      _statsContacto('jugador', jugadorId, { familiaPrimero: true, mensaje: this.mensaje(item, teamId), volver: 'App.alertas.open(' + JSON.stringify(teamId) + ')' });
+    },
+
+    verFicha: function(jugadorId) {
+      App.closeModal();
+      App.views['jugador-detalle'].cargar(jugadorId);
+    },
+
+    open: function(teamId) {
+      var equipo = App.cache.getEquipoById(teamId);
+      App.openModal('Alertas' + (equipo ? ' · ' + equipo.Nombre : ''), '<div id="alertas-ausencias"></div>');
+      this.render(teamId);
+    },
+
+    _fila: function(teamId, item) {
+      var j = item.jugador, args = _statsArgumento(teamId) + ',' + _statsArgumento(item.jugadorId);
+      var desde = item.desde.split('-').map(Number);
+      var fecha = new Date(desde[0], desde[1] - 1, desde[2]).toLocaleDateString(App.preferences.locale(), { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '');
+      return '<article class="alerta-item' + (item.contactado ? ' is-done' : '') + '">' +
+        '<button type="button" class="alerta-person" onclick="App.alertas.verFicha(' + _statsArgumento(item.jugadorId) + ')">' + App.avatarHtml(j.FotoURL, j.Nombre + ' ' + j.Apellidos, 40) +
+          '<span class="alerta-copy"><strong data-no-i18n>' + _statsTexto(j.Apellidos + ', ' + j.Nombre) + '</strong><span class="alerta-racha">' + item.ausencias + ' entrenos seguidos sin venir</span><span>Desde ' + _statsTexto(fecha) + '</span></span>' +
+          '<span class="alerta-arrow" aria-hidden="true">›</span></button>' +
+        '<div class="alerta-meta">' + (item.justificadas ? '<span class="alerta-chip">' + item.justificadas + (item.justificadas === 1 ? ' justificada' : ' justificadas') + '</span>' : '') +
+          '<span class="alerta-last">' + (item.ultimaAsistencia ? 'Última asistencia: ' + _statsTexto(_statsFechaCorta(item.ultimaAsistencia)) : 'Sin asistencias esta temporada') + '</span></div>' +
+        '<div class="alerta-actions"><button type="button" class="btn btn-primary btn-sm" onclick="App.alertas.contactar(' + args + ')">Contactar familia</button>' +
+          (item.contactado ? '<button type="button" class="btn btn-secondary btn-sm" onclick="App.alertas.deshacer(' + args + ')">Deshacer</button>'
+            : '<button type="button" class="btn btn-secondary btn-sm" onclick="App.alertas.marcarContactado(' + args + ')">✓ Marcar contactado</button>') + '</div>' +
+      '</article>';
+    },
+
+    render: function(teamId) {
+      var host = document.getElementById('alertas-ausencias');
+      if (!host) return;
+      var d = App.state.alertasAusencias, umbral = _alertasUmbral(), self = this;
+      if (!d) { host.innerHTML = '<div class="notification-empty"><p>No se pudieron calcular las alertas.</p><p>Se reintentará en la próxima recarga de datos.</p></div>'; return; }
+      if (!d.temporadaId) { host.innerHTML = '<div class="notification-empty">No hay temporada activa.</div>'; return; }
+      var items = this.items(teamId);
+      var pendientes = items.filter(function(item) { return !item.contactado; }), hechos = items.filter(function(item) { return item.contactado; });
+      var html = '<p class="alertas-intro">Jugadores con ' + umbral + ' o más entrenos seguidos sin venir. Las faltas justificadas también cuentan.</p>';
+      if (!items.length) html += '<div class="notification-empty">Ningún jugador acumula ' + umbral + ' entrenos seguidos sin venir.</div>';
+      else {
+        html += pendientes.length ? '<div class="alertas-list">' + pendientes.map(function(item) { return self._fila(teamId, item); }).join('') + '</div>'
+          : '<div class="notification-empty">Ya has contactado con todas las familias en alerta.</div>';
+        if (hechos.length) html += '<h3 class="alertas-subtitle">Contactados (' + hechos.length + ')</h3><div class="alertas-list">' + hechos.map(function(item) { return self._fila(teamId, item); }).join('') + '</div>';
+      }
+      host.innerHTML = html;
+    },
+  },
+
   init() {
     var reqSeq = ++App.state._authReqSeq;
     _clientLog('init_start', { hasAuthMem: !!App.state.auth });
@@ -878,6 +1021,7 @@ const App = {
         : (ctx.esAdmin ? 'Admin' : '-');
       _updateUserBadge(nombre, ctx.esAdmin ? 'Administrador' : 'Entrenador');
     }
+    App.alertas.recibir(res.alertasAusencias, res.alertasAusenciasError);
     App.stats.recibirBootstrap(res);
   },
 
@@ -1136,9 +1280,10 @@ const App = {
           var eqId = eq.ID;
           var eqNombre = _esc(eq.Nombre);
           var unread = esVisor ? 0 : App.notifications.unreadCount(eq.ID);
+          var alertasHtml = esVisor ? '' : App.alertas.boton(eq.ID, eqNombre);
           var notificationHtml = esVisor ? '' : '<button type="button" class="eq-notifications" aria-label="Notificaciones de ' + eqNombre + (unread ? ': ' + unread + ' nuevas' : '') + '" title="Notificaciones" onclick="App.notifications.openInbox(\'' + eqId + '\')"><span aria-hidden="true">&#x1F4EC;</span>' + (unread ? '<span class="eq-notifications-count">' + unread + '</span>' : '') + '</button>';
           return '<article class="equipo-card-big">' +
-            '<div class="eq-big-hdr"><div class="eq-home-title"><span class="eq-home-eyebrow">Tu equipo</span><h2 class="eq-nombre">' + _statsTexto(eq.Nombre) + '</h2><span class="eq-meta">' + _statsTexto(eq.Categoria) + ' · ' + _statsTexto(eq.Modalidad) + '</span></div>' + visorHtml + notificationHtml + '</div>' +
+            '<div class="eq-big-hdr"><div class="eq-home-title"><span class="eq-home-eyebrow">Tu equipo</span><h2 class="eq-nombre">' + _statsTexto(eq.Nombre) + '</h2><span class="eq-meta">' + _statsTexto(eq.Categoria) + ' · ' + _statsTexto(eq.Modalidad) + '</span></div>' + visorHtml + alertasHtml + notificationHtml + '</div>' +
             '<div class="eq-big-stats"><div class="eq-home-metrics"><div><span class="eq-home-label">Asistencia ' + (resumenEquipo ? _statsTexto(App.stats.resumen.filtro.temporadaNombre) : '') + _statsInfoBoton('Asistencia') + '</span><strong class="eq-home-percentage">' + _pctTexto(asistencia) + '</strong></div><div class="eq-home-roster"><strong>' + plantilla + '</strong><span>en plantilla</span></div></div>' +
             '<div class="eq-home-bar" role="img" aria-label="Asistencia: ' + _pctTexto(asistencia) + '"><span style="width:' + (asistencia == null ? 0 : asistencia) + '%"></span></div>' +
             '<div class="eq-home-next">' + (proxima ? 'Próximo entreno · <strong>' + _statsTexto(_fmtFecha(proxima.Fecha).d + ' ' + _fmtFecha(proxima.Fecha).m) + ' · ' + _statsTexto(proxima.HoraInicio) + '</strong>' : 'Sin próximos entrenamientos') + '</div></div>' +
@@ -4891,12 +5036,12 @@ function _svgSerie(serie, titulo) {
   });
   if (puntos.length) segmentos.push(puntos);
   return '<div class="stats-chart"><p class="stats-chart-caption">Evolución semanal del equipo · asistencia (%)</p><svg class="serie-svg stats-weekly" viewBox="0 0 340 156" role="img" aria-label="' + _statsChartEsc(resumen) + '">' + [0,50,100].map(function(v) { return '<path d="M34 ' + (120-v) + 'H306" class="stats-chart-grid"/><text x="3" y="' + (124-v) + '" class="stats-axis">' + v + '%</text>'; }).join('') + segmentos.map(function(s) {
-    return '<polyline points="' + s.map(function(p) { return p.x + ',' + p.y; }).join(' ') + '" fill="none" stroke="var(--morado)" stroke-width="3" stroke-linejoin="round"/>' + s.map(function(p) { var d = p.dato, label = 'Semana del ' + d.semana + ': ' + _pctTexto(d.asistenciaPct) + ' de asistencia · ' + d.base + ' registros · ' + d.P + ' presentes, ' + d.R + ' retrasos, ' + d.A + ' ausencias'; return '<circle class="stats-line-point" cx="' + p.x + '" cy="' + p.y + '" r="6" fill="var(--morado)"' + _statsChartAttrs(label) + '><title>' + _statsChartEsc(label) + '</title></circle>'; }).join('');
+    return '<polyline points="' + s.map(function(p) { return p.x + ',' + p.y; }).join(' ') + '" fill="none" stroke="var(--morado)" stroke-width="3" stroke-linejoin="round"/>' + s.map(function(p) { var d = p.dato, label = 'Semana del ' + d.semana + ': ' + _pctTexto(d.asistenciaPct) + ' de asistencia · ' + d.base + ' registros · ' + d.P + ' presentes, ' + d.R + ' retrasos, ' + d.A + ' ausencias'; return '<circle class="stats-line-point" cx="' + p.x + '" cy="' + p.y + '" r="6" fill="var(--morado)"' + _statsChartAttrs(label,['Semana del ' + _statsFechaCorta(d.semana),_pctTexto(d.asistenciaPct),_statsCuenta(d.base,'registro','registros')]) + '/>'; }).join('');
   }).join('') + (serie.length ? '<text x="34" y="148" class="stats-axis">' + _statsChartEsc(serie[0].semana) + '</text><text x="306" y="148" text-anchor="end" class="stats-axis">' + _statsChartEsc(serie[serie.length-1].semana) + '</text>' : '') + '</svg>' + (!segmentos.length ? '<p class="stats-empty">Sin datos</p>' : '') + _statsDatos(['Semana','Registros','Asistencia','Puntualidad'],serie.map(function(p) { return [_statsChartEsc(p.semana),p.base,_pctTexto(p.asistenciaPct),_pctTexto(p.puntualidadPct)]; })) + '</div>';
 }
 function _htmlHeatmap(sesiones) {
   var estados = {P:'Presente',A:'Ausente',R:'Retraso'};
-  return '<div class="stats-chart"><div class="heatmap" role="img" aria-label="Asistencia en las últimas sesiones">' + sesiones.map(function(s) { var label = s.fecha + ' · ' + (s.hora || '') + ' · ' + (s.equipoNombre || '') + ' · ' + (estados[s.estado] || 'Sin registrar') + (s.justificada ? ' · justificada' : '') + (s.minutosRetraso == null ? '' : ' · ' + s.minutosRetraso + ' minutos de retraso'); return '<button type="button" class="heat-cell ' + (estados[s.estado] ? s.estado : 'none') + '"' + _statsChartAttrs(label) + '>' + (estados[s.estado] ? s.estado : '—') + '</button>'; }).join('') + '</div><p class="stats-periodo">P: Presente · A: Ausente · R: Retraso · —: Sin registrar</p>' + (!sesiones.length ? '<p class="stats-empty">Sin sesiones en este periodo</p>' : '') + _statsDatos(['Fecha','Equipo','Estado','Justificada','Minutos retraso'],sesiones.map(function(s) { return [_statsChartEsc(s.fecha + ' ' + (s.hora || '')),_statsChartEsc(s.equipoNombre),estados[s.estado] || 'Sin registrar',s.justificada ? 'Sí' : 'No',_datoTexto(s.minutosRetraso)]; })) + '</div>';
+  return '<div class="stats-chart"><div class="heatmap" role="img" aria-label="Asistencia en las últimas sesiones">' + sesiones.map(function(s) { var label = s.fecha + ' · ' + (s.hora || '') + ' · ' + (s.equipoNombre || '') + ' · ' + (estados[s.estado] || 'Sin registrar') + (s.justificada ? ' · justificada' : '') + (s.minutosRetraso == null ? '' : ' · ' + s.minutosRetraso + ' minutos de retraso'); var detalle = [s.justificada ? 'Justificada' : '', s.minutosRetraso == null ? '' : s.minutosRetraso + ' min tarde', s.equipoNombre || ''].filter(Boolean).join(' · '); return '<button type="button" class="heat-cell ' + (estados[s.estado] ? s.estado : 'none') + '"' + _statsChartAttrs(label,[_statsFechaCorta(s.fecha) + (s.hora ? ' · ' + s.hora : ''),estados[s.estado] || 'Sin registrar',detalle]) + '>' + (estados[s.estado] ? s.estado : '—') + '</button>'; }).join('') + '</div><p class="stats-periodo">P: Presente · A: Ausente · R: Retraso · —: Sin registrar</p>' + (!sesiones.length ? '<p class="stats-empty">Sin sesiones en este periodo</p>' : '') + _statsDatos(['Fecha','Equipo','Estado','Justificada','Minutos retraso'],sesiones.map(function(s) { return [_statsChartEsc(s.fecha + ' ' + (s.hora || '')),_statsChartEsc(s.equipoNombre),estados[s.estado] || 'Sin registrar',s.justificada ? 'Sí' : 'No',_datoTexto(s.minutosRetraso)]; })) + '</div>';
 }
 function _htmlDistribucion(dist) {
   var keys = ['alta','media','baja','pocasSesiones'], labels = ['Alta (≥85%)','Media (70–84%)','Baja (<70%)','Con pocas sesiones'];
@@ -4907,7 +5052,8 @@ function _htmlLogro(code) {
   var label = ({perfecta:'Asistencia perfecta',puntual:'Siempre puntual',racha10:'Racha de 10+',mejorRacha:'Mejor racha del equipo'})[code] || code;
   return '<span class="logro-chip logro-' + _esc(code) + '" title="' + _esc(label) + '"><span aria-hidden="true">' + (({perfecta:'✦',puntual:'◷',racha10:'ϟ',mejorRacha:'★'})[code] || '✦') + '</span>' + _esc(label) + '</span>';
 }
-function _htmlAlerta(code) { return '<span class="alerta-chip">' + _esc(({seguidas:'3 ausencias seguidas',caida:'Caída de asistencia',injustificadas:'Faltas sin justificar'})[code] || code) + '</span>'; }
+function _alertasUmbral() { return (App.state.alertasAusencias && App.state.alertasAusencias.umbral) || 3; }
+function _htmlAlerta(code) { return '<span class="alerta-chip">' + _esc(({seguidas:_alertasUmbral() + ' ausencias seguidas',caida:'Caída de asistencia',injustificadas:'Faltas sin justificar'})[code] || code) + '</span>'; }
 function _statsArgumento(valor) { return JSON.stringify(valor == null ? null : valor).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function _statsJugadorBoton(id,nombre) { var persona = App.cache.getJugadorById(id); return '<button class="btn btn-secondary btn-sm person-inline" onclick="App.views[\'jugador-detalle\'].cargar(' + _statsArgumento(id) + ')">' + App.avatarHtml(persona && persona.FotoURL,persona ? persona.Nombre + ' ' + persona.Apellidos : nombre,36) + '<span>' + _esc(nombre) + '</span></button>'; }
 function _statsEquipoBoton(id,nombre) { return '<button class="btn btn-secondary btn-sm" onclick="App.views[\'equipo-detalle\'].cargar(' + _statsArgumento(id) + ')">' + _esc(nombre) + '</button>'; }
@@ -4926,7 +5072,7 @@ function _statsLogros(j,jugadores) {
   return logros.map(_htmlLogro).join('');
 }
 function _statsSerieMensual(serie) {
-  return _statsColumnas(serie.map(function(p) { return {nombre:_statsMes(p.mes),valores:[p.presentes,p.sesiones-p.presentes]}; }),['Presentes','Sin presencia'],['var(--morado)','var(--borde)'],'Presencia mensual del entrenador') + _statsDatos(['Mes','Sesiones','Presentes'],serie.map(function(p) { return [_statsChartEsc(_statsMes(p.mes)),p.sesiones,p.presentes]; }));
+  return _statsColumnas(serie.map(function(p) { return {nombre:_statsMes(p.mes),valores:[p.presentes,p.sesiones-p.presentes],tip:[_statsMes(p.mes),_pctTexto(p.sesiones ? Math.round(p.presentes * 100 / p.sesiones) : null),p.presentes + ' de ' + p.sesiones + ' sesiones']}; }),['Presentes','Sin presencia'],['var(--morado)','var(--borde)'],'Presencia mensual del entrenador') + _statsDatos(['Mes','Sesiones','Presentes'],serie.map(function(p) { return [_statsChartEsc(_statsMes(p.mes)),p.sesiones,p.presentes]; }));
 }
 
 function _csvDescargar(nombre, filas) {
@@ -4940,11 +5086,11 @@ function _statsHero(d, comparativa) {
 }
 function _statsPorDia(serie) {
   var dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-  return _statsColumnas(serie.map(function(p) { return {nombre:dias[p.dia-1],valores:[p.asistenciaPct],extra:p.base + ' registros'}; }),['Asistencia'],['var(--morado)'],'Asistencia por día de la semana',true) + _statsDatos(['Día','Registros','Asistencia'],serie.map(function(p) { return [dias[p.dia-1],p.base,_pctTexto(p.asistenciaPct)]; }));
+  return _statsColumnas(serie.map(function(p) { return {nombre:dias[p.dia-1],valores:[p.asistenciaPct],extra:p.base + ' registros',tip:[dias[p.dia-1],_pctTexto(p.asistenciaPct),_statsCuenta(p.base,'registro','registros')]}; }),['Asistencia'],['var(--morado)'],'Asistencia por día de la semana',true) + _statsDatos(['Día','Registros','Asistencia'],serie.map(function(p) { return [dias[p.dia-1],p.base,_pctTexto(p.asistenciaPct)]; }));
 }
 function _statsMotivos(motivos) {
   var max = Math.max.apply(null,[1].concat(motivos.map(function(m) { return m.A+m.R; })));
-  return '<div class="stats-chart stats-horizontal" role="img" aria-label="Motivos de ausencias y retrasos">' + _statsLeyenda(['Ausencias','Retrasos'],['var(--stats-coral)','var(--stats-gold)']) + (motivos.length ? motivos.map(function(m) { return '<div class="stats-hrow"><div class="stats-hlabel"><span>' + _statsChartEsc(m.motivo) + '</span><strong>' + (m.A+m.R) + '</strong></div><div class="stats-htrack">' + [m.A,m.R].map(function(v,i) { return v ? '<span class="stats-hsegment" style="width:' + v/max*100 + '%;background:' + (i ? 'var(--stats-gold)' : 'var(--stats-coral)') + '"' + _statsChartAttrs(m.motivo + ': ' + v + (i ? ' retrasos' : ' ausencias') + ' · ' + (m.A+m.R) + ' incidencias en total') + '>' + v + '</span>' : ''; }).join('') + '</div></div>'; }).join('') : '<p class="stats-empty">Sin incidencias registradas</p>') + '</div>' + _statsDatos(['Motivo','Ausencias','Retrasos'],motivos.map(function(m) { return [_statsChartEsc(m.motivo),m.A,m.R]; }));
+  return '<div class="stats-chart stats-horizontal" role="img" aria-label="Motivos de ausencias y retrasos">' + _statsLeyenda(['Ausencias','Retrasos'],['var(--stats-coral)','var(--stats-gold)']) + (motivos.length ? motivos.map(function(m) { return '<div class="stats-hrow"><div class="stats-hlabel"><span>' + _statsChartEsc(m.motivo) + '</span><strong>' + (m.A+m.R) + '</strong></div><div class="stats-htrack">' + [m.A,m.R].map(function(v,i) { return v ? '<span class="stats-hsegment" style="width:' + v/max*100 + '%;background:' + (i ? 'var(--stats-gold)' : 'var(--stats-coral)') + '"' + _statsChartAttrs(m.motivo + ': ' + v + (i ? ' retrasos' : ' ausencias') + ' · ' + (m.A+m.R) + ' incidencias en total',[m.motivo,i ? _statsCuenta(v,'retraso','retrasos') : _statsCuenta(v,'ausencia','ausencias')]) + '>' + v + '</span>' : ''; }).join('') + '</div></div>'; }).join('') : '<p class="stats-empty">Sin incidencias registradas</p>') + '</div>' + _statsDatos(['Motivo','Ausencias','Retrasos'],motivos.map(function(m) { return [_statsChartEsc(m.motivo),m.A,m.R]; }));
 }
 function _statsCancelaciones(lista) { return _statsTabla(['Cancelada: motivo','Sesiones'], lista.map(function(c) { return [_esc(c.motivo),c.n]; })); }
 function _statsSesionBoton(s) {
@@ -4971,16 +5117,48 @@ function _svgPie(cP, cA, cR) {
 }
 
 function _statsChartEsc(valor) { return String(valor == null ? '' : valor).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-function _statsChartAttrs(texto) {
-  return ' tabindex="0" role="button" aria-pressed="false" aria-label="' + _statsChartEsc(texto) + '" data-stats-tip="' + _statsChartEsc(texto) + '" onmouseenter="_statsTooltip(this,this.dataset.statsTip,event)" onmouseleave="_statsTooltip(this,null,event)" onfocus="_statsTooltip(this,this.dataset.statsTip,event)" onblur="_statsTooltip(this,null,event)" onclick="_statsTooltip(this,this.dataset.statsTip,event)" onkeydown="_statsTooltip(this,this.dataset.statsTip,event)"';
+// `texto` es la descripción accesible completa; `tip` = [etiqueta, valor, secundaria?] es lo único que se ve en el detalle.
+function _statsChartAttrs(texto,tip) {
+  tip = tip || [texto];
+  return ' tabindex="0" role="button" aria-pressed="false" aria-label="' + _statsChartEsc(texto) + '" data-stats-tip="' + _statsChartEsc(tip[0]) + '"' + (tip[1] == null || tip[1] === '' ? '' : ' data-stats-tip-value="' + _statsChartEsc(tip[1]) + '"') + (tip[2] ? ' data-stats-tip-sub="' + _statsChartEsc(tip[2]) + '"' : '') + ' onmouseenter="_statsTooltip(this,true,event)" onmouseleave="_statsTooltip(this,null,event)" onfocus="_statsTooltip(this,true,event)" onblur="_statsTooltip(this,null,event)" onclick="_statsTooltip(this,true,event)" onkeydown="_statsTooltip(this,true,event)"';
 }
-function _statsTooltip(el,text,event) {
+function _statsFechaCorta(fecha) {
+  var p = String(fecha || '').split('-');
+  return p.length === 3 ? new Date(Number(p[0]),Number(p[1])-1,Number(p[2])).toLocaleDateString(App.preferences.locale(),{day:'numeric',month:'short'}).replace('.','') : String(fecha || '');
+}
+function _statsCuenta(n,singular,plural) { return n + ' ' + (n === 1 ? singular : plural); }
+function _statsTipParte(n,total,unidad) { return unidad ? n + unidad : n + ' (' + (total ? Math.round(n * 100 / total) : 0) + '%)'; }
+function _statsTooltipCerrar() {
+  var tip = document.getElementById('stats-chart-tooltip'), owner = tip && tip._statsOwner;
+  if (!tip) return;
+  tip.hidden = true;
+  if (owner) { owner.removeAttribute('aria-describedby'); owner.classList.remove('stats-selected'); owner.setAttribute('aria-pressed','false'); }
+  tip._statsOwner = null;
+}
+// Detalle compacto junto al punto tocado: arriba si cabe, si no debajo; ajustado a los bordes y cerrado al tocar fuera o desplazar.
+function _statsTooltip(el,contenido,event) {
   var type = event && event.type, key = event && event.key, tip = document.getElementById('stats-chart-tooltip');
   if (type === 'keydown' && key !== 'Enter' && key !== ' ' && key !== 'Escape') return;
   if (type === 'keydown') event.preventDefault();
-  if (key === 'Escape') { text = null; el.classList.remove('stats-selected'); el.setAttribute('aria-pressed','false'); }
-  if (text == null) { if (tip && tip._statsOwner === el) { tip.hidden = true; el.removeAttribute('aria-describedby'); } return; }
-  if (!tip) { tip = document.createElement('div'); tip.id = 'stats-chart-tooltip'; tip.className = 'stats-chart-tooltip'; tip.setAttribute('role','tooltip'); document.body.appendChild(tip); }
+  if (key === 'Escape') { contenido = null; el.classList.remove('stats-selected'); el.setAttribute('aria-pressed','false'); }
+  if (contenido == null) { if (tip && tip._statsOwner === el) { tip.hidden = true; el.removeAttribute('aria-describedby'); } return; }
+  var datos = el.dataset || {}, partes = contenido === true ? [datos.statsTip,datos.statsTipValue,datos.statsTipSub] : Array.isArray(contenido) ? contenido : [contenido];
+  if (!tip) {
+    tip = document.createElement('div'); tip.id = 'stats-chart-tooltip'; tip.className = 'stats-chart-tooltip'; tip.setAttribute('role','tooltip'); document.body.appendChild(tip);
+    document.addEventListener('pointerdown',function(e) { if (!(e.target && e.target.closest && e.target.closest('[data-stats-tip]'))) _statsTooltipCerrar(); },true);
+    // El detalle sigue a su punto en desplazamientos pequeños (ajuste del foco) y se cierra si se aleja más de 40 px.
+    window.addEventListener('scroll',function() {
+      var actual = document.getElementById('stats-chart-tooltip'), owner = actual && actual._statsOwner;
+      if (!owner || actual.hidden || !actual._statsAncla) return;
+      var r = owner.getBoundingClientRect(), dx = r.left - actual._statsAncla.left, dy = r.top - actual._statsAncla.top;
+      if (Math.abs(dx) > 40 || Math.abs(dy) > 40) { _statsTooltipCerrar(); return; }
+      if (!dx && !dy) return;
+      actual.style.left = parseFloat(actual.style.left) + dx + 'px';
+      actual.style.top = parseFloat(actual.style.top) + dy + 'px';
+      actual._statsAncla = { left: r.left, top: r.top };
+    },{passive:true,capture:true});
+    window.addEventListener('resize',_statsTooltipCerrar);
+  }
   if (tip._statsOwner && tip._statsOwner !== el) tip._statsOwner.removeAttribute('aria-describedby');
   tip._statsOwner = el;
   if (type === 'click' || type === 'keydown') {
@@ -4988,15 +5166,23 @@ function _statsTooltip(el,text,event) {
     chart.querySelectorAll('.stats-selected').forEach(function(selected) { selected.classList.remove('stats-selected'); selected.setAttribute('aria-pressed','false'); });
     el.classList.add('stats-selected'); el.setAttribute('aria-pressed','true');
   }
-  tip.textContent = text; tip.hidden = false; el.setAttribute('aria-describedby',tip.id);
-  var rect = el.getBoundingClientRect(), plot = (el.querySelector && el.querySelector('.stats-column-plot')) || el.closest('.stats-column-plot') || el.closest('svg') || el.closest('.stats-chart') || el;
-  var card = el.closest('.stat-widget') || plot, bounds = plot.getBoundingClientRect(), cardBounds = card.getBoundingClientRect();
-  tip.style.maxWidth = Math.max(100,Math.min(300,cardBounds.width - 24)) + 'px';
-  var box = tip.getBoundingClientRect(), width = document.documentElement.clientWidth, height = document.documentElement.clientHeight;
-  var left = Math.max(8,cardBounds.left + 8), right = Math.min(width - 8,cardBounds.right - 8);
-  var top = Math.max(8,bounds.top + 6), bottom = Math.min(height - 8,bounds.bottom - 6);
-  tip.style.left = Math.max(left,Math.min(right - box.width,rect.left + rect.width/2 - box.width/2)) + 'px';
-  tip.style.top = Math.max(top,Math.min(Math.max(top,bottom - box.height),rect.top - box.height - 10)) + 'px';
+  tip.innerHTML = '<span class="stats-tip-main"><span class="stats-tip-label">' + _statsChartEsc(partes[0]) + '</span>' + (partes[1] ? '<strong class="stats-tip-value">' + _statsChartEsc(partes[1]) + '</strong>' : '') + '</span>' + (partes[2] ? '<span class="stats-tip-sub">' + _statsChartEsc(partes[2]) + '</span>' : '');
+  if (App.preferences.idioma === 'en' && App.i18n) App.i18n.aplicar(tip);
+  tip.hidden = false; el.setAttribute('aria-describedby',tip.id);
+  // Ancla: el punto tocado si lo hay (sectores y filas grandes); con teclado, el centro superior del elemento.
+  var rect = el.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight, margen = 8, hueco = 10;
+  tip._statsAncla = { left: rect.left, top: rect.top };
+  var puntero = event && typeof event.clientX === 'number' && (event.clientX || event.clientY) && type !== 'keydown';
+  var x = puntero ? Math.max(rect.left,Math.min(rect.right,event.clientX)) : rect.left + rect.width / 2;
+  var arriba = puntero ? Math.max(rect.top,Math.min(rect.bottom,event.clientY)) : rect.top, abajo = puntero ? arriba : rect.bottom;
+  tip.style.left = '0px'; tip.style.top = '0px';
+  var box = tip.getBoundingClientRect();
+  var left = Math.max(margen,Math.min(vw - margen - box.width,x - box.width / 2));
+  var encima = arriba - hueco - box.height >= margen;
+  tip.style.left = left + 'px';
+  tip.style.top = (encima ? arriba - hueco - box.height : Math.min(vh - margen - box.height,abajo + hueco)) + 'px';
+  tip.classList[encima ? 'remove' : 'add']('is-below');
+  if (tip.style.setProperty) tip.style.setProperty('--stats-tip-arrow',Math.max(12,Math.min(box.width - 12,x - left)) + 'px');
 }
 function _statsMes(mes) {
   var partes = String(mes).split('-');
@@ -5012,30 +5198,30 @@ function _statsTinta(color) {
 function _statsColumnas(filas,labels,colores,titulo,porcentaje) {
   var max = porcentaje ? 100 : Math.max.apply(null,[1].concat(filas.map(function(f) { return f.valores.reduce(function(n,v) { return n+(v || 0); },0); })));
   return '<div class="stats-chart">' + _statsLeyenda(labels,colores) + '<div class="stats-columns-scroll"><div class="stats-columns" role="img" aria-label="' + _statsChartEsc(titulo) + '" style="--stats-columns:' + Math.max(1,filas.length) + '"><div class="stats-yaxis"><span>' + max + (porcentaje ? '%' : '') + '</span><span>' + Math.round(max/2) + '</span><span>0</span></div>' + filas.map(function(f) {
-    var total = f.valores.reduce(function(n,v) { return n+(v || 0); },0), texto = f.nombre + ': ' + labels.map(function(label,i) { return label + ' ' + (f.valores[i] == null ? 'sin datos' : f.valores[i] + (porcentaje ? '%' : '')); }).join(' · ') + (f.extra ? ' · ' + f.extra : '');
+    var total = f.valores.reduce(function(n,v) { return n+(v || 0); },0), texto = f.nombre + ': ' + labels.map(function(label,i) { return label + ' ' + (f.valores[i] == null ? 'sin datos' : f.valores[i] + (porcentaje ? '%' : '')); }).join(' · ') + (f.extra ? ' · ' + f.extra : ''), tip = f.tip || [f.nombre, porcentaje ? _pctTexto(f.valores[0]) : String(total)];
     var segmentos = f.valores.filter(function(v) { return v > 0; }).length;
-    return '<div class="stats-column"' + _statsChartAttrs(texto) + '><div class="stats-column-plot"><span class="stats-column-value">' + (porcentaje ? _pctTexto(f.valores[0]) : total) + '</span><div class="stats-column-stack" style="height:' + total/max*100 + '%">' + f.valores.map(function(v,i) { return v ? '<span style="height:' + v/total*100 + '%;background:' + colores[i] + ';color:' + _statsTinta(colores[i]) + '">' + (!porcentaje && segmentos >= 2 && v/max*160 >= 22 ? v : '') + '</span>' : ''; }).join('') + '</div></div><span class="stats-column-label">' + _statsChartEsc(f.nombre) + '</span></div>';
+    return '<div class="stats-column"' + _statsChartAttrs(texto,tip) + '><div class="stats-column-plot"><span class="stats-column-value">' + (porcentaje ? _pctTexto(f.valores[0]) : total) + '</span><div class="stats-column-stack" style="height:' + total/max*100 + '%">' + f.valores.map(function(v,i) { return v ? '<span style="height:' + v/total*100 + '%;background:' + colores[i] + ';color:' + _statsTinta(colores[i]) + '">' + (!porcentaje && segmentos >= 2 && v/max*160 >= 22 ? v : '') + '</span>' : ''; }).join('') + '</div></div><span class="stats-column-label">' + _statsChartEsc(f.nombre) + '</span></div>';
   }).join('') + '</div></div>' + (!filas.length ? '<p class="stats-empty">Sin datos en este periodo</p>' : '') + '</div>';
 }
 function _statsMensual(serie) {
-  return _statsColumnas(serie.map(function(p) { return {nombre:_statsMes(p.mes),valores:[p.P,p.R,p.A],extra:p.base + ' registros'}; }),['Presentes','Retrasos','Ausentes'],['var(--stats-positive)','var(--stats-gold)','var(--stats-coral)'],'Asistencia mensual: presentes, retrasos y ausentes') + _statsDatos(['Mes','Presentes','Retrasos','Ausentes','Registros'],serie.map(function(p) { return [_statsChartEsc(_statsMes(p.mes)),p.P,p.R,p.A,p.base]; }));
+  return _statsColumnas(serie.map(function(p) { return {nombre:_statsMes(p.mes),valores:[p.P,p.R,p.A],extra:p.base + ' registros',tip:[_statsMes(p.mes),_pctTexto(p.asistenciaPct),[_statsCuenta(p.P,'presente','presentes'),_statsCuenta(p.R,'retraso','retrasos'),_statsCuenta(p.A,'ausencia','ausencias')].join(' · ')]}; }),['Presentes','Retrasos','Ausentes'],['var(--stats-positive)','var(--stats-gold)','var(--stats-coral)'],'Asistencia mensual: presentes, retrasos y ausentes') + _statsDatos(['Mes','Presentes','Retrasos','Ausentes','Registros'],serie.map(function(p) { return [_statsChartEsc(_statsMes(p.mes)),p.P,p.R,p.A,p.base]; }));
 }
 function _statsHorizontales(rows,title) {
-  return '<div class="stats-chart stats-horizontal" role="img" aria-label="' + _statsChartEsc(title) + '">' + (rows.length ? rows.map(function(row) { var label = row.nombre + ': ' + _pctTexto(row.asistenciaPct) + ' de asistencia' + (row.base == null ? '' : ' · ' + row.base + ' registros'); return '<div class="stats-hrow stats-percent-row"' + _statsChartAttrs(label) + '><div class="stats-hlabel"><span>' + _statsChartEsc(row.nombre) + '</span><strong>' + _pctTexto(row.asistenciaPct) + '</strong></div><div class="stats-htrack"><span class="stats-hsegment stats-hpercent" style="width:' + (row.asistenciaPct || 0) + '%"></span></div>' + (row.base == null ? '' : '<small>' + row.base + ' registros</small>') + '</div>'; }).join('') : '<p class="stats-empty">Sin datos en este periodo</p>') + '</div>' + _statsDatos(['Grupo','Registros','Asistencia'],rows.map(function(row) { return [_statsChartEsc(row.nombre),_datoTexto(row.base),_pctTexto(row.asistenciaPct)]; }));
+  return '<div class="stats-chart stats-horizontal" role="img" aria-label="' + _statsChartEsc(title) + '">' + (rows.length ? rows.map(function(row) { var label = row.nombre + ': ' + _pctTexto(row.asistenciaPct) + ' de asistencia' + (row.base == null ? '' : ' · ' + row.base + ' registros'); return '<div class="stats-hrow stats-percent-row"' + _statsChartAttrs(label,[row.nombre,_pctTexto(row.asistenciaPct),row.base == null ? '' : _statsCuenta(row.base,'registro','registros')]) + '><div class="stats-hlabel"><span>' + _statsChartEsc(row.nombre) + '</span><strong>' + _pctTexto(row.asistenciaPct) + '</strong></div><div class="stats-htrack"><span class="stats-hsegment stats-hpercent" style="width:' + (row.asistenciaPct || 0) + '%"></span></div>' + (row.base == null ? '' : '<small>' + row.base + ' registros</small>') + '</div>'; }).join('') : '<p class="stats-empty">Sin datos en este periodo</p>') + '</div>' + _statsDatos(['Grupo','Registros','Asistencia'],rows.map(function(row) { return [_statsChartEsc(row.nombre),_datoTexto(row.base),_pctTexto(row.asistenciaPct)]; }));
 }
 function _statsDonut(valores,labels,colores,centro,caption,titulo,unidad) {
   var total = valores.reduce(function(n,v) { return n+(v || 0); },0), offset = 0;
   return '<div class="stats-chart stats-donut"><svg viewBox="0 0 160 160" role="img" aria-label="' + _statsChartEsc(titulo + ': ' + labels.map(function(label,i) { return label + ' ' + valores[i] + (unidad || ''); }).join(', ')) + '"><circle cx="80" cy="80" r="60" fill="none" stroke="var(--borde)" stroke-width="18"/>' + valores.map(function(v,i) {
     var largo = total ? v/total*100 : 0, inicio = offset; offset += largo;
-    return v ? '<circle class="stats-donut-segment" cx="80" cy="80" r="60" pathLength="100" fill="none" stroke="' + colores[i] + '" stroke-width="18" stroke-dasharray="' + largo + ' ' + (100-largo) + '" stroke-dashoffset="' + (-inicio) + '" transform="rotate(-90 80 80)"' + _statsChartAttrs(labels[i] + ': ' + v + (unidad || '') + (unidad ? '' : ' · ' + Math.round(largo) + '% del total')) + '/>' : '';
-  }).join('') + '<text class="stats-donut-number" x="80" y="78" text-anchor="middle">' + _statsChartEsc(centro) + '</text><text class="stats-donut-caption" x="80" y="96" text-anchor="middle">' + _statsChartEsc(caption) + '</text></svg><div class="stats-donut-legend">' + labels.map(function(label,i) { return '<button type="button"' + _statsChartAttrs(label + ': ' + valores[i] + (unidad || '')) + '><i style="background:' + colores[i] + '" aria-hidden="true"></i><span>' + _statsChartEsc(label) + '</span><strong>' + valores[i] + (unidad || '') + '</strong></button>'; }).join('') + '</div>' + (!total ? '<p class="stats-empty">Sin datos en este periodo</p>' : '') + '</div>';
+    return v ? '<circle class="stats-donut-segment" cx="80" cy="80" r="60" pathLength="100" fill="none" stroke="' + colores[i] + '" stroke-width="18" stroke-dasharray="' + largo + ' ' + (100-largo) + '" stroke-dashoffset="' + (-inicio) + '" transform="rotate(-90 80 80)"' + _statsChartAttrs(labels[i] + ': ' + v + (unidad || '') + (unidad ? '' : ' · ' + Math.round(largo) + '% del total'),[labels[i],_statsTipParte(v,total,unidad)]) + '/>' : '';
+  }).join('') + '<text class="stats-donut-number" x="80" y="78" text-anchor="middle">' + _statsChartEsc(centro) + '</text><text class="stats-donut-caption" x="80" y="96" text-anchor="middle">' + _statsChartEsc(caption) + '</text></svg><div class="stats-donut-legend">' + labels.map(function(label,i) { return '<button type="button"' + _statsChartAttrs(label + ': ' + valores[i] + (unidad || ''),[label,_statsTipParte(valores[i],total,unidad)]) + '><i style="background:' + colores[i] + '" aria-hidden="true"></i><span>' + _statsChartEsc(label) + '</span><strong>' + valores[i] + (unidad || '') + '</strong></button>'; }).join('') + '</div>' + (!total ? '<p class="stats-empty">Sin datos en este periodo</p>' : '') + '</div>';
 }
 function _statsJustificacion(pct) {
   return '<div class="stats-justification"><p class="stats-chart-caption">Justificación de ausencias y retrasos ' + _statsInfoBoton('Justificación de incidencias','justificacion') + '</p>' + (pct == null ? '<p class="stats-empty">Sin ausencias ni retrasos registrados</p>' : _statsDonut([pct,100-pct],['Justificados','Sin justificar'],['var(--morado)','var(--borde)'],_pctTexto(pct),'justificados','Justificación de ausencias y retrasos','%')) + _statsDatos(['Incidencias justificadas'],[[_pctTexto(pct)]]) + '</div>';
 }
 function _statsCobertura(d) {
   var datos = [[d.cobertura.conEntrenadorPct,'Con entrenador','cobertura','Sesiones con un entrenador del equipo'],[d.cobertura.sustitutoPct,'Con sustituto','suplencias','Sesiones con un entrenador invitado'],[d.refuerzosPct,'Refuerzos','refuerzos','Presencias de jugadores de refuerzo']];
-  return '<div class="stats-coverage">' + datos.map(function(f) { var pct = f[0], label = f[1] + ': ' + _pctTexto(pct); return '<div class="stats-chart stats-gauge"><svg viewBox="0 0 140 140" role="img" aria-label="' + _statsChartEsc(label) + '"><g' + _statsChartAttrs(label + ' · ' + f[3]) + '><circle cx="70" cy="70" r="54" fill="none" stroke="var(--borde)" stroke-width="12"/><circle cx="70" cy="70" r="54" fill="none" stroke="var(--morado)" stroke-width="12" stroke-linecap="round" pathLength="100" stroke-dasharray="' + (pct || 0) + ' 100" transform="rotate(-90 70 70)"/><text class="stats-donut-number" x="70" y="77" text-anchor="middle">' + _pctTexto(pct) + '</text></g></svg><p><strong>' + f[1] + '</strong> ' + _statsInfoBoton(f[1],f[2]) + '</p><small>' + f[3] + '</small></div>'; }).join('') + '</div>' + _statsDatos(['Con entrenador','Con sustituto','Presencias de refuerzos'],[datos.map(function(f) { return _pctTexto(f[0]); })]);
+  return '<div class="stats-coverage">' + datos.map(function(f) { var pct = f[0], label = f[1] + ': ' + _pctTexto(pct); return '<div class="stats-chart stats-gauge"><svg viewBox="0 0 140 140" role="img" aria-label="' + _statsChartEsc(label) + '"><g' + _statsChartAttrs(label + ' · ' + f[3],[f[1],_pctTexto(pct),f[3]]) + '><circle cx="70" cy="70" r="54" fill="none" stroke="var(--borde)" stroke-width="12"/><circle cx="70" cy="70" r="54" fill="none" stroke="var(--morado)" stroke-width="12" stroke-linecap="round" pathLength="100" stroke-dasharray="' + (pct || 0) + ' 100" transform="rotate(-90 70 70)"/><text class="stats-donut-number" x="70" y="77" text-anchor="middle">' + _pctTexto(pct) + '</text></g></svg><p><strong>' + f[1] + '</strong> ' + _statsInfoBoton(f[1],f[2]) + '</p><small>' + f[3] + '</small></div>'; }).join('') + '</div>' + _statsDatos(['Con entrenador','Con sustituto','Presencias de refuerzos'],[datos.map(function(f) { return _pctTexto(f[0]); })]);
 }
 function _statsPendientes(lista,equipoId) {
   if (!lista.length) return '<div class="stats-pending-clear"><span aria-hidden="true">✓</span><strong>Todo al día</strong><p>No hay sesiones pendientes de registrar en este periodo.</p></div>';
@@ -5112,7 +5298,7 @@ function _statsContactabilidad(c) {
     }).join('') + '</div><h3 class="contact-subtitle">Jugadores sin ningún contacto ' + _statsInfoBoton('Sin contacto','contactoSin') + '</h3><p class="stats-periodo">Abre su ficha para completar los datos con la familia.</p><div class="contact-missing">' + (c.sinContactoLista.map(function(j) { return '<div class="contact-missing-row"><div>' + _statsJugadorBoton(j.jugadorId,j.nombre + ' ' + j.apellidos) + '<span>' + _statsTexto(j.equipoNombre) + '</span></div><span aria-hidden="true">›</span></div>'; }).join('') || '<p class="contact-all-set">Todos tienen alguna vía de contacto.</p>') + '</div></div>';
 }
 function _statsChartAttrsContacto(s,total) {
-  return _statsChartAttrs(s.nombre + ': ' + s.n + ' de ' + total + ' jugadores');
+  return _statsChartAttrs(s.nombre + ': ' + s.n + ' de ' + total + ' jugadores',[s.nombre,_statsTipParte(s.n,total),'de ' + total + ' jugadores']);
 }
 
 function _statsRacha(d) {
@@ -5173,7 +5359,7 @@ var _statsMetricas = {
   recientes: ['Últimas sesiones','Histórico reciente de registros válidos del jugador dentro del filtro.','Se ordenan por fecha y hora de inicio, del más reciente al más antiguo. El detalle conserva hasta 60 registros y cada vista puede mostrar menos. Canceladas, pendientes y excluidas no aparecen como ausencias.'],
   ranking: ['Ranking de asistencia','Orden de asistencia entre los jugadores de la plantilla principal del jugador.','Participan miembros vigentes al final del periodo con al menos 5 registros. Se ordenan por asistencia descendente, después por número de registros descendente y por apellidos. La posición es ordinal; con menos de 5 registros se muestran aparte.'],
   logros: ['Logros','Reconocimientos de asistencia, puntualidad y continuidad.','Con al menos 5 registros: asistencia perfecta si es 100 %, puntualidad perfecta si es 100 %, racha de 10 si la actual es ≥ 10 y mejor racha si iguala la mayor racha actual de los candidatos del equipo y esta es ≥ 3. Pueden coincidir varios logros.'],
-  alertas: ['Alertas de asistencia','Señales para revisar un caso; no sanciones automáticas.','Tres últimas ausencias seguidas; tendencia de −20 pp o inferior; o al menos 3 ausencias sin justificar en los últimos 28 días. La tendencia necesita al menos 4 registros recientes y solo se calcula para la temporada activa completa.'],
+  alertas: ['Alertas de asistencia','Señales para revisar un caso; no sanciones automáticas.','{umbral} ausencias seguidas en cualquiera de sus equipos, aunque estén justificadas; un retraso corta la racha y las faltas como invitado no cuentan. También: tendencia de −20 pp o inferior, o al menos 3 ausencias sin justificar en los últimos 28 días. La tendencia necesita al menos 4 registros recientes y solo se calcula para la temporada activa completa.'],
   injustificadas: ['Faltas sin justificar','Ausencias sin una justificación registrada.','Número de registros A válidos en el periodo cuyo indicador TieneJustificacion no es verdadero. No incluye retrasos.'],
   comparativa: ['Comparativa con el club','Diferencia entre la asistencia del equipo y la del conjunto del club.','Porcentaje de asistencia del equipo menos porcentaje de asistencia del club, en puntos porcentuales. El club reúne todos los registros válidos del mismo filtro; no promedia porcentajes de equipos.'],
   equipos: ['Participación por equipo','Asistencia de una persona desglosada por equipo.','Se agrupan sus registros válidos por equipo y se aplica la fórmula de asistencia o presencia correspondiente. El tipo refleja la relación vigente al final del periodo o, si no existe, la participación registrada.'],
@@ -5215,7 +5401,7 @@ function _statsInfoBoton(titulo, explicitMetric) {
 function _statsInfo(metric) {
   var keys = String(metric || '').split('|').filter(function(k,i,a) { return Object.prototype.hasOwnProperty.call(_statsMetricas,k) && a.indexOf(k) === i; });
   if (!keys.length) return;
-  App.openModal(keys.length === 1 ? _statsMetricas[keys[0]][0] : 'Cómo interpretar estos datos','<div class="stats-info-sheet">' + keys.map(function(k) { var m = _statsMetricas[k]; return '<section class="stats-info-entry">' + (keys.length > 1 ? '<h3>' + _statsTexto(m[0]) + '</h3>' : '') + '<h4>Qué significa</h4><p>' + _statsTexto(m[1]) + '</p><h4>Cómo se calcula</h4><p>' + _statsTexto(m[2]) + '</p></section>'; }).join('') + '<p class="stats-info-note">Los datos respetan la temporada y el periodo seleccionados. — significa que no hay datos suficientes; no equivale a cero.</p></div>');
+  App.openModal(keys.length === 1 ? _statsMetricas[keys[0]][0] : 'Cómo interpretar estos datos','<div class="stats-info-sheet">' + keys.map(function(k) { var m = _statsMetricas[k]; return '<section class="stats-info-entry">' + (keys.length > 1 ? '<h3>' + _statsTexto(m[0]) + '</h3>' : '') + '<h4>Qué significa</h4><p>' + _statsTexto(m[1]) + '</p><h4>Cómo se calcula</h4><p>' + _statsTexto(m[2].replace('{umbral}',_alertasUmbral())) + '</p></section>'; }).join('') + '<p class="stats-info-note">Los datos respetan la temporada y el periodo seleccionados. — significa que no hay datos suficientes; no equivale a cero.</p></div>');
 }
 function _statsFechaHumana(fecha) {
   if (!fecha || fecha === '0000-00-00') return 'Inicio de temporada';
@@ -5242,19 +5428,25 @@ function _statsTelefono(valor) {
   if (/^34\d{9}$/.test(telefono)) telefono = '+' + telefono;
   return /^\+\d{7,15}$/.test(telefono) ? telefono : '';
 }
-function _statsContacto(tipo,id) {
+// `opciones` (alertas de ausencias): { familiaPrimero, mensaje (WhatsApp y email prellenados), volver: JS del botón de vuelta }.
+function _statsContacto(tipo,id,opciones) {
+  opciones = opciones || {};
   var jugador = tipo === 'jugador';
   var persona = (jugador ? App.cache.jugadores : App.cache.entrenadores).find(function(p) { return p.ID === id; });
   if (!persona) { showToast('No se encontró el contacto','error'); return; }
   var nombre = [persona.Nombre,persona.Apellidos].filter(Boolean).join(' ');
   var contactos = [{titulo:jugador ? 'Jugador' : 'Entrenador',nombre:nombre,tel:persona.Telefono,email:persona.Email}];
   if (jugador) [1,2].forEach(function(n) { var familiar = {titulo:'Familiar ' + n,nombre:[persona['NombrePadre'+n],persona['ApellidosPadre'+n]].filter(Boolean).join(' '),tel:persona['TelefonoPadre'+n],email:persona['EmailPadre'+n]}; if (familiar.nombre || familiar.tel || familiar.email) contactos.push(familiar); });
+  if (jugador && opciones.familiaPrimero) contactos.push(contactos.shift());
+  var texto = opciones.mensaje ? encodeURIComponent(opciones.mensaje) : '', alguno = false;
   App.openModal('Contactar · ' + nombre,'<div class="stats-contact-sheet"><div class="person-inline">' + App.avatarHtml(persona.FotoURL,nombre,72) + '<strong>' + _statsTexto(nombre) + '</strong></div>' + contactos.map(function(c) {
     var tel = _statsTelefono(c.tel), email = String(c.email || '').trim();
     var emailValido = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email);
     if (!tel && !emailValido) return '<p class="stats-contact-muted">' + _statsTexto(c.titulo) + ': sin teléfono ni email disponible.</p>';
-    return '<section class="stats-contact-card"><span class="stats-contact-kind">' + _statsTexto(c.titulo) + '</span>' + (c.nombre ? '<h3>' + _statsTexto(c.nombre) + '</h3>' : '') + (c.tel ? '<p>' + _statsTexto(c.tel) + '</p>' : '') + (email ? '<p>' + _statsTexto(email) + '</p>' : '') + '<div class="stats-contact-actions">' + (tel ? '<a href="tel:' + _statsTexto(tel) + '" aria-label="Llamar a ' + _statsTexto(c.nombre || c.titulo) + '">Llamar</a><a class="stats-contact-whatsapp" href="https://wa.me/' + tel.slice(1) + '" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp de ' + _statsTexto(c.nombre || c.titulo) + '">WhatsApp</a>' : '') + (emailValido ? '<a href="mailto:' + _statsTexto(encodeURIComponent(email)) + '" aria-label="Enviar email a ' + _statsTexto(c.nombre || c.titulo) + '">Email</a>' : '') + '</div></section>';
-  }).join('') + '</div>');
+    alguno = true;
+    return '<section class="stats-contact-card"><span class="stats-contact-kind">' + _statsTexto(c.titulo) + '</span>' + (c.nombre ? '<h3>' + _statsTexto(c.nombre) + '</h3>' : '') + (c.tel ? '<p>' + _statsTexto(c.tel) + '</p>' : '') + (email ? '<p>' + _statsTexto(email) + '</p>' : '') + '<div class="stats-contact-actions">' + (tel ? '<a href="tel:' + _statsTexto(tel) + '" aria-label="Llamar a ' + _statsTexto(c.nombre || c.titulo) + '">Llamar</a><a class="stats-contact-whatsapp" href="' + _statsTexto('https://wa.me/' + tel.slice(1) + (texto ? '?text=' + texto : '')) + '" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp de ' + _statsTexto(c.nombre || c.titulo) + '">WhatsApp</a>' : '') + (emailValido ? '<a href="' + _statsTexto('mailto:' + encodeURIComponent(email) + (texto ? '?subject=' + encodeURIComponent('CB Baeza') + '&body=' + texto : '')) + '" aria-label="Enviar email a ' + _statsTexto(c.nombre || c.titulo) + '">Email</a>' : '') + '</div></section>';
+  }).join('') + (!alguno && jugador && opciones.volver ? '<button type="button" class="btn btn-secondary btn-full" onclick="App.closeModal();App.views[\'jugador-detalle\'].cargar(' + _statsArgumento(id) + ')">Completar ficha</button>' : '') +
+    (opciones.volver ? '<button type="button" class="btn btn-secondary btn-full stats-contact-back" onclick="' + _statsTexto(opciones.volver) + '">‹ Volver a alertas</button>' : '') + '</div>');
 }
 
 
@@ -6626,6 +6818,39 @@ Object.assign(App.i18n.diccionario, {
   'El código ha caducado o no existe. Solicita uno nuevo.':'The code has expired or does not exist. Request a new one.',
   'Espera un minuto antes de pedir otro código.':'Wait one minute before requesting another code.',
 });
+Object.assign(App.i18n.diccionario, {
+  'Alertas de ausencias':'Absence alerts',
+  'Contactar familia':'Contact family',
+  'Marcar contactado':'Mark as contacted',
+  'Deshacer':'Undo',
+  'Sin asistencias esta temporada':'No attendance this season',
+  'Ya has contactado con todas las familias en alerta.':'You have contacted every family on alert.',
+  'No se pudieron calcular las alertas.':'Alerts could not be calculated.',
+  'Se reintentará en la próxima recarga de datos.':'They will be recalculated on the next data refresh.',
+  'No hay temporada activa.':'There is no active season.',
+  'Volver a alertas':'Back to alerts',
+  'Completar ficha':'Complete profile',
+});
+App.i18n.patrones.push(
+  [/^Alertas de ausencias de (.+?)(?:: (\d+) jugador(?:es)?)?$/, function(all,equipo,n) { return 'Absence alerts for ' + equipo + (n ? ': ' + n + (n === '1' ? ' player' : ' players') : ''); }],
+  [/^(\d+) entrenos seguidos sin venir$/, '$1 training sessions missed in a row'],
+  [/^(\d+) ausencias seguidas$/, '$1 consecutive absences'],
+  [/^Desde (.+)$/, 'Since $1'],
+  [/^Última asistencia: (.+)$/, 'Last attended: $1'],
+  [/^(\d+) justificadas?$/, '$1 excused'],
+  [/^Contactados \((\d+)\)$/, 'Contacted ($1)'],
+  [/^Jugadores con (\d+) o más entrenos seguidos sin venir\. Las faltas justificadas también cuentan\.$/, 'Players who have missed $1 or more training sessions in a row. Excused absences count too.'],
+  [/^Ningún jugador acumula (\d+) entrenos seguidos sin venir\.$/, 'No player has missed $1 training sessions in a row.'],
+  [/^(\d+) ausencias seguidas en cualquiera de sus equipos, aunque estén justificadas; un retraso corta la racha y las faltas como invitado no cuentan\. También: tendencia de −20 pp o inferior, o al menos 3 ausencias sin justificar en los últimos 28 días\. La tendencia necesita al menos 4 registros recientes y solo se calcula para la temporada activa completa\.$/, '$1 absences in a row across any of their teams, even if explained; a late arrival breaks the run and absences as a guest do not count. Also: a trend of −20 percentage points or lower, or at least 3 unexplained absences in the last 28 days. Trend requires at least 4 valid recent records and applies only to the full active season.'],
+  [/^Semana del (.+)$/, 'Week of $1'],
+  [/^(\d+) presentes?$/, '$1 present'],
+  [/^(\d+) retrasos?$/, '$1 late'],
+  [/^(\d+) ausencias?$/, '$1 absent'],
+  [/^(\d+) registro$/, '$1 record'],
+  [/^(\d+) min tarde$/, '$1 min late'],
+  [/^(\d+) de (\d+) sesiones$/, '$1 of $2 sessions'],
+  [/^de (\d+) jugadores$/, 'of $1 players']
+);
 document.addEventListener('DOMContentLoaded',function() { App.i18n.iniciar(); });
 
 </script>

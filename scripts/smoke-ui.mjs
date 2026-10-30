@@ -189,8 +189,10 @@ function driveViews() {
             if (!badge || badge.textContent !== '!' || !/1 entreno sin registrar|1 unrecorded training session/.test(badge.getAttribute('aria-label'))) throw new Error('Inicio sin indicador compacto de entrenamientos pendientes');
             if (/Último entreno|sin registrar/.test(element.innerText)) throw new Error('Inicio muestra detalles antiguos o pendientes fuera del botón');
             if (!element.querySelector('.eq-home-bar') || !/en plantilla|Próximo entreno|in the squad|Next training/.test(element.innerText)) throw new Error('Inicio sin nuevas métricas de equipo');
-            const inbox = element.querySelector('.eq-notifications');
-            if (!inbox || !/App.notifications.openInbox/.test(inbox.getAttribute('onclick')) || !element.querySelector('.eq-notifications-count')) throw new Error('Inicio sin buzón de notificaciones y contador');
+            const inbox = element.querySelector('.eq-notifications:not(.eq-alerts)');
+            if (!inbox || !/App.notifications.openInbox/.test(inbox.getAttribute('onclick')) || !inbox.querySelector('.eq-notifications-count')) throw new Error('Inicio sin buzón de notificaciones y contador');
+            const alerts = element.querySelector('.eq-alerts');
+            if (!alerts || !/App.alertas.open/.test(alerts.getAttribute('onclick')) || element.querySelector('.eq-alerts-count')?.textContent !== '1') throw new Error('Inicio sin botón de alertas de ausencias con contador');
           }
           if (['perfil-jugador','mis-stats','jugador-detalle'].includes(view)) {
             const streak = element.querySelector('.stats-streak');
@@ -277,13 +279,42 @@ function driveViews() {
         result.interacciones.temporadas = Boolean(document.querySelector('.stats-season-option'));
         if (!result.interacciones.temporadas) throw new Error('No se abrió el selector de temporada');
       } else if (state === 'tooltip') {
-        const point = active.querySelector('[data-stats-tip]');
+        const point = active.querySelector('.stats-donut-segment[data-stats-tip]') || active.querySelector('[data-stats-tip]');
         if (!point) throw new Error('No hay punto de gráfico interactivo');
         point.scrollIntoView({ block: 'center' });
-        point.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const tap = () => { const r = point.getBoundingClientRect(); point.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); };
+        tap();
         const tooltip = document.getElementById('stats-chart-tooltip');
-        result.interacciones.tooltip = Boolean(tooltip && !tooltip.hidden && tooltip.textContent.trim());
-        if (!result.interacciones.tooltip) throw new Error('No se abrió el detalle del gráfico');
+        if (!tooltip || tooltip.hidden || !tooltip.querySelector('.stats-tip-label')?.textContent.trim() || !tooltip.querySelector('.stats-tip-value')?.textContent.trim()) throw new Error('No se abrió el detalle compacto del gráfico');
+        const box = tooltip.getBoundingClientRect();
+        if (box.left < 0 || box.top < 0 || box.right > innerWidth || box.bottom > innerHeight || box.width > 250 || box.height > 80) throw new Error('Detalle del gráfico demasiado grande o fuera de pantalla: ' + JSON.stringify(box));
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        if (!tooltip.hidden) throw new Error('El detalle del gráfico no se cierra al tocar fuera');
+        tap();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        if (tooltip.hidden) throw new Error('El detalle del gráfico se cierra solo tras abrirlo');
+        result.interacciones.tooltip = { texto: tooltip.innerText, ancho: Math.round(box.width), alto: Math.round(box.height) };
+      } else if (state === 'alertas' || state === 'alertas-contacto') {
+        const boton = active.querySelector('.eq-alerts');
+        if (!boton) throw new Error('Inicio sin botón de alertas');
+        boton.click();
+        const lista = document.getElementById('alertas-ausencias');
+        const fila = lista && lista.querySelector('.alerta-item');
+        if (!fila || !/Torres Gil, Gonzalo/.test(fila.innerText) || !/6 entrenos seguidos sin venir|6 training sessions missed in a row/.test(fila.innerText)) throw new Error('Lista de alertas sin el jugador de la fixture');
+        fila.querySelector('button[onclick*="marcarContactado"]').click();
+        if (!lista.querySelector('.alerta-item.is-done') || document.querySelector('.view.active .eq-alerts-count')) throw new Error('Marcar contactado no actualiza la lista y el contador');
+        lista.querySelector('.alerta-item.is-done button[onclick*="deshacer"]').click();
+        if (lista.querySelector('.alerta-item.is-done') || !document.querySelector('.view.active .eq-alerts-count')) throw new Error('Deshacer no devuelve la alerta');
+        if (state === 'alertas-contacto') {
+          Object.assign(App.cache.getJugadorById('jugador-gonzalo'), { NombrePadre1: 'Rosa', ApellidosPadre1: 'Gil', TelefonoPadre1: '600555666' });
+          lista.querySelector('.alerta-item button[onclick*="contactar"]').click();
+          const sheet = document.querySelector('.stats-contact-sheet');
+          const wa = sheet && sheet.querySelector('a.stats-contact-whatsapp');
+          if (!wa || !/^https:\/\/wa\.me\/34600555666\?text=Hola/.test(wa.getAttribute('href'))) throw new Error('Contactar familia sin WhatsApp prellenado');
+          if (!/^(Familiar 1|Family contact 1)$/.test(sheet.querySelector('.stats-contact-kind').textContent)) throw new Error('La familia no aparece primero');
+          if (!sheet.querySelector('.stats-contact-back')) throw new Error('Contacto sin vuelta a alertas');
+        }
+        result.interacciones.alertas = true;
       } else if (state === 'contacto') {
         active.querySelector('button[aria-label="Contacto del jugador"]').click();
         if (!document.querySelector('.stats-contact-sheet')) throw new Error('No se abrió el contacto rápido');
@@ -380,7 +411,7 @@ async function captureMobile(browser, url, output, role, screenshot) {
   let launchError;
   child.on('error', error => { launchError = error; });
   const delay = () => new Promise(resolve => setTimeout(resolve, 50));
-  const deadline = Date.now() + 30000;
+  const deadline = Date.now() + 60000;
   function remaining() {
     if (launchError) throw launchError;
     if (Date.now() > deadline) throw new Error('Tiempo agotado capturando viewport móvil: ' + role);
@@ -416,7 +447,9 @@ async function captureMobile(browser, url, output, role, screenshot) {
       pending.set(requestId, { resolve, reject, timer });
       socket.send(JSON.stringify({ id: requestId, method, params, sessionId }));
     });
-    const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+    // Contexto aislado: sin extensiones forzadas por política del perfil normal (cuelgan capturas en Linux).
+    const { browserContextId } = await send('Target.createBrowserContext');
+    const { targetId } = await send('Target.createTarget', { url: 'about:blank', browserContextId });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
     await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, deviceScaleFactor: 1, mobile: true }, sessionId);
     await send('Page.navigate', { url }, sessionId);
@@ -488,7 +521,7 @@ async function main() {
   const assembled = join(output, 'index.html');
   await writeFile(assembled, html);
   let browser;
-  for (const candidate of ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe']) {
+  for (const candidate of [process.env.SMOKE_BROWSER, 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/microsoft-edge'].filter(Boolean)) {
     try { await access(candidate); browser = candidate; break; } catch {}
   }
   if (!browser) throw new Error('No se encuentra Edge ni Chrome en las rutas documentadas. HTML: ' + assembled);
@@ -503,9 +536,11 @@ async function main() {
     const url = pathToFileURL(assembled);
     url.searchParams.set('role', role);
     url.searchParams.set('final', role === 'admin' ? 'informes' : 'mi-equipo');
+    // Linux: a policy-forced extension in the regular --user-data-dir profile keeps
+    // headless --dump-dom from ever finishing; an off-the-record profile skips it.
     const run = spawnSync(browser, [
       '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-      '--force-device-scale-factor=1',
+      '--force-device-scale-factor=1', ...(process.platform === 'linux' ? ['--incognito'] : []),
       '--allow-file-access-from-files', '--user-data-dir=' + join(output, 'profile-' + role),
       '--virtual-time-budget=15000', '--dump-dom', '--screenshot=' + screenshot,
       '--window-size=412,915', url.href,
@@ -537,7 +572,7 @@ async function main() {
       const states = [['info', role === 'admin' ? 'informes' : 'mis-stats'], ['temporadas', role === 'admin' ? 'informes' : 'mis-stats'], ['tooltip', role === 'admin' ? 'equipo-detalle' : 'mis-stats'], ['mensual', role === 'admin' ? 'equipo-detalle' : 'mis-stats']];
       if (role === 'admin') states.push(['contacto','jugador-detalle'],['cobertura','equipo-detalle'],['pendientes','equipo-detalle']);
       if (role === 'admin') states.push(['contactabilidad','informes']);
-      if (role === 'admin') states.push(['avatars-sesion','equipos'],['avatars-guardada','equipos']);
+      if (role === 'admin') states.push(['avatars-sesion','equipos'],['avatars-guardada','equipos'],['alertas','equipos'],['alertas-contacto','equipos']);
       for (const state of ['menu','perfil-usuario','perfil-editar','avatar','seguridad','pin','recovery-destinos','recovery-code','recovery-result','politica-privacidad','politica-cookies']) states.push(['cuenta-'+state,role === 'admin' ? 'equipos' : 'perfil-jugador']);
       if (role === 'jugador') states.push(['cuenta-codigo','perfil-jugador']);
       if (role === 'admin') for (const state of ['staff-player-perfil','staff-player-editar','staff-player-seguridad','staff-coach-perfil','staff-coach-editar','staff-coach-seguridad','coach-sin-permiso']) states.push(['cuenta-'+state,'equipos']);
@@ -567,6 +602,19 @@ async function main() {
           preferenceUrl.searchParams.set('theme',theme);
           preferenceUrl.searchParams.set('lang','en');
           preferenceUrl.searchParams.set('final',state.startsWith('cuenta-') ? (role === 'admin' ? 'equipos' : 'perfil-jugador') : (role === 'admin' ? 'informes' : 'mis-stats'));
+          preferenceUrl.searchParams.set('state',state);
+          const name = role + '-' + theme + '-en-' + state;
+          await captureMobile(browser,preferenceUrl.href,output,name,join(output,name + '-412x915.png'));
+          check(name + ': captura de tema e idioma',true);
+        }
+      }
+      // Alertas y detalle de gráficos en los tres temas, en inglés.
+      for (const theme of ['claro','oscuro','patrimonio']) {
+        for (const state of role === 'admin' ? ['alertas','alertas-contacto','tooltip'] : ['tooltip']) {
+          const preferenceUrl = new URL(url.href);
+          preferenceUrl.searchParams.set('theme',theme);
+          preferenceUrl.searchParams.set('lang','en');
+          preferenceUrl.searchParams.set('final',state === 'tooltip' ? (role === 'admin' ? 'equipo-detalle' : 'mis-stats') : 'equipos');
           preferenceUrl.searchParams.set('state',state);
           const name = role + '-' + theme + '-en-' + state;
           await captureMobile(browser,preferenceUrl.href,output,name,join(output,name + '-412x915.png'));
