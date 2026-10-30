@@ -5631,13 +5631,55 @@ function _statsRachaTexto(valor) {
   return String(valor == null ? '' : valor).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function _statsRachaNivel(n) { return n >= 15 ? 5 : n >= 10 ? 4 : n >= 6 ? 3 : n >= 3 ? 2 : n >= 1 ? 1 : 0; }
+// Fuego de racha: único componente para el héroe y las minis (perfil, mis estadísticas, ficha, ranking y tabla del equipo).
+// Cada capa es un <svg> propio para animar solo transform/opacity; el nivel añade capas, tamaño, brillo y chispas.
+var _STATS_RACHA_CAPAS = {
+  outer: 'M51 7C61 31 82 40 84 68C88 92 70 109 50 110C26 110 11 94 15 73C17 58 26 48 30 33C30 48 36 53 40 55C46 39 42 23 51 7Z',
+  mid: 'M50 26C58 44 74 53 74 75C75 95 63 106 49 106C33 106 22 96 24 80C25 70 31 63 34 52C35 62 39 66 43 67C47 55 45 41 50 26Z',
+  inner: 'M52 51C55 67 70 73 66 89C64 99 57 104 48 103C37 102 30 94 33 83C35 75 43 70 43 61L48 72C52 66 50 59 52 51Z',
+  core: 'M50 74C54 83 60 87 59 95C58 101 54 104 50 104C45 104 41 100 42 95C43 89 48 85 50 74Z'
+};
 function _statsRachaFuego(n) {
-  var nivel = _statsRachaNivel(n);
-  return '<svg class="stats-streak-flame" viewBox="0 0 100 120" role="img" aria-label="' + (nivel ? 'Llama de racha, nivel ' + nivel + ' de 5' : 'Brasa de racha por encender') + '">' +
-    '<ellipse class="stats-streak-glow" cx="50" cy="105" rx="33" ry="8"/>' +
-    (nivel === 5 ? '<g class="stats-streak-sparks"><circle cx="20" cy="28" r="3"/><circle cx="75" cy="20" r="2"/><circle cx="86" cy="55" r="3"/><circle cx="33" cy="10" r="2"/></g>' : '') +
-    '<path class="stats-streak-outer" d="M51 7C61 31 82 40 84 68C88 92 70 109 50 110C26 110 11 94 15 73C17 58 26 48 30 33C30 48 36 53 40 55C46 39 42 23 51 7Z"/>' +
-    '<path class="stats-streak-inner" d="M52 51C55 67 70 73 66 89C64 99 57 104 48 103C37 102 30 94 33 83C35 75 43 70 43 61L48 72C52 66 50 59 52 51Z"/></svg>';
+  n = Math.max(0, Math.floor(Number(n)) || 0);
+  var nivel = _statsRachaNivel(n), capas = ['outer'].concat(nivel >= 2 ? ['mid'] : [], ['inner'], nivel >= 3 ? ['core'] : []);
+  var chispas = nivel >= 5 ? 4 : nivel >= 4 ? 2 : 0, html = '';
+  for (var i = 0; i < chispas; i++) html += '<span class="stats-streak-spark"></span>';
+  return '<button type="button" class="stats-streak-fire stats-streak-tier-' + nivel + '" data-racha="' + n + '" aria-label="' + (nivel ? 'Llama de racha, nivel ' + nivel + ' de 5' : 'Brasa de racha por encender') + '" onclick="event.stopPropagation();_statsRachaCelebrar(this)">' +
+    '<span class="stats-streak-size" aria-hidden="true"><span class="stats-streak-pop"><span class="stats-streak-halo"></span>' +
+    capas.map(function(c) { return '<svg class="stats-streak-layer stats-streak-' + c + '" viewBox="0 0 100 120" focusable="false"><path d="' + _STATS_RACHA_CAPAS[c] + '"/></svg>'; }).join('') +
+    (chispas ? '<span class="stats-streak-sparks">' + html + '</span>' : '') + '</span></span></button>';
+}
+// Toque: llamarada con rebote, estallido de chispas, vibración y texto flotante. Reutiliza un único overlay por documento.
+function _statsRachaCelebrar(boton) {
+  var n = Number(boton.getAttribute('data-racha')) || 0, nivel = _statsRachaNivel(n);
+  var reducido = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var clase = reducido ? 'is-destello' : 'is-celebrando';
+  boton.classList.remove('is-destello', 'is-celebrando');
+  void boton.offsetWidth;
+  boton.classList.add(clase);
+  clearTimeout(boton._rachaTimer);
+  boton._rachaTimer = setTimeout(function() { boton.classList.remove(clase); }, 900);
+  if (reducido) return;
+  if (nivel && navigator.vibrate) { try { navigator.vibrate(30); } catch (e) {} }
+  var burst = document.getElementById('stats-streak-burst');
+  if (!burst) {
+    burst = document.createElement('div');
+    burst.id = 'stats-streak-burst';
+    burst.setAttribute('aria-hidden', 'true');
+    burst.innerHTML = new Array(13).join('<span class="stats-streak-particle"></span>') + '<span class="stats-streak-float"></span>';
+    document.body.appendChild(burst);
+  }
+  var rect = boton.getBoundingClientRect(), texto = burst.lastChild;
+  var cx = rect.left + rect.width / 2, cy = rect.top + rect.height * .45;
+  burst.className = 'stats-streak-burst stats-streak-tier-' + nivel;
+  burst.style.transform = 'translate(' + cx + 'px,' + cy + 'px)';
+  texto.textContent = App.i18n.texto(!n ? 'Racha por encender' : n === 1 ? '¡1 sesión seguida! 🔥' : '¡' + n + ' sesiones seguidas! 🔥');
+  var ancho = texto.offsetWidth, vw = document.documentElement.clientWidth || window.innerWidth;
+  var centro = Math.min(Math.max(cx, ancho / 2 + 8), vw - ancho / 2 - 8);
+  texto.style.left = (centro - cx - ancho / 2) + 'px';
+  texto.style.top = -(rect.height * .45 + 14) + 'px';
+  void burst.offsetWidth;
+  burst.classList.add('is-activo');
 }
 function _statsContactoSegmentos(c) {
   return [{ nombre:'Email familiar', n:c.conEmailFamiliar, clase:'email' },{ nombre:'Solo teléfono', n:c.soloTelefono, clase:'telefono' },{ nombre:'Solo email personal', n:c.soloEmailPersonal, clase:'personal' },{ nombre:'Sin contacto', n:c.sinContacto, clase:'sin' }];
@@ -6813,6 +6855,9 @@ App.i18n = {
   "Racha": "Streak",
   "seguidas": "in a row",
   "sesiones seguidas": "consecutive sessions",
+  "¡1 sesión seguida! 🔥": "1 session in a row! 🔥",
+  "Racha por encender": "Streak not lit yet",
+  "Brasa de racha por encender": "Unlit streak ember",
   "Evolución semanal": "Weekly trend",
   "Evolución mensual": "Monthly trend",
   "Asistencia por día": "Attendance by weekday",
@@ -7050,6 +7095,8 @@ App.i18n = {
     [/^(\d+) sin registrar$/, '$1 not recorded'],
     [/^Tu posición: (.+) de (.+)$/, 'Your position: $1 of $2'],
     [/^Racha actual: (\d+) sesiones seguidas$/, 'Current streak: $1 consecutive sessions'],
+    [/^¡(\d+) sesiones seguidas! 🔥$/, '$1 sessions in a row! 🔥'],
+    [/^Llama de racha, nivel (\d) de 5$/, 'Streak flame, level $1 of 5'],
     [/^Datos de (.+) a (.+)$/, 'Data from $1 to $2'],
     [/^Información sobre (.+)$/, 'Information about $1'],
     [/^Contacto del jugador$/, 'Player contact'],

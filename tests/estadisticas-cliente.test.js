@@ -96,7 +96,7 @@ test('los lotes respetan el máximo de 60 consultas y los errores conservan dato
   assert.equal(entrada.error, 'Sin conexión');
 });
 
-test('rachas: seis niveles, brasa vacía y mejor racha accesible', () => {
+test('rachas: seis niveles, mismo fuego tocable en héroe y mini, más capas y chispas al subir', () => {
   const { context } = cliente();
   vm.runInContext('_statsInfoBoton = titulo => "<button>Info " + titulo + "</button>"', context);
   for (const [n, nivel] of [[0, 0], [1, 1], [2, 1], [3, 2], [5, 2], [6, 3], [9, 3], [10, 4], [14, 4], [15, 5], [30, 5]]) {
@@ -108,9 +108,12 @@ test('rachas: seis niveles, brasa vacía y mejor racha accesible', () => {
     assert.match(hero, new RegExp('stats-streak-count">' + n + '<span>sesiones seguidas'));
     assert.match(hero, /Récord: <strong>31<\/strong>/);
     assert.doesNotMatch(hero, /<details|stats-streak-message/);
-    assert.match(hero, /role="img" aria-label="/);
+    const fuego = vm.runInContext('_statsRachaFuego(d.rachaActual)', context);
+    assert.ok(hero.includes(fuego) && mini.includes(fuego));
+    assert.match(fuego, /^<button type="button"[^>]* data-racha="\d+" aria-label="[^"]+" onclick="[^"]*_statsRachaCelebrar\(this\)"/);
     assert.match(mini, new RegExp('aria-label="Racha actual: ' + n + ' sesiones seguidas"'));
-    assert.equal(hero.includes('stats-streak-sparks'), nivel === 5);
+    assert.equal((fuego.match(/stats-streak-layer/g) || []).length, 2 + (nivel >= 2) + (nivel >= 3));
+    assert.equal((fuego.match(/class="stats-streak-spark"/g) || []).length, nivel === 5 ? 4 : nivel === 4 ? 2 : 0);
     assert.equal(hero.includes('Brasa de racha por encender'), n === 0);
     assert.doesNotMatch(hero, /\bbase\b/i);
   }
