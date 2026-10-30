@@ -138,9 +138,11 @@ const Equipos = {
     });
   },
 
+  // Inicial del nombre + apellidos sin espacios ni tildes (máx. 10). Si no queda ningún carácter
+  // latino (p. ej. nombres en otro alfabeto) usa «jugador» para que Usuario nunca quede vacío.
   _generarUsuario(nombre, apellidos) {
     const n = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-    return n(nombre).charAt(0) + n(apellidos).replace(/\s+/g, '').substring(0, 10);
+    return (n(nombre).charAt(0) + n(apellidos).substring(0, 10)) || 'jugador';
   },
 
   _generarPIN4() {

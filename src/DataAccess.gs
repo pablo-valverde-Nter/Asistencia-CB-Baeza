@@ -11,6 +11,8 @@ const SUPABASE_BOOLEAN_FIELDS = new Set([
   'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2',
 ]);
 const SUPABASE_INTEGER_FIELDS = new Set(['DiaSemana', 'MinutosRetraso']);
+// Columnas timestamptz: PostgREST rechaza '' («invalid input syntax for type timestamp»).
+const SUPABASE_TIMESTAMP_FIELDS = new Set(['BienvenidaVista']);
 // Caché por ejecución: cada llamada de google.script.run arranca vacía y cualquier escritura la vacía.
 const SUPABASE_TABLE_CACHE_ = new Map();
 let SUPABASE_CONFIG_CACHE_ = null;
@@ -144,6 +146,7 @@ function supabaseFilter_(field, value) {
 function normalizeSupabaseValue_(field, value) {
   if (value === '' && SUPABASE_BOOLEAN_FIELDS.has(field)) return null;
   if (SUPABASE_INTEGER_FIELDS.has(field) && value === '') return null;
+  if (SUPABASE_TIMESTAMP_FIELDS.has(field) && (value === '' || value === null || value === undefined)) return null;
   return value;
 }
 
@@ -192,7 +195,8 @@ function appendRow(sheetName, rowData) {
   if (!rowData.ID) rowData.ID = Utilities.getUuid();
   const payload = {};
   SCHEMA[sheetName].forEach(field => {
-    payload[field] = normalizeSupabaseValue_(field, rowData[field] !== undefined ? rowData[field] : '');
+    const value = rowData[field] !== undefined ? rowData[field] : (SUPABASE_TIMESTAMP_FIELDS.has(field) ? null : '');
+    payload[field] = normalizeSupabaseValue_(field, value);
   });
   const inserted = supabaseRequest_(sheetName, 'post', '', payload, 'return=representation');
   return inserted[0] || rowData;
