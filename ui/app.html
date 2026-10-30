@@ -1017,6 +1017,7 @@ const App = {
     _clientLog('cerrarSesion', { reason: reason || 'manual_or_unknown', view: App.state.currentView || null });
     App.realtime.stop();
     App.stats.reset();
+    _statsFuegoEggApagar();
     hideLoading(); // Garantiza que el overlay no quede visible si se llama durante la carga inicial
     App.state._authReqSeq++;
     App.state.auth = null;
@@ -5653,6 +5654,7 @@ function _statsRachaFuego(n) {
 function _statsRachaCelebrar(boton) {
   var n = Number(boton.getAttribute('data-racha')) || 0, nivel = _statsRachaNivel(n);
   var reducido = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  _statsFuegoEggToque(boton, reducido);
   var clase = reducido ? 'is-destello' : 'is-celebrando';
   boton.classList.remove('is-destello', 'is-celebrando');
   void boton.offsetWidth;
@@ -5681,6 +5683,118 @@ function _statsRachaCelebrar(boton) {
   void burst.offsetWidth;
   burst.classList.add('is-activo');
 }
+// Easter egg solo para el rol jugador: cada toque seguido carga el fuego (crece, tiembla, vira a blanco/azul y suelta
+// chispas); la carga baja si se deja de tocar y, al completarse, estalla y deja la app en llamas hasta recargar.
+// Todo vive en memoria: no se guarda nada y cerrar sesión lo apaga.
+var _STATS_FUEGO_EGG = { toques: 15, esperaMs: 2000, bajadaMs: 350, estallidoMs: 2300 };
+var _statsFuegoEgg = { carga: 0, ultimo: 0, boton: null, timer: 0, fase: '' };
+function _statsFuegoEggCarga(ahora) {
+  var e = _statsFuegoEgg, parado = ahora - e.ultimo - _STATS_FUEGO_EGG.esperaMs;
+  return parado > 0 ? Math.max(0, e.carga - Math.floor(parado / _STATS_FUEGO_EGG.bajadaMs)) : e.carga;
+}
+function _statsFuegoEggToque(boton, reducido) {
+  var e = _statsFuegoEgg;
+  if (App.state.rol !== 'jugador' || e.fase) return;
+  var ahora = Date.now();
+  e.carga = _statsFuegoEggCarga(ahora) + 1;
+  e.ultimo = ahora;
+  if (e.boton !== boton) _statsFuegoEggPintar(e.boton, 0);
+  e.boton = boton;
+  clearTimeout(e.timer);
+  if (e.carga < _STATS_FUEGO_EGG.toques) {
+    _statsFuegoEggPintar(boton, e.carga);
+    e.timer = setTimeout(_statsFuegoEggEnfriar, _STATS_FUEGO_EGG.esperaMs + _STATS_FUEGO_EGG.bajadaMs);
+    return;
+  }
+  e.carga = 0; e.boton = null; e.fase = 'estallando';
+  _statsFuegoEggPintar(boton, 0);
+  if (reducido) _statsFuegoEggEnLlamas(); else _statsFuegoEggEstallar(boton);
+}
+function _statsFuegoEggEnfriar() {
+  var e = _statsFuegoEgg, carga = _statsFuegoEggCarga(Date.now());
+  _statsFuegoEggPintar(e.boton, carga);
+  if (!carga) e.boton = null;
+  e.timer = carga ? setTimeout(_statsFuegoEggEnfriar, _STATS_FUEGO_EGG.bajadaMs) : 0;
+}
+// --egg (0-1) gobierna en CSS tamaño, temblor, tono y chispas; las capas extra se añaden al primer toque.
+function _statsFuegoEggPintar(boton, carga) {
+  if (!boton) return;
+  var k = Math.min(1, carga / _STATS_FUEGO_EGG.toques), pop = boton.querySelector('.stats-streak-pop');
+  if (k && pop && !pop.querySelector('.stats-egg-tono')) {
+    pop.insertAdjacentHTML('beforeend', '<span class="stats-egg-tono"><svg class="stats-egg-llama" viewBox="0 0 100 120" focusable="false"><path class="stats-egg-azul" d="' + _STATS_RACHA_CAPAS.mid + '"/><path class="stats-egg-blanco" d="' + _STATS_RACHA_CAPAS.inner + '"/></svg></span>' +
+      '<span class="stats-egg-chispas">' + new Array(7).join('<span class="stats-streak-spark"></span>') + '</span>');
+  }
+  boton.style.setProperty('--egg', k.toFixed(3));
+  boton.classList.toggle('is-cargando', k > 0);
+}
+function _statsFuegoEggLlama(clase, capa, estilo) {
+  return '<span class="' + clase + '" style="' + estilo + '"><svg viewBox="0 0 100 120" preserveAspectRatio="none" focusable="false"><path d="' + _STATS_RACHA_CAPAS[capa] + '"/></svg></span>';
+}
+// Estallido (≈2,3 s): flash, onda expansiva, chispas y un mar de llamas a pantalla completa; después, en llamas.
+function _statsFuegoEggEstallar(boton) {
+  var rect = boton.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight;
+  var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+  var radio = Math.sqrt(Math.pow(Math.max(cx, vw - cx), 2) + Math.pow(Math.max(cy, vh - cy), 2));
+  var html = '<span class="stats-egg-flash"></span><span class="stats-egg-onda"></span><span class="stats-egg-onda is-segunda"></span><span class="stats-egg-mar">';
+  for (var i = 0; i < 9; i++) html += _statsFuegoEggLlama('stats-egg-ola', 'outer', 'left:' + (i * 12 - 10) + '%;animation-delay:' + ((i % 3) * .06 + (i % 2) * .05).toFixed(2) + 's');
+  for (i = 0; i < 7; i++) html += _statsFuegoEggLlama('stats-egg-ola is-frente', 'mid', 'left:' + (i * 16 - 6) + '%;animation-delay:' + (.12 + (i % 3) * .07).toFixed(2) + 's');
+  html += '</span>';
+  for (i = 0; i < 18; i++) {
+    var ang = i / 18 * Math.PI * 2 + (i % 2) * .17, dist = radio * (.55 + (i % 3) * .2);
+    html += '<span class="stats-egg-chispa" style="--dx:' + Math.round(Math.cos(ang) * dist) + 'px;--dy:' + Math.round(Math.sin(ang) * dist) + 'px;animation-delay:' + ((i % 4) * .04).toFixed(2) + 's"></span>';
+  }
+  var capa = document.createElement('div');
+  capa.id = 'stats-egg-estallido';
+  capa.className = 'stats-egg-estallido';
+  capa.setAttribute('aria-hidden', 'true');
+  capa.style.setProperty('--cx', cx + 'px');
+  capa.style.setProperty('--cy', cy + 'px');
+  capa.style.setProperty('--onda', (radio / 20).toFixed(1));
+  capa.innerHTML = html;
+  document.body.appendChild(capa);
+  if (navigator.vibrate) { try { navigator.vibrate([60, 40, 160]); } catch (e) {} }
+  var mar = capa.querySelector('.stats-egg-mar'), hecho = false;
+  var fin = function() {
+    if (hecho) return;
+    hecho = true;
+    capa.remove();
+    if (_statsFuegoEgg.fase === 'estallando') _statsFuegoEggEnLlamas();
+  };
+  mar.addEventListener('animationend', function(ev) { if (ev.animationName === 'stats-egg-mar') fin(); });
+  setTimeout(fin, _STATS_FUEGO_EGG.estallidoMs + 1500);
+}
+// Pantalla en llamas: brillo en los bordes, llamas en el borde inferior del contenido y brasas. Sin eventos de puntero.
+function _statsFuegoEggEnLlamas() {
+  _statsFuegoEgg.fase = 'en-llamas';
+  var html = '<span class="stats-egg-borde"></span><span class="stats-egg-suelo">', i;
+  for (i = 0; i < 9; i++) html += _statsFuegoEggLlama('stats-egg-lengua', i % 2 ? 'mid' : 'outer', 'left:' + (i * 12 - 4) + '%;animation-delay:-' + ((i * .37) % 1.3).toFixed(2) + 's');
+  for (i = 0; i < 6; i++) html += _statsFuegoEggLlama('stats-egg-lengua is-frente', 'inner', 'left:' + (i * 18 + 2) + '%;animation-delay:-' + ((i * .29) % .9).toFixed(2) + 's');
+  html += '</span>';
+  [22, 48, 74].forEach(function(top, j) {
+    html += _statsFuegoEggLlama('stats-egg-lado is-izq', 'outer', 'top:' + top + '%;animation-delay:-' + (j * .4) + 's');
+    html += _statsFuegoEggLlama('stats-egg-lado is-der', 'outer', 'top:' + (top + 12) + '%;animation-delay:-' + (j * .4 + .2) + 's');
+  });
+  [[8, 12], [21, 26], [34, 8], [47, 34], [59, 15], [71, 28], [84, 10], [93, 22]].forEach(function(p, j) {
+    html += '<span class="stats-egg-brasa" style="left:' + p[0] + '%;bottom:' + p[1] + '%;--dx:' + ((j % 2 ? 1 : -1) * (8 + j * 3)) + 'px;animation-delay:-' + (j * .73).toFixed(2) + 's"></span>';
+  });
+  var capa = document.createElement('div');
+  capa.id = 'stats-egg-llamas';
+  capa.className = 'stats-egg-llamas';
+  capa.setAttribute('aria-hidden', 'true');
+  capa.innerHTML = html;
+  (document.getElementById('app') || document.body).appendChild(capa);
+  showToast(App.i18n.texto('🔥 ¡Estás on fire!'));
+}
+function _statsFuegoEggApagar() {
+  var e = _statsFuegoEgg;
+  clearTimeout(e.timer);
+  _statsFuegoEggPintar(e.boton, 0);
+  e.carga = 0; e.boton = null; e.timer = 0; e.fase = '';
+  ['stats-egg-estallido', 'stats-egg-llamas'].forEach(function(id) { var el = document.getElementById(id); if (el) el.remove(); });
+}
+document.addEventListener('visibilitychange', function() {
+  document.documentElement.classList.toggle('stats-egg-pausa', document.hidden);
+});
 function _statsContactoSegmentos(c) {
   return [{ nombre:'Email familiar', n:c.conEmailFamiliar, clase:'email' },{ nombre:'Solo teléfono', n:c.soloTelefono, clase:'telefono' },{ nombre:'Solo email personal', n:c.soloEmailPersonal, clase:'personal' },{ nombre:'Sin contacto', n:c.sinContacto, clase:'sin' }];
 }
@@ -6857,6 +6971,7 @@ App.i18n = {
   "sesiones seguidas": "consecutive sessions",
   "¡1 sesión seguida! 🔥": "1 session in a row! 🔥",
   "Racha por encender": "Streak not lit yet",
+  "🔥 ¡Estás on fire!": "🔥 You're on fire!",
   "Brasa de racha por encender": "Unlit streak ember",
   "Evolución semanal": "Weekly trend",
   "Evolución mensual": "Monthly trend",

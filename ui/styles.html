@@ -32,6 +32,8 @@
   --fuego-med:    #F57C00;
   --fuego-int:    #FFB300;
   --fuego-nucleo: #FFF3C4;
+  --fuego-azul:   #29B6F6;   /* carga del easter egg del fuego: vira a azul y blanco */
+  --fuego-blanco: #FFFFFF;
   --programado:   #7B1FA2;   /* borde y punto de sesiones programadas */
   --brand-bg:     #4A148C;   /* cabecera, barra inferior, botón primario */
   --brand-end:    #7B1FA2;
@@ -61,7 +63,7 @@ html[data-theme="oscuro"] {
   --verde:#81D897; --verde-s:#193D2B; --rojo:#FFACA9; --rojo-s:#492126;
   --naranja:#FFD08B; --naranja-s:#463321; --ambar:#FFD181; --ambar-s:#44351E;
   --stats-positive:#C49AF3; --stats-gold:#E3BF6C; --stats-coral:#E9A397; --programado:#BC93EE;
-  --fuego-ext:#FF7043; --fuego-med:#FF9E40; --fuego-int:#FFD54F; --fuego-nucleo:#FFF8E1;
+  --fuego-ext:#FF7043; --fuego-med:#FF9E40; --fuego-int:#FFD54F; --fuego-nucleo:#FFF8E1; --fuego-azul:#4FC3F7; --fuego-blanco:#FFFFFF;
   --brand-bg:#4B2770; --brand-end:#643A8C;
   --button-ink:#17101F; --avatar-accent:#E3BF6C; --toast-bg:#352640; --loading-scrim:rgba(6,2,12,.86);
   --shadow-color:rgba(0,0,0,.35); --sombra:0 2px 8px rgba(0,0,0,.3); --sombra-lg:0 6px 24px rgba(0,0,0,.45);
@@ -71,7 +73,7 @@ html[data-theme="patrimonio"] {
   --morado:#7B1E24; --morado-m:#A3343C; --morado-s:#EFEAEA; --morado-xs:#F8F5F5;
   --blanco:#FFFFFF; --fondo:#F4F4F4; --texto:#211A1B; --texto-sec:#5C5455; --borde:#E0DCDC;
   --stats-positive:#8F2830; --stats-gold:#E0A93A; --stats-coral:#EC967A; --programado:#8C8586;
-  --fuego-ext:#C4391D; --fuego-med:#EE7A1F; --fuego-int:#F6B530; --fuego-nucleo:#FFF1C9;
+  --fuego-ext:#C4391D; --fuego-med:#EE7A1F; --fuego-int:#F6B530; --fuego-nucleo:#FFF1C9; --fuego-azul:#3FA9E0; --fuego-blanco:#FFFDF7;
   --brand-bg:#7B1E24; --brand-end:#9A2A33;
   --avatar-ink:#FFFFFF; --avatar-accent:#E3B85C; --toast-bg:#2B2122; --loading-scrim:rgba(40,8,12,.84);
   --shadow-color:rgba(60,16,20,.12); --sombra:0 2px 8px rgba(123,30,36,.08); --sombra-lg:0 4px 20px rgba(123,30,36,.15);
@@ -1899,7 +1901,7 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 .stats-streak-fire::before { content:''; position:absolute; inset:-8px; }
 .stats-streak-fire:focus-visible { outline:3px solid var(--brand-bg); outline-offset:2px; }
 .stats-streak-size,.stats-streak-pop,.stats-streak-layer,.stats-streak-halo,.stats-streak-sparks { position:absolute; inset:0; pointer-events:none; }
-.stats-streak-size { transform:scale(var(--streak-scale)); transform-origin:50% 92%; }
+.stats-streak-size { transform:scale(calc(var(--streak-scale) * (1 + var(--egg,0) * .55))); transform-origin:50% 92%; transition:transform .25s ease-out; }
 .stats-streak-pop,.stats-streak-layer { transform-origin:50% 92%; }
 .stats-streak-layer { display:block; width:100%; height:100%; overflow:visible; }
 .stats-streak-outer { fill:var(--fuego-ext); animation:stats-streak-baile calc(2.2s * var(--streak-speed)) ease-in-out infinite; }
@@ -1957,11 +1959,69 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 @keyframes stats-streak-destello { 0%,100% { opacity:var(--streak-glow); } 35% { opacity:.9; } }
 @keyframes stats-streak-estallido { 0% { opacity:1; transform:translate(0,0) scale(.6); } 55% { opacity:1; } 100% { opacity:0; transform:translate(calc(var(--dx) * var(--burst-k) * 1px),calc(var(--dy) * var(--burst-k) * 1px)) scale(.2); } }
 @keyframes stats-streak-flota { 0% { opacity:0; transform:translateY(10px) scale(.6); } 18% { opacity:1; transform:translateY(-6px) scale(1.08); } 30% { transform:translateY(-8px) scale(1); } 75% { opacity:1; transform:translateY(-18px); } 100% { opacity:0; transform:translateY(-28px); } }
+/* Easter egg del jugador (_statsFuegoEggToque): --egg (0-1) es la carga; agranda, hace temblar y tiñe de blanco/azul el fuego. */
+.stats-streak-fire.is-cargando { animation:stats-egg-tiembla .12s linear infinite; }
+.stats-egg-tono,.stats-egg-chispas { position:absolute; inset:0; pointer-events:none; opacity:var(--egg,0); transition:opacity .25s ease-out; }
+.stats-egg-llama { display:block; width:100%; height:100%; overflow:visible; transform-origin:50% 92%; animation:stats-streak-ondula .7s ease-in-out infinite; }
+.stats-egg-azul { fill:var(--fuego-azul); }
+.stats-egg-blanco { fill:var(--fuego-blanco); }
+.stats-egg-chispas .stats-streak-spark { background:var(--fuego-blanco); animation-duration:.8s; }
+.stats-egg-chispas .stats-streak-spark:nth-child(even) { background:var(--fuego-azul); }
+.stats-egg-chispas .stats-streak-spark:nth-child(5) { --dx:-16; left:18%; animation-delay:-.35s; }
+.stats-egg-chispas .stats-streak-spark:nth-child(6) { --dx:15; left:76%; animation-delay:-.65s; }
+/* Estallido a pantalla completa (≈2,3 s): flash, ondas, chispas y mar de llamas. */
+.stats-egg-estallido { position:fixed; inset:0; z-index:20002; overflow:hidden; pointer-events:none; }
+.stats-egg-estallido span { position:absolute; }
+.stats-egg-flash { inset:0; background:radial-gradient(circle at var(--cx) var(--cy),var(--fuego-blanco),var(--fuego-int) 28%,color-mix(in srgb,var(--fuego-ext) 70%,transparent) 70%); opacity:0; animation:stats-egg-flash .7s ease-out forwards; }
+.stats-egg-onda { left:var(--cx); top:var(--cy); width:40px; height:40px; margin:-20px 0 0 -20px; border:3px solid var(--fuego-int); border-radius:50%; box-shadow:0 0 12px var(--fuego-med),inset 0 0 12px var(--fuego-blanco); opacity:0; animation:stats-egg-onda .9s cubic-bezier(.1,.6,.3,1) forwards; }
+.stats-egg-onda.is-segunda { border-color:var(--fuego-azul); animation-delay:.14s; }
+.stats-egg-mar { inset:0; animation:stats-egg-mar 2.3s linear forwards; }
+.stats-egg-mar::before { content:''; position:absolute; inset:0; background:linear-gradient(to top,var(--fuego-ext),color-mix(in srgb,var(--fuego-med) 85%,transparent) 45%,color-mix(in srgb,var(--fuego-int) 40%,transparent) 80%,transparent); opacity:0; animation:stats-egg-calor 2.3s ease-out forwards; }
+.stats-egg-ola { bottom:-6%; width:30%; height:112%; transform-origin:50% 100%; transform:scaleY(0); animation:stats-egg-ola 1.9s cubic-bezier(.2,.8,.3,1) forwards; }
+.stats-egg-ola.is-frente { width:26%; height:80%; }
+.stats-egg-ola svg,.stats-egg-lengua svg,.stats-egg-lado svg { display:block; width:100%; height:100%; }
+.stats-egg-ola path { fill:var(--fuego-ext); }
+.stats-egg-ola.is-frente path { fill:var(--fuego-int); }
+.stats-egg-chispa { left:var(--cx); top:var(--cy); width:9px; height:9px; margin:-4px 0 0 -4px; border-radius:50%; background:var(--fuego-int); opacity:0; animation:stats-egg-chispa 1.3s cubic-bezier(.1,.7,.3,1) forwards; }
+.stats-egg-chispa:nth-child(3n) { background:var(--fuego-blanco); }
+.stats-egg-chispa:nth-child(3n+1) { width:6px; height:6px; background:var(--fuego-azul); }
+/* En llamas hasta recargar: solo el área de contenido (sin cabecera ni barra inferior) y sin eventos de puntero. */
+.stats-egg-llamas { position:absolute; left:0; right:0; top:var(--hdr-h); bottom:var(--nav-h); z-index:95; overflow:hidden; pointer-events:none; animation:stats-egg-aparece .8s ease-out; }
+.stats-egg-llamas span { position:absolute; }
+.stats-egg-borde { inset:0; box-shadow:inset 0 0 22px 4px color-mix(in srgb,var(--fuego-ext) 55%,transparent),inset 0 -18px 30px -6px color-mix(in srgb,var(--fuego-med) 60%,transparent); animation:stats-egg-pulso 2.4s ease-in-out infinite; }
+.stats-egg-suelo { left:0; right:0; bottom:0; height:40px; opacity:.78; }
+.stats-egg-lengua { bottom:-8px; width:17%; height:100%; transform-origin:50% 100%; animation:stats-egg-lame 1.3s ease-in-out infinite; }
+.stats-egg-lengua path { fill:var(--fuego-ext); }
+.stats-egg-lengua:nth-child(even) path { fill:var(--fuego-med); }
+.stats-egg-lengua.is-frente { width:12%; height:62%; animation-duration:.9s; }
+.stats-egg-lengua.is-frente path { fill:var(--fuego-int); }
+.stats-egg-lado { width:16px; height:28px; opacity:.85; }
+.stats-egg-lado.is-izq { left:-4px; transform:rotate(90deg); }
+.stats-egg-lado.is-der { right:-4px; transform:rotate(-90deg); }
+.stats-egg-lado svg { transform-origin:50% 100%; animation:stats-egg-lame 1.1s ease-in-out infinite; animation-delay:inherit; }
+.stats-egg-lado path { fill:var(--fuego-med); }
+.stats-egg-brasa { width:5px; height:5px; border-radius:50%; background:var(--fuego-int); box-shadow:0 0 6px var(--fuego-med); opacity:0; animation:stats-egg-brasa 5.5s linear infinite; }
+.stats-egg-brasa:nth-child(3n) { background:var(--fuego-med); }
+.stats-egg-pausa :is(.stats-egg-llamas,.stats-egg-estallido),.stats-egg-pausa :is(.stats-egg-llamas,.stats-egg-estallido) *,.stats-egg-pausa .stats-egg-mar::before { animation-play-state:paused !important; }
+@keyframes stats-egg-tiembla { 0%,100% { transform:translate(0,0) rotate(0); } 25% { transform:translate(calc(var(--egg,0) * -4 * var(--streak-u)),calc(var(--egg,0) * 2 * var(--streak-u))) rotate(calc(var(--egg,0) * -6deg)); } 50% { transform:translate(calc(var(--egg,0) * 3 * var(--streak-u)),calc(var(--egg,0) * -2 * var(--streak-u))) rotate(calc(var(--egg,0) * 4deg)); } 75% { transform:translate(calc(var(--egg,0) * -2 * var(--streak-u)),calc(var(--egg,0) * -1 * var(--streak-u))) rotate(calc(var(--egg,0) * 5deg)); } }
+@keyframes stats-egg-flash { 0% { opacity:0; } 10% { opacity:.95; } 100% { opacity:0; } }
+@keyframes stats-egg-onda { 0% { opacity:1; transform:scale(.2); } 70% { opacity:.7; } 100% { opacity:0; transform:scale(var(--onda)); } }
+@keyframes stats-egg-mar { 0%,72% { opacity:1; } 100% { opacity:0; } }
+@keyframes stats-egg-calor { 0% { opacity:0; } 25%,60% { opacity:.92; } 100% { opacity:.4; } }
+@keyframes stats-egg-ola { 0% { transform:scale(.6,0); } 30% { transform:scale(1.1,1.08); } 50% { transform:scale(1,.94); } 70% { transform:scale(1.05,1.05); } 100% { transform:translateY(-8%) scale(.9,1.2); } }
+@keyframes stats-egg-chispa { 0% { opacity:1; transform:translate(0,0) scale(1.4); } 70% { opacity:1; } 100% { opacity:0; transform:translate(var(--dx),var(--dy)) scale(.3); } }
+@keyframes stats-egg-aparece { from { opacity:0; } }
+@keyframes stats-egg-pulso { 0%,100% { opacity:.75; } 50% { opacity:1; } }
+@keyframes stats-egg-lame { 0%,100% { transform:scale(1,1) skewX(0); } 25% { transform:scale(.92,1.18) skewX(4deg); } 50% { transform:scale(1.06,.88) skewX(-3deg); } 75% { transform:scale(.96,1.1) skewX(2deg); } }
+@keyframes stats-egg-brasa { 0% { opacity:0; transform:translate(0,0) scale(1); } 12% { opacity:.95; } 70% { opacity:.7; } 100% { opacity:0; transform:translate(var(--dx),-42vh) scale(.4); } }
 @media (max-width:360px) { .stats-streak { gap:8px; padding:10px; grid-template-columns:34px minmax(0,1fr); } .stats-streak-count { gap:5px; font-size:1.5rem; } .stats-streak-count span { font-size:.7rem; } }
 @media (prefers-reduced-motion:reduce) {
   .stats-streak-layer,.stats-streak-pop,.stats-streak-halo,.stats-streak-spark { animation:none !important; }
   .stats-streak-fire.is-destello .stats-streak-halo { animation:stats-streak-destello .7s ease-out !important; }
-  .stats-streak-burst { display:none; }
+  .stats-streak-burst,.stats-egg-chispas,.stats-egg-estallido,.stats-egg-suelo,.stats-egg-lado { display:none; }
+  .stats-streak-size { transition:none; }
+  .stats-streak-fire.is-cargando,.stats-egg-llama,.stats-egg-llamas,.stats-egg-llamas * { animation:none !important; }
+  .stats-egg-brasa { opacity:.8; }
 }
 
 /* Interactive statistics charts */

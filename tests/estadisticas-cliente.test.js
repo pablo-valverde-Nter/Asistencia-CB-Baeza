@@ -119,6 +119,39 @@ test('rachas: seis niveles, mismo fuego tocable en héroe y mini, más capas y c
   }
 });
 
+test('rachas: el easter egg solo carga para jugadores, se enfría sin toques y estalla a los 15 seguidos', () => {
+  const { app, context } = cliente();
+  const efectos = [];
+  Object.assign(context, { setTimeout: () => 1, clearTimeout() {}, ahora: 0 });
+  context.document.getElementById = () => null;
+  vm.runInContext('Date.now = () => ahora; _statsFuegoEggEstallar = () => efectos.push("estallido"); _statsFuegoEggEnLlamas = () => efectos.push("llamas")', Object.assign(context, { efectos }));
+  const boton = { querySelector: () => null, style: { setProperty(k, v) { this[k] = v; } }, classList: { toggle() {} } };
+  const tocar = (veces, reducido = false) => { for (let i = 0; i < veces; i++) { context.ahora += 200; context._statsFuegoEggToque(boton, reducido); } };
+  const carga = () => vm.runInContext('_statsFuegoEggCarga(ahora)', context);
+  for (const [rol, esAdmin] of [['admin', true], ['entrenador', false]]) {
+    app.state.rol = rol; app.state.esAdmin = esAdmin;
+    tocar(20);
+    assert.equal(carga(), 0);
+  }
+  assert.deepEqual(efectos, []);
+  app.state.rol = 'jugador'; app.state.esAdmin = false;
+  tocar(14);
+  assert.equal(carga(), 14);
+  assert.equal(boton.style['--egg'], (14 / 15).toFixed(3));
+  context.ahora += 2000 + 350 * 4;
+  assert.equal(carga(), 10);
+  tocar(4);
+  assert.deepEqual(efectos, []);
+  tocar(1);
+  assert.deepEqual(efectos, ['estallido']);
+  assert.equal(boton.style['--egg'], '0.000');
+  tocar(30);
+  assert.deepEqual(efectos, ['estallido']);
+  vm.runInContext('_statsFuegoEggApagar()', context);
+  tocar(15, true);
+  assert.deepEqual(efectos, ['estallido', 'llamas']);
+});
+
 test('rachas: el motor real alimenta el héroe y el ranking privado', () => {
   const { datos, AHORA } = require('./fixtures/estadisticas-fixture');
   const { context } = cliente();
