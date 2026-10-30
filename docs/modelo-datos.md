@@ -160,7 +160,7 @@ Registro de asistencia de jugadores por sesión.
 | `Estado` | String | `P` (Presente) / `A` (Ausente) / `R` (Retraso) |
 | `EsInvitado` | Boolean | `true` si el jugador no pertenece al equipo de la sesión |
 | `FechaRegistro` | String (YYYY-MM-DD HH:MM) | Timestamp del registro |
-| `MinutosRetraso` | Integer (1–180) | Minutos de retraso cuando `Estado = R`; `null` si no se indicó |
+| `MinutosRetraso` | Integer (1–180) | Minutos de retraso cuando `Estado = R`; `null` si no se indicó. Un aviso de retraso de la familia lo rellena si aún no hay `Estado` (prerrellena la ficha del entrenador) o si el entrenador marcó R sin minutos; nunca sustituye minutos ya registrados |
 
 **Reglas:**
 - Si un jugador no tiene fila para una sesión, su estado es **sin registrar** (se muestra en gris en la UI).

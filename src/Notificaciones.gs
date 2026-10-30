@@ -161,17 +161,19 @@ CB Baeza — Gestión de Asistencia`;
 
   /**
    * Genera el texto de la justificación que se almacena en MensajeGenerado.
+   * El cliente replica este texto en App.views.justificacion.mensaje para el resumen previo al envío.
    */
-  generarMensajeJustificacion(jugador, sesion, equipo, tipoIncidencia, motivo, detalle, horaIncorporacion) {
+  generarMensajeJustificacion(jugador, sesion, equipo, tipoIncidencia, motivo, detalle, horaIncorporacion, minutosRetraso) {
     const fechaForm   = Notificaciones._formatFecha(sesion.Fecha);
     const diaNombre   = Notificaciones._diaSemana(sesion.Fecha);
     const tipoTexto   = tipoIncidencia === 'Ausencia' ? 'una ausencia' : 'una llegada con retraso';
     const detalleText = detalle ? ` Información adicional: "${detalle}".` : '';
+    const minutosText = minutosRetraso ? ` Llegará con unos ${minutosRetraso} minutos de retraso.` : '';
     const horaText    = horaIncorporacion ? ` Previsión de incorporación aproximada: ${horaIncorporacion}.` : '';
 
     return `Los padres/tutores de ${jugador.Nombre} ${jugador.Apellidos} han notificado ${tipoTexto} ` +
            `al entrenamiento del ${diaNombre} ${fechaForm} a las ${sesion.HoraInicio} ` +
-           `del equipo ${equipo.Nombre}. Motivo: ${motivo}.${detalleText}${horaText}`;
+           `del equipo ${equipo.Nombre}. Motivo: ${motivo}.${minutosText}${detalleText}${horaText}`;
   },
 
   // ── Helper ────────────────────────────────────────────────────────────────────

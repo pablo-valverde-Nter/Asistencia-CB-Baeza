@@ -219,10 +219,10 @@ const Asistencia = {
    * @param {string} tipoIncidencia   - 'Ausencia' | 'Retraso'
    * @param {string} motivo           - Categoría del motivo (ver CONFIG.MOTIVOS_JUSTIFICACION)
    * @param {string} detalle          - Texto libre adicional (puede ser vacío)
-   * @param {string} [horaIncorporacion] - Solo para Retraso: hora prevista "HH:MM"
+   * @param {number} [minutosRetraso] - Solo para Retraso: minutos previstos (1–180)
    * @returns {{ success: boolean, registro?: Object, error?: string }}
    */
-  registrarJustificacion(sesionId, jugadorId, codigoPadres, tipoIncidencia, motivo, detalle, horaIncorporacion) {
+  registrarJustificacion(sesionId, jugadorId, codigoPadres, tipoIncidencia, motivo, detalle, minutosRetraso) {
     // Validar código de padres
     if (!Auth.verificarCodigoPadres(jugadorId, codigoPadres)) {
       throw new Error('El código de autorización no es correcto.');
@@ -244,10 +244,15 @@ const Asistencia = {
 
     const equipo  = findById(CONFIG.SHEETS.EQUIPOS, sesion.ID_Equipo);
 
+    const minutos = tipoIncidencia === 'Retraso' && minutosRetraso != null && minutosRetraso !== '' ? Number(minutosRetraso) : null;
+    if (minutos !== null && (!Number.isInteger(minutos) || minutos < 1 || minutos > 180)) {
+      throw new Error('Los minutos de retraso deben estar entre 1 y 180.');
+    }
+
     const timestamp = Asistencia._timestamp_();
 
     const mensaje = Notificaciones.generarMensajeJustificacion(
-      jugador, sesion, equipo, tipoIncidencia, motivo, detalle, horaIncorporacion || ''
+      jugador, sesion, equipo, tipoIncidencia, motivo, detalle, '', minutos
     );
 
     const camposJustificacion = {
@@ -261,6 +266,13 @@ const Asistencia = {
       NotificadoEntrenador: false,
       EsProgramada:         false,
     };
+    // Los minutos del aviso prerrellenan la ficha del entrenador; nunca sustituyen los que él ya registró.
+    const previo = registros[0];
+    const estadoPrevio = previo && previo.Estado;
+    if (!estadoPrevio) camposJustificacion.MinutosRetraso = minutos;
+    else if (estadoPrevio === CONFIG.ESTADOS_ASISTENCIA.RETRASO && minutos !== null && previo.MinutosRetraso == null) {
+      camposJustificacion.MinutosRetraso = minutos;
+    }
 
     let registro;
     if (registros.length > 0) {

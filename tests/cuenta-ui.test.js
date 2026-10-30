@@ -7,7 +7,7 @@ const vm = require('node:vm');
 function client(fields = {}, globals = {}) {
   const stored = {};
   const document = { addEventListener() {}, getElementById: id => fields[id] || null, querySelectorAll: () => [] };
-  const context = vm.createContext({ document, window: { addEventListener() {} }, clearInterval() {}, setInterval() {}, localStorage: { setItem(k,v) { stored[k] = v; }, getItem: () => null }, ...globals });
+  const context = vm.createContext({ document, window: { addEventListener() {} }, clearInterval() {}, setInterval() {}, setTimeout, clearTimeout, localStorage: { setItem(k,v) { stored[k] = v; }, getItem: () => null }, ...globals });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../ui/app.html'), 'utf8').replace(/^<script[^>]*>|<\/script>\s*$/g, ''), context);
   return { app: vm.runInContext('App',context), context, stored };
 }
@@ -35,21 +35,31 @@ test('perfil conserva contacto familiar y ambos interruptores de avisos', () => 
   assert.doesNotMatch(html,/data-perfil="(?:PIN|CodigoPadres|Usuario)"/);
 });
 
-test('foto centra, reduce a 128 y limita JPEG antes del envío', () => {
+test('foto: el indicador aparece antes de preparar la imagen, que se centra, reduce a 128 y limita el JPEG', async () => {
   const calls = [];
   let image;
   const canvas = { getContext: () => ({ fillRect() {}, drawImage(...args) { calls.push(args); } }), toDataURL: (_type,q) => q > .55 ? 'x'.repeat(16001) : 'data:image/jpeg;base64,ok' };
   const {app,context} = client({}, {URL:{createObjectURL:()=> 'blob:foto',revokeObjectURL:url=>calls.push(url)},Image:function() { image=this; this.naturalWidth=400; this.naturalHeight=200; }});
   context.document.createElement = () => canvas;
-  let foto;
-  app.views['perfil-usuario'].guardarFoto = value => {foto=value;};
-  app.views['perfil-usuario'].subirFoto({files:[{type:'image/png'}]});
+  const eventos = [];
+  app.operation.begin = (key,textos) => { eventos.push(['begin',textos.pending]); return {id:1,key,textos}; };
+  app.operation.afterPaint = () => { eventos.push(['paint']); return Promise.resolve(); };
+  app.operation.succeed = () => eventos.push(['succeed']);
+  context.server = (fn,foto) => { eventos.push([fn,foto]); return Promise.resolve({success:true,fotoURL:foto}); };
+  app.state.auth = {tipo:'jugador'}; app.state.rol = 'jugador'; app.state.jugador = {ID:'j',Nombre:'Ana'};
+  app.closeModal = () => {};
+  app.views['perfil-usuario']._actualizar = () => {};
+  const subida = app.views['perfil-usuario'].subirFoto({files:[{type:'image/png'}]});
+  assert.deepEqual(eventos,[['begin','Subiendo foto…'],['paint']]);
+  assert.equal(image, undefined, 'la imagen no se procesa antes de pintar el indicador');
+  await new Promise(resolve => setImmediate(resolve));
   image.onload();
+  await subida;
   assert.equal(canvas.width,128);
   assert.equal(canvas.height,128);
   assert.deepEqual(calls[0].slice(1),[100,0,200,200,0,0,128,128]);
-  assert.equal(foto,'data:image/jpeg;base64,ok');
   assert.equal(calls[1],'blob:foto');
+  assert.deepEqual(eventos.slice(2),[['actualizarFotoPerfil','data:image/jpeg;base64,ok'],['succeed']]);
 });
 
 test('cambio de credenciales guarda el auth devuelto sin cerrar sesión', async () => {

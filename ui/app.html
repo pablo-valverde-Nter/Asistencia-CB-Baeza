@@ -3707,7 +3707,6 @@ const App = {
           App.state._formIsDirty = false;
           if (App.state.viewHistory[App.state.viewHistory.length-1] === 'perfil-usuario') App.state.viewHistory.pop();
           App.navigate('perfil-usuario',{},false);
-          showToast('Perfil actualizado', 'success');
         }).catch(function() { /* App.operation presenta el error y conserva el formulario. */ });
       },
       _actualizar: function(datos) {
@@ -3723,38 +3722,48 @@ const App = {
           return '<button type="button" class="avatar-choice" aria-label="' + App.avatars[id][0] + '" aria-pressed="' + (persona.FotoURL === 'avatar:'+id) + '" onclick="App.views[\'perfil-usuario\'].guardarFoto(\'avatar:' + id + '\')">' + App.avatarHtml('avatar:'+id,'',56) + '<span>' + App.avatars[id][0] + '</span></button>';
         }).join('') + '</div><label class="btn btn-primary btn-full avatar-upload" for="perfil-foto-file">Subir mi foto</label><input id="perfil-foto-file" class="sr-only" type="file" accept="image/*" onchange="App.views[\'perfil-usuario\'].subirFoto(this)"><p>Se recortará al centro. La foto solo se usa como imagen de perfil.</p><button type="button" class="btn btn-secondary btn-full" onclick="App.views[\'perfil-usuario\'].guardarFoto(\'\')">Quitar foto</button></div>');
       },
-      guardarFoto: function(foto) {
-        if (App.account.isStaff()) return;
-        App.operation.run('my-avatar', 'actualizarFotoPerfil', [foto], function(res) {
+      guardarFoto: function(foto, textos) {
+        if (App.account.isStaff()) return Promise.resolve();
+        return App.operation.run('my-avatar', 'actualizarFotoPerfil', typeof foto === 'function' ? function() {
+          return Promise.resolve(foto()).then(function(lista) { return [lista]; });
+        } : [foto], function(res) {
           App.views['perfil-usuario']._actualizar({ FotoURL: res.fotoURL });
           var persona = App.state.rol === 'jugador' ? App.state.jugador : App.state.usuario;
           var avatar = document.getElementById('perfil-avatar');
           if (avatar) avatar.innerHTML = App.avatarHtml(persona.FotoURL,persona.Nombre,88);
           App.closeModal();
-          showToast('Foto actualizada', 'success');
-        }).catch(function() { /* App.operation presenta el error y conserva el selector. */ });
+        }, null, textos || { success: 'Foto actualizada' }).catch(function() { /* App.operation presenta el error y conserva el selector. */ });
       },
+      // El indicador aparece antes de decodificar y comprimir: la preparación corre después de pintarlo.
       subirFoto: function(input) {
-        if (App.account.isStaff()) return;
+        if (App.account.isStaff()) return Promise.resolve();
         var file = input.files && input.files[0];
-        if (!file) return;
-        if (!file.type.startsWith('image/')) { showToast('Selecciona un archivo de imagen', 'error'); return; }
-        var url = URL.createObjectURL(file), image = new Image();
-        image.onload = function() {
-          try {
-            var canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
-            var context = canvas.getContext('2d'), side = Math.min(image.naturalWidth,image.naturalHeight);
-            context.fillStyle = '#fff'; context.fillRect(0,0,128,128);
-            context.drawImage(image,(image.naturalWidth-side)/2,(image.naturalHeight-side)/2,side,side,0,0,128,128);
-            var quality = .75, foto = canvas.toDataURL('image/jpeg',quality);
-            while (foto.length > 16000 && quality > .15) { quality -= .1; foto = canvas.toDataURL('image/jpeg',quality); }
-            if (foto.length > 16000) throw new Error('La imagen es demasiado compleja. Prueba con otra foto.');
-            App.views['perfil-usuario'].guardarFoto(foto);
-          } catch (error) { showToast(error.message || 'No se pudo preparar la foto', 'error'); }
-          URL.revokeObjectURL(url);
-        };
-        image.onerror = function() { URL.revokeObjectURL(url); showToast('No se pudo abrir la imagen. Prueba con JPG o PNG.', 'error'); };
-        image.src = url;
+        if (!file) return Promise.resolve();
+        if (!file.type || file.type.indexOf('image/') !== 0) { showToast('Selecciona un archivo de imagen', 'error'); return Promise.resolve(); }
+        input.value = '';
+        return this.guardarFoto(function() { return App.views['perfil-usuario']._prepararFoto(file); },
+          { pending: 'Subiendo foto\u2026', success: 'Foto actualizada' });
+      },
+      // Recorta al centro, reduce a 128×128 y limita el JPEG a 16 000 caracteres.
+      _prepararFoto: function(file) {
+        return new Promise(function(resolve, reject) {
+          var url = URL.createObjectURL(file), image = new Image();
+          image.onload = function() {
+            try {
+              var canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+              var context = canvas.getContext('2d'), side = Math.min(image.naturalWidth,image.naturalHeight);
+              context.fillStyle = '#fff'; context.fillRect(0,0,128,128);
+              context.drawImage(image,(image.naturalWidth-side)/2,(image.naturalHeight-side)/2,side,side,0,0,128,128);
+              var quality = .75, foto = canvas.toDataURL('image/jpeg',quality);
+              while (foto.length > 16000 && quality > .15) { quality -= .1; foto = canvas.toDataURL('image/jpeg',quality); }
+              if (foto.length > 16000) throw new Error('La imagen es demasiado compleja. Prueba con otra foto.');
+              resolve(foto);
+            } catch (error) { reject(new Error(error && error.message || 'No se pudo preparar la foto')); }
+            finally { URL.revokeObjectURL(url); }
+          };
+          image.onerror = function() { URL.revokeObjectURL(url); reject(new Error('No se pudo abrir la imagen. Prueba con JPG o PNG.')); };
+          image.src = url;
+        });
       },
     },
 
@@ -3783,14 +3792,13 @@ const App = {
           if (App.state.jugador && res.auth.usuario) App.views['perfil-usuario']._actualizar({ Usuario: res.auth.usuario });
           document.getElementById('seg-credenciales').querySelectorAll('input[type="password"]').forEach(function(el) { el.value = ''; });
           App.state._formIsDirty = false;
-          showToast('Credenciales actualizadas. Tu sesión sigue abierta.', 'success');
-        }).catch(function() { /* La sesión anterior sigue siendo válida si falla el cambio. */ });
+        }, null, { success: 'Credenciales actualizadas' }).catch(function() { /* La sesión anterior sigue siendo válida si falla el cambio. */ });
       },
       codigo: function() {
         var actual = document.getElementById('seg-codigo-actual').value.trim().toUpperCase(), nuevo = document.getElementById('seg-codigo-nuevo').value.trim().toUpperCase();
         if (!/^[A-Z0-9]{6}$/.test(actual) || !/^[A-Z0-9]{6}$/.test(nuevo)) { showToast('Los códigos deben tener 6 letras o números', 'error'); return; }
         App.operation.run('my-security-code','cambiarCodigoSeguridad',[actual,nuevo],function() {
-          document.getElementById('seg-codigo-form').reset(); App.state._formIsDirty = false; showToast('Código de seguridad actualizado', 'success');
+          document.getElementById('seg-codigo-form').reset(); App.state._formIsDirty = false;
         }).catch(function() { /* App.operation presenta el error y conserva el formulario. */ });
       },
     },
@@ -3846,7 +3854,7 @@ const App = {
         if (form) form.onsubmit = function(e) { e.preventDefault(); self.verificar(); };
         if (this._paso === 2) this._cuentaAtras();
       },
-      _error: function(error) { var el = document.getElementById('recovery-error'); if (el) el.textContent = error.message || 'Error de conexión'; },
+      _error: function(error) { var el = document.getElementById('recovery-error'); if (el) el.textContent = error ? (error.message || 'Error de conexión') : ''; },
       _bloquear: function(busy) { this._busy = busy; document.querySelectorAll('#recuperar-acceso-contenido button').forEach(function(button) { button.disabled = busy; }); if (!busy && this._paso === 2) this._cuentaAtras(); },
       enviar: function(reenviar) {
         if (this._busy || (reenviar && Date.now() < this._reenviarDesde)) return Promise.resolve();
@@ -3856,12 +3864,16 @@ const App = {
         }
         if (!this._destino) return Promise.resolve();
         var self = this, version = this._version;
+        var token = App.operation.begin('recovery-send', { pending: 'Enviando c\u00f3digo\u2026', success: 'C\u00f3digo enviado' });
+        if (!token) return Promise.resolve();
+        this._error(null);
         this._bloquear(true);
         return server('solicitarCodigoRecuperacion',this._destino.id).then(function(res) {
-          if (version !== self._version) return;
           if (!res.success) throw new Error(res.error || 'No se pudo enviar el código');
+          App.operation.succeed(token);
+          if (version !== self._version) return;
           self._reenviarDesde = Date.now()+60000; self._paso = 2; self._pintar();
-        }).catch(function(error) { if (version === self._version) self._error(error); }).finally(function() { if (version === self._version) self._bloquear(false); });
+        }).catch(function(error) { App.operation.fail(token, (error && error.message) || 'Error de conexión'); }).finally(function() { if (version === self._version) self._bloquear(false); });
       },
       _cuentaAtras: function() {
         clearInterval(this._timer);
@@ -3880,12 +3892,16 @@ const App = {
         if (this._busy) return Promise.resolve();
         var code = document.getElementById('recovery-code').value.trim(), self = this, version = this._version;
         if (!/^\d{6}$/.test(code)) { this._error(new Error('Introduce los 6 dígitos del código')); return Promise.resolve(); }
+        var token = App.operation.begin('recovery-verify', { pending: 'Comprobando c\u00f3digo\u2026', success: 'C\u00f3digo verificado' });
+        if (!token) return Promise.resolve();
+        this._error(null);
         this._bloquear(true);
         return server('verificarCodigoRecuperacion',code).then(function(res) {
-          if (version !== self._version) return;
           if (!res.success) throw new Error(res.error || 'Código incorrecto.');
+          App.operation.succeed(token);
+          if (version !== self._version) return;
           clearInterval(self._timer); self._secretos = {pin:res.pin,codigoSeguridad:res.codigoSeguridad}; self._paso = 3; self._pintar();
-        }).catch(function(error) { if (version === self._version) self._error(error); }).finally(function() { if (version === self._version) self._bloquear(false); });
+        }).catch(function(error) { App.operation.fail(token, (error && error.message) || 'Error de conexión'); }).finally(function() { if (version === self._version) self._bloquear(false); });
       },
       revelar: function(button) {
         var reveal = button.getAttribute('aria-pressed') !== 'true';
@@ -3904,100 +3920,204 @@ const App = {
       },
     },
 
-    // 3d-12: Modal de justificación
+    // Asistente de justificación: una pregunta por paso; al contestar avanza solo.
     justificacion: {
+      MINUTOS_RAPIDOS: [5, 10, 15, 30],
       _sesionId: null,
       _estadoInicial: null,
+      _modo: 'nuevo',      // 'nuevo' | 'edicion' | 'eliminar'
+      _datos: null,        // { tipo, minutos, motivo, detalle }
+      _paso: 'tipo',
+      _otrosMinutos: false,
 
       abrir: function(sesionId, estado, borrador, soloEliminar) {
         this._sesionId = sesionId;
         this._estadoInicial = estado;
         var jugador = App.state.jugador;
         var registro = App.cache.asistJugadores.find(function(r) { return jugador && r.ID_Sesion === sesionId && r.ID_Jugador === jugador.ID; });
-        var esEdicion = registro && (registro.TieneJustificacion === true || registro.TieneJustificacion === 'TRUE');
-        var tipoGuardado = borrador ? borrador.tipo : (esEdicion ? registro.TipoJustificacion : '');
-        var esAusencia = (tipoGuardado || estado) !== 'Retraso' && (tipoGuardado || estado) !== 'R';
-        document.querySelectorAll('#modal-justificacion input[name="justif-tipo"]').forEach(function(inp) {
-          inp.checked = esAusencia ? inp.value === 'Ausencia' : inp.value === 'Retraso';
-        });
-        document.getElementById('justif-hora-wrap').classList.toggle('hidden', esAusencia);
-        document.getElementById('justif-detalle').value = borrador ? borrador.detalle : (esEdicion ? registro.MotivoDetalle || '' : '');
-        document.getElementById('justif-codigo').value = borrador ? borrador.codigo : '';
-        var horaInput = document.getElementById('justif-hora');
-        var horaGuardada = esEdicion ? String(registro.MensajeGenerado || '').match(/Previsi\u00f3n de incorporaci\u00f3n aproximada: (\d{2}:\d{2})/) : null;
-        if (horaInput) horaInput.value = borrador ? borrador.hora : (horaGuardada ? horaGuardada[1] : '');
-        var justifTituloEl = document.getElementById('justif-titulo');
-        if (justifTituloEl) justifTituloEl.textContent = soloEliminar ? 'Eliminar justificaci\u00f3n' : esEdicion ? 'Editar justificaci\u00f3n' : esAusencia ? 'Justificar ausencia' : 'Justificar retraso';
-        // Poblar motivos desde la configuraci\u00f3n
-        var select = document.getElementById('justif-motivo');
-        select.innerHTML = App.state.motivosJustificacion.length
-          ? App.state.motivosJustificacion.map(function(m) {
-              return '<option value="' + _esc(m) + '">' + m + '</option>';
-            }).join('')
-          : '<option value="Motivo personal">Motivo personal</option>';
-        if (borrador && borrador.motivo) select.value = borrador.motivo;
-        else if (esEdicion && registro.MotivoCategoria) select.value = registro.MotivoCategoria;
-        if (borrador && borrador.tipo) {
-          document.querySelectorAll('#modal-justificacion input[name="justif-tipo"]').forEach(function(inp) {
-            inp.checked = inp.value === borrador.tipo;
-          });
-          document.getElementById('justif-hora-wrap').classList.toggle('hidden', borrador.tipo !== 'Retraso');
+        var esEdicion = !!registro && (registro.TieneJustificacion === true || registro.TieneJustificacion === 'TRUE');
+        this._modo = soloEliminar ? 'eliminar' : esEdicion ? 'edicion' : 'nuevo';
+        if (borrador) {
+          this._datos = { tipo: borrador.tipo, minutos: borrador.minutos || null, motivo: borrador.motivo || '', detalle: borrador.detalle || '' };
+        } else if (esEdicion) {
+          var retraso = registro.TipoJustificacion === 'Retraso';
+          this._datos = { tipo: retraso ? 'Retraso' : 'Ausencia', minutos: retraso && registro.MinutosRetraso ? Number(registro.MinutosRetraso) : null,
+            motivo: registro.MotivoCategoria || '', detalle: registro.MotivoDetalle || '' };
+        } else {
+          this._datos = { tipo: estado === 'R' ? 'Retraso' : estado === 'A' ? 'Ausencia' : null, minutos: null, motivo: '', detalle: '' };
         }
-        document.getElementById('justif-submit').classList.toggle('hidden', !!soloEliminar);
-        document.getElementById('justif-submit').textContent = esEdicion ? 'Guardar cambios' : 'Enviar justificaci\u00f3n';
-        document.getElementById('justif-delete').classList.toggle('hidden', !esEdicion);
-        App.views.justificacion.actualizarPreview();
+        this._otrosMinutos = !!this._datos.minutos && this.MINUTOS_RAPIDOS.indexOf(this._datos.minutos) < 0;
+        var motivos = App.state.motivosJustificacion.length ? App.state.motivosJustificacion.slice() : ['Motivo personal'];
+        if (this._datos.motivo && motivos.indexOf(this._datos.motivo) < 0) motivos.push(this._datos.motivo);
+        document.getElementById('justif-motivos').innerHTML = motivos.map(function(m) {
+          return '<button type="button" class="justif-chip" data-motivo="' + _statsTexto(m) + '" aria-pressed="false" onclick="App.views.justificacion.elegirMotivo(this.dataset.motivo)">' + _statsTexto(m) + '</button>';
+        }).join('');
+        document.getElementById('justif-detalle').value = this._datos.detalle;
+        document.getElementById('justif-minutos').value = this._otrosMinutos ? String(this._datos.minutos) : '';
+        document.getElementById('justif-codigo').value = borrador ? borrador.codigo || '' : '';
+        document.getElementById('justif-submit').textContent = esEdicion ? 'Guardar cambios' : 'Enviar';
+        var confirmarBtn = document.getElementById('justif-enviar');
+        confirmarBtn.textContent = soloEliminar ? 'Eliminar justificaci\u00f3n' : esEdicion ? 'Confirmar cambios' : 'Confirmar y enviar';
+        confirmarBtn.classList.toggle('btn-danger', !!soloEliminar);
+        confirmarBtn.classList.toggle('btn-primary', !soloEliminar);
+        this._actualizarTitulo();
+        this._irA(soloEliminar || borrador ? 'codigo' : 'tipo', 0);
         document.getElementById('modal-justificacion').classList.remove('hidden');
       },
 
-      onTipoChange: function(el) {
-        var esRetraso = el && el.value === 'Retraso';
-        document.getElementById('justif-hora-wrap').classList.toggle('hidden', !esRetraso);
-        App.views.justificacion.actualizarPreview();
+      _pasos: function() {
+        if (this._modo === 'eliminar') return ['codigo'];
+        return this._datos.tipo === 'Retraso' ? ['tipo', 'minutos', 'motivo', 'resumen', 'codigo'] : ['tipo', 'motivo', 'resumen', 'codigo'];
+      },
+
+      _actualizarTitulo: function() {
+        var titulo = this._modo === 'eliminar' ? 'Eliminar justificaci\u00f3n'
+          : this._modo === 'edicion' ? 'Editar justificaci\u00f3n'
+          : this._datos.tipo === 'Retraso' ? 'Justificar retraso'
+          : this._datos.tipo === 'Ausencia' ? 'Justificar ausencia' : 'Avisar al entrenador';
+        document.getElementById('justif-titulo').textContent = titulo;
+      },
+
+      _sinMovimiento: function() {
+        return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      },
+
+      // Muestra el paso indicado. direccion: 1 avanza, -1 retrocede, 0 sin animación.
+      _irA: function(paso, direccion) {
+        this._paso = paso;
+        var datos = this._datos, pasos = this._pasos(), indice = pasos.indexOf(paso), self = this;
+        if (paso === 'resumen') this.actualizarPreview();
+        if (paso === 'codigo') this.actualizarCodigo();
+        document.querySelectorAll('#justif-steps .justif-step').forEach(function(step) {
+          var activo = step.dataset.step === paso;
+          step.hidden = !activo;
+          step.classList.remove('enter-forward', 'enter-back');
+          if (activo && direccion) {
+            void step.offsetWidth;
+            step.classList.add(direccion > 0 ? 'enter-forward' : 'enter-back');
+          }
+        });
+        document.querySelectorAll('#justif-steps [data-tipo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.tipo === datos.tipo)); });
+        document.querySelectorAll('#justif-steps [data-minutos]').forEach(function(b) {
+          var marcado = b.dataset.minutos === 'otro' ? self._otrosMinutos : !self._otrosMinutos && Number(b.dataset.minutos) === datos.minutos;
+          b.setAttribute('aria-pressed', String(marcado));
+        });
+        document.getElementById('justif-otros').classList.toggle('hidden', !this._otrosMinutos);
+        document.querySelectorAll('#justif-steps [data-motivo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.motivo === datos.motivo)); });
+        document.getElementById('justif-motivo-next').disabled = !datos.motivo;
+        var progreso = document.getElementById('justif-progress');
+        progreso.classList.toggle('hidden', pasos.length < 2);
+        document.getElementById('justif-progress-text').textContent = 'Paso ' + (indice + 1) + ' de ' + pasos.length;
+        document.getElementById('justif-progress-fill').style.width = Math.round((indice + 1) * 100 / pasos.length) + '%';
+        document.getElementById('justif-atras').style.visibility = indice > 0 ? 'visible' : 'hidden';
+        var contenedor = document.getElementById('justif-steps');
+        contenedor.scrollTop = 0;
+        if (!direccion) return;
+        var activo = contenedor.querySelector('.justif-step[data-step="' + paso + '"]');
+        var foco = activo && activo.querySelector(paso === 'codigo' ? '#justif-codigo' : '.justif-question');
+        if (foco) foco.focus({ preventScroll: true });
+      },
+
+      siguiente: function() {
+        var pasos = this._pasos(), indice = pasos.indexOf(this._paso);
+        if (indice >= 0 && indice < pasos.length - 1) this._irA(pasos[indice + 1], 1);
+      },
+
+      atras: function() {
+        var pasos = this._pasos(), indice = pasos.indexOf(this._paso);
+        if (indice > 0) this._irA(pasos[indice - 1], -1);
+      },
+
+      elegirTipo: function(tipo) {
+        this._datos.tipo = tipo === 'Retraso' ? 'Retraso' : 'Ausencia';
+        if (this._datos.tipo !== 'Retraso') { this._datos.minutos = null; this._otrosMinutos = false; }
+        this._actualizarTitulo();
+        this.siguiente();
+      },
+
+      elegirMinutos: function(minutos) {
+        this._datos.minutos = minutos;
+        this._otrosMinutos = false;
+        this.siguiente();
+      },
+
+      otrosMinutos: function() {
+        this._otrosMinutos = true;
+        this._irA('minutos', 0);
+        var input = document.getElementById('justif-minutos');
+        if (input) input.focus({ preventScroll: true });
+      },
+
+      confirmarMinutos: function() {
+        var texto = String(document.getElementById('justif-minutos').value || '').trim();
+        var minutos = Number(texto);
+        if (!/^\d+$/.test(texto) || minutos < 1 || minutos > 180) { showToast('Indica entre 1 y 180 minutos', 'error'); return; }
+        this._datos.minutos = minutos;
+        this.siguiente();
+      },
+
+      elegirMotivo: function(motivo) {
+        this._datos.motivo = motivo;
+        document.querySelectorAll('#justif-steps [data-motivo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.motivo === motivo)); });
+        var continuar = document.getElementById('justif-motivo-next');
+        continuar.disabled = false;
+        // El detalle es opcional: se desplaza hasta él y hasta Continuar sin cambiar de paso.
+        if (continuar.scrollIntoView) continuar.scrollIntoView({ block: 'nearest', behavior: this._sinMovimiento() ? 'auto' : 'smooth' });
+      },
+
+      continuarMotivo: function() {
+        if (!this._datos.motivo) return;
+        this._datos.detalle = document.getElementById('justif-detalle').value.trim();
+        this.siguiente();
+      },
+
+      // Réplica de Notificaciones.generarMensajeJustificacion: lo que se muestra es lo que recibe el entrenador.
+      mensaje: function(jugador, sesion, equipo, tipo, motivo, detalle, minutos) {
+        var partes = String(sesion.Fecha || '').split('-'), numeros = partes.map(Number);
+        var valida = partes.length === 3 && numeros.every(function(n) { return Number.isInteger(n); });
+        var dias = ['Domingo', 'Lunes', 'Martes', 'Mi\u00e9rcoles', 'Jueves', 'Viernes', 'S\u00e1bado'];
+        var dia = valida ? dias[new Date(Date.UTC(numeros[0], numeros[1] - 1, numeros[2])).getUTCDay()] : '';
+        var fecha = partes.length === 3 ? partes[2] + '/' + partes[1] + '/' + partes[0] : String(sesion.Fecha || '');
+        return 'Los padres/tutores de ' + jugador.Nombre + ' ' + jugador.Apellidos + ' han notificado ' +
+          (tipo === 'Ausencia' ? 'una ausencia' : 'una llegada con retraso') + ' ' +
+          'al entrenamiento del ' + dia + ' ' + fecha + ' a las ' + sesion.HoraInicio + ' ' +
+          'del equipo ' + (equipo ? equipo.Nombre : '') + '. Motivo: ' + motivo + '.' +
+          (minutos ? ' Llegar\u00e1 con unos ' + minutos + ' minutos de retraso.' : '') +
+          (detalle ? ' Informaci\u00f3n adicional: "' + detalle + '".' : '');
       },
 
       actualizarPreview: function() {
-        var tipoInput = document.querySelector('#modal-justificacion input[name="justif-tipo"]:checked');
-        var tipo = tipoInput ? tipoInput.value : 'Ausencia';
-        var motivoEl = document.getElementById('justif-motivo');
-        var motivo = motivoEl && motivoEl.value ? motivoEl.value : 'Motivo personal';
-        var detalle = document.getElementById('justif-detalle') ? document.getElementById('justif-detalle').value.trim() : '';
-        var horaWrap = document.getElementById('justif-hora-wrap');
-        var horaEl = document.getElementById('justif-hora');
-        var hora = (horaEl && horaWrap && !horaWrap.classList.contains('hidden')) ? horaEl.value : null;
-        var j = App.state.jugador;
-        if (!j) return;
-        var s = App.cache.sesiones.find(function(x) { return x.ID === App.views.justificacion._sesionId; });
-        var f = s ? _fmtFecha(s.Fecha) : null;
-        var fechaStr = f ? (f.dn + ' ' + f.d + ' de ' + f.ml) : '';
-        var preview = j.Nombre + ' ' + j.Apellidos + ' ';
-        if (tipo === 'Retraso') {
-          preview += 'se incorporar\u00e1 con retraso' + (hora ? ' a las ' + hora : '') + ' el ' + fechaStr + '.';
-        } else {
-          preview += 'no podr\u00e1 asistir al entrenamiento del ' + fechaStr + '.';
-        }
-        preview += ' Motivo: ' + motivo + (detalle ? '. ' + detalle : '') + '.';
+        var j = App.state.jugador, d = this._datos, id = this._sesionId;
+        var s = App.cache.sesiones.find(function(x) { return x.ID === id; });
         var prev = document.getElementById('justif-preview');
-        if (prev) prev.textContent = preview;
+        if (!j || !s || !prev) return;
+        prev.textContent = this.mensaje(j, s, App.cache.getEquipoById(s.ID_Equipo), d.tipo, d.motivo, d.detalle, d.tipo === 'Retraso' ? d.minutos : null);
+      },
+
+      _codigo: function() {
+        var el = document.getElementById('justif-codigo');
+        return el ? String(el.value || '').trim().toUpperCase() : '';
+      },
+
+      actualizarCodigo: function() {
+        document.getElementById('justif-enviar').disabled = this._codigo().length !== 6;
+      },
+
+      confirmar: function() {
+        if (this._modo === 'eliminar') this.eliminar();
+        else this.enviar();
       },
 
       enviar: function() {
-        var sesionId = this._sesionId;
-        var j = App.state.jugador;
-        if (!sesionId || !j) return;
-        var tipoInput = document.querySelector('#modal-justificacion input[name="justif-tipo"]:checked');
-        var tipo = tipoInput ? tipoInput.value : 'Ausencia';
-        var motivoEl = document.getElementById('justif-motivo');
-        var motivo = motivoEl ? motivoEl.value : '';
-        var detalle = document.getElementById('justif-detalle') ? document.getElementById('justif-detalle').value.trim() : '';
-        var horaWrap = document.getElementById('justif-hora-wrap');
-        var horaInput = document.getElementById('justif-hora');
-        var hora = (horaWrap && !horaWrap.classList.contains('hidden') && horaInput) ? horaInput.value : null;
-        var codigo = document.getElementById('justif-codigo') ? document.getElementById('justif-codigo').value.trim().toUpperCase() : '';
-        if (!codigo || codigo.length !== 6) { showToast('Introduce el c\u00f3digo de autorizaci\u00f3n de 6 caracteres', 'error'); return; }
-        var token = App.operation.begin('justification:' + sesionId + ':' + j.ID);
+        var sesionId = this._sesionId, j = App.state.jugador, d = this._datos;
+        if (!sesionId || !j || !d || !d.tipo || !d.motivo) return;
+        var codigo = this._codigo();
+        if (codigo.length !== 6) { showToast('Introduce el c\u00f3digo de autorizaci\u00f3n de 6 caracteres', 'error'); return; }
+        var minutos = d.tipo === 'Retraso' ? d.minutos : null;
+        var token = App.operation.begin('justification:' + sesionId + ':' + j.ID,
+          this._modo === 'edicion' ? null : { pending: 'Enviando\u2026', success: 'Enviado correctamente' });
         if (!token) return;
-        var borrador = { tipo: tipo, motivo: motivo, detalle: detalle, hora: hora || '', codigo: codigo };
+        var borrador = { tipo: d.tipo, minutos: minutos, motivo: d.motivo, detalle: d.detalle, codigo: codigo };
         var historyBefore = App.state.viewHistory.slice();
         App.closeModalJustif();
         var parentIndex = App.state.viewHistory.lastIndexOf('mis-entrenamientos');
@@ -4006,18 +4126,12 @@ const App = {
           : App.state.viewHistory.filter(function(view) { return view !== 'detalle-sesion-jugador'; });
         App.navigate('mis-entrenamientos', {}, false);
         var jugadorId = j.ID;
-        server('enviarJustificacion', sesionId, jugadorId, codigo, tipo, motivo, detalle, hora || null)
+        server('enviarJustificacion', sesionId, jugadorId, codigo, d.tipo, d.motivo, d.detalle, minutos)
           .then(function(res) {
             if (!res || res.success === false) throw new Error(res && res.error || 'No se pudo enviar la justificación');
-            // Actualizar cach\u00e9 con el registro devuelto por el servidor
             var reg = App.cache.asistJugadores.find(function(r) { return r.ID_Sesion === sesionId && r.ID_Jugador === jugadorId; });
-            if (reg) {
-              Object.assign(reg, res.registro);
-            } else if (res.registro) {
-              // Sin registro previo: el servidor cre\u00f3 uno nuevo, a\u00f1adirlo al cach\u00e9
-              App.cache.asistJugadores.push(res.registro);
-            }
-            // Re-renderizar vistas afectadas solo si siguen activas
+            if (reg) Object.assign(reg, res.registro);
+            else if (res.registro) App.cache.asistJugadores.push(res.registro);
             if (App.state.currentView === 'mis-entrenamientos') App.views['mis-entrenamientos'].render();
             App.operation.succeed(token);
           })
@@ -4033,7 +4147,7 @@ const App = {
       eliminar: function() {
         var sesionId = this._sesionId;
         var jugador = App.state.jugador;
-        var codigo = document.getElementById('justif-codigo').value.trim().toUpperCase();
+        var codigo = this._codigo();
         if (!sesionId || !jugador) return;
         if (codigo.length !== 6) { showToast('Introduce el c\u00f3digo de autorizaci\u00f3n de 6 caracteres', 'error'); return; }
         App.closeModalJustif();
@@ -4051,7 +4165,7 @@ const App = {
         var codigo = this._codigoEliminar;
         this._codigoEliminar = null;
         App.closeModal();
-        var token = App.operation.begin('justification:' + sesionId + ':' + jugadorId);
+        var token = App.operation.begin('justification:' + sesionId + ':' + jugadorId, { pending: 'Eliminando\u2026', success: 'Eliminado correctamente' });
         if (!token) return;
         server('eliminarJustificacion', sesionId, jugadorId, codigo).then(function(res) {
           if (!res || res.success === false) throw new Error(res && res.error || 'No se pudo eliminar la justificaci\u00f3n');
@@ -4175,7 +4289,7 @@ const App = {
         var id = this._id;
         var jugadorId = App.state.jugador.ID;
         var self = this;
-        var token = App.operation.begin('programacion:delete:' + id);
+        var token = App.operation.begin('programacion:delete:' + id, { pending: 'Eliminando\u2026', success: 'Eliminado correctamente' });
         if (!token) return;
         this.cerrar();
         this._busy = true;
@@ -4218,7 +4332,6 @@ const App = {
           self.render();
           App.sync.done();
           App.operation.succeed(token);
-          showToast('Programación guardada', 'success');
         }).catch(function(error) {
           App.sync.done();
           App.operation.fail(token, error.message || 'Error de conexión');
@@ -4271,7 +4384,7 @@ const App = {
         var self = this;
         var jugadorId = App.state.jugador.ID;
         var programacion = App.cache.programacionesJustificaciones.find(function(item) { return item.ID === pending.id; });
-        var token = App.operation.begin('programacion:' + pending.action + ':' + pending.id);
+        var token = App.operation.begin('programacion:' + pending.action + ':' + pending.id, pending.action === 'delete' ? { pending: 'Eliminando\u2026', success: 'Eliminado correctamente' } : null);
         if (!token) return;
         this._busy = true;
         this._busyId = pending.id;
@@ -4314,20 +4427,31 @@ const App = {
 
 }; // fin App
 
+// Estándar único de guardado: logo girando mientras dura la acción y resultado (éxito o error) en el mismo indicador.
+// Toda acción de guardar, enviar, borrar o subir pasa por aquí; los textos por defecto pueden adaptarse a la acción.
 App.operation = {
+  TEXTOS: { pending: 'Guardando\u2026', success: 'Guardado correctamente', error: 'No se pudo guardar' },
   _nextId: 0,
   _active: {},
   _locks: {},
   _timer: null,
   _result: 'success',
   _errorMessage: '',
+  _pendingText: '',
+  _successTexts: [],
 
   _render: function(state) {
     var status = document.getElementById('operation-status');
     if (!status) return;
+    hideToast();
     var logo = document.getElementById('operation-logo');
     var source = document.getElementById('hdr-logo') || document.querySelector('.loading-logo-img');
     if (logo && source && source.src && logo.src !== source.src) logo.src = source.src;
+    var pendingText = document.getElementById('operation-pending-text');
+    if (pendingText) pendingText.textContent = this._pendingText || this.TEXTOS.pending;
+    var successText = document.getElementById('operation-success-text');
+    var unicos = this._successTexts.filter(function(t, i, all) { return all.indexOf(t) === i; });
+    if (successText) successText.textContent = unicos.length === 1 ? unicos[0] : this.TEXTOS.success;
     status.classList.remove('hidden', 'pending', 'success', 'error', 'success-animate');
     status.classList.add(state);
     if (state === 'success') {
@@ -4335,20 +4459,31 @@ App.operation = {
       status.classList.add('success-animate');
     }
     var errorText = document.getElementById('operation-error-text');
-    if (errorText) errorText.textContent = state === 'error' ? (this._errorMessage || 'No se pudo guardar') : 'No se pudo guardar';
+    if (errorText) errorText.textContent = state === 'error' ? (this._errorMessage || this.TEXTOS.error) : this.TEXTOS.error;
   },
 
-  begin: function(key) {
+  // Oculta un resultado ya mostrado (nunca el «Guardando…» de una acción en curso).
+  ocultarResultado: function() {
+    if (Object.keys(this._active).length) return;
+    if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+    var status = document.getElementById('operation-status');
+    if (status) status.classList.add('hidden');
+  },
+
+  // textos opcionales: { pending: 'Enviando…', success: 'Enviado correctamente' }.
+  begin: function(key, textos) {
     key = key || 'operation';
     if (this._locks[key]) return null;
     if (!Object.keys(this._active).length) {
       this._result = 'success';
       this._errorMessage = '';
+      this._successTexts = [];
     }
     if (this._timer) { clearTimeout(this._timer); this._timer = null; }
-    var token = { id: ++this._nextId, key: key };
+    var token = { id: ++this._nextId, key: key, textos: textos || {} };
     this._locks[key] = token.id;
     this._active[token.id] = token;
+    this._pendingText = token.textos.pending || '';
     this._render('pending');
     return token;
   },
@@ -4357,7 +4492,9 @@ App.operation = {
     if (!token || this._active[token.id] !== token) return;
     if (outcome === 'error') {
       this._result = 'error';
-      this._errorMessage = message || 'No se pudo guardar';
+      this._errorMessage = message || this.TEXTOS.error;
+    } else {
+      this._successTexts.push(token.textos.success || this.TEXTOS.success);
     }
     delete this._active[token.id];
     if (this._locks[token.key] === token.id) delete this._locks[token.key];
@@ -4375,10 +4512,21 @@ App.operation = {
   succeed: function(token) { this._finish(token, 'success'); },
   fail: function(token, message) { this._finish(token, 'error', message); },
 
-  run: function(key, fn, args, onSuccess, onError) {
-    var token = this.begin(key);
+  // Resuelve cuando el indicador ya se ha pintado: permite empezar trabajo pesado sin congelar la pantalla.
+  afterPaint: function() {
+    return new Promise(function(resolve) {
+      var frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(fn) { return setTimeout(fn, 16); };
+      frame(function() { setTimeout(resolve, 0); });
+    });
+  },
+
+  // args puede ser una función (síncrona o que devuelve promesa) que prepara los argumentos tras pintar el indicador.
+  run: function(key, fn, args, onSuccess, onError, textos) {
+    var token = this.begin(key, textos);
     if (!token) return Promise.reject(new Error('Ya hay una operación en curso'));
-    return server.apply(null, [fn].concat(args || []))
+    return this.afterPaint()
+      .then(function() { return typeof args === 'function' ? args() : args; })
+      .then(function(listos) { return server.apply(null, [fn].concat(listos || [])); })
       .then(function(result) {
         if (!result || result.success === false) throw new Error(result && result.error || 'El servidor no confirmó el guardado');
         return Promise.resolve(onSuccess ? onSuccess(result) : result).then(function(value) {
@@ -4694,7 +4842,7 @@ App.sync = {
   run: function(fn, args, rollback) {
     var self = this;
     var operationKey = 'sync:' + fn + ':' + JSON.stringify((args || []).slice(0, 1));
-    var token = App.operation.begin(operationKey);
+    var token = App.operation.begin(operationKey, /^eliminar/.test(fn) ? { pending: 'Eliminando\u2026', success: 'Eliminado correctamente' } : null);
     if (!token) {
       if (rollback) rollback();
       return Promise.resolve(null);
@@ -4859,13 +5007,40 @@ function hideLoading() {
   document.getElementById('loading-overlay').classList.add('hidden');
 }
 
+// Un único aviso visible: el nuevo sustituye al anterior, el mismo aviso repetido solo reinicia su tiempo
+// y un resultado ya mostrado por App.operation se retira para que nunca se solapen.
+var _toastActual = null;
 function showToast(msg, type) {
   var c = document.getElementById('toast-container');
-  var t = document.createElement('div');
-  t.className = 'toast ' + (type || '');
-  t.textContent = msg;
-  c.appendChild(t);
-  setTimeout(function() { t.classList.add('out'); setTimeout(function() { t.remove(); }, 280); }, 3000);
+  if (!c) return;
+  var texto = String(msg == null ? '' : msg), tipo = type || '';
+  App.operation.ocultarResultado();
+  if (_toastActual && _toastActual.texto === texto && _toastActual.tipo === tipo && _toastActual.el.parentNode === c && !_toastActual.saliendo) {
+    clearTimeout(_toastActual.timer);
+  } else {
+    hideToast();
+    var t = document.createElement('div');
+    t.className = 'toast ' + tipo;
+    t.setAttribute('role', tipo === 'error' ? 'alert' : 'status');
+    t.textContent = texto;
+    c.appendChild(t);
+    _toastActual = { el: t, texto: texto, tipo: tipo, timer: null, saliendo: false };
+  }
+  var actual = _toastActual;
+  actual.timer = setTimeout(function() {
+    actual.saliendo = true;
+    actual.el.classList.add('out');
+    actual.timer = setTimeout(function() {
+      actual.el.remove();
+      if (_toastActual === actual) _toastActual = null;
+    }, 280);
+  }, 3000);
+}
+function hideToast() {
+  var c = document.getElementById('toast-container');
+  if (_toastActual) clearTimeout(_toastActual.timer);
+  _toastActual = null;
+  if (c) while (c.firstChild) c.removeChild(c.firstChild);
 }
 
 function _hoy() {
@@ -5545,8 +5720,7 @@ Object.assign(App.account, {
       App.state._formIsDirty = false;
       if (App.state.viewHistory[App.state.viewHistory.length - 1] === 'perfil-usuario') App.state.viewHistory.pop();
       App.navigate('perfil-usuario',{},false);
-      showToast('Perfil actualizado','success');
-    }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
+    }).catch(function() { /* App.operation muestra el error y se conserva el formulario. */ });
   },
   seguridadStaffHtml: function(persona) {
     if (!this.isStaff() || !this.allowed()) return '';
@@ -5574,8 +5748,7 @@ Object.assign(App.account, {
         if (jugador) App.cache.upsert('jugadores',Object.assign({},persona,{Usuario:usuario}));
         pinField.value = ''; confirmField.value = '';
         App.state._formIsDirty = false;
-        showToast('Credenciales actualizadas','success');
-      }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
+      }).catch(function() { /* App.operation muestra el error. */ });
     });
   },
   guardarStaffCodigo: function() {
@@ -5587,8 +5760,7 @@ Object.assign(App.account, {
       App.operation.run('staff-code:' + id,'actualizarCredencialesJugador',[id,null,null,codigo],function() {
         App.cache.upsert('jugadores',Object.assign({},persona,{CodigoPadres:codigo}));
         App.state._formIsDirty = false;
-        showToast('Código de seguridad actualizado','success');
-      }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
+      }).catch(function() { /* App.operation muestra el error. */ });
     });
   },
   eliminarStaff: function() {
@@ -5605,7 +5777,7 @@ Object.assign(App.account, {
         App.account.target = null;
         App.state.viewHistory = App.state.viewHistory.filter(function(v) { return ['perfil-usuario','seguridad','seguridad-opcion',jugador ? 'jugador-detalle' : 'entrenador-detalle'].indexOf(v) < 0; });
         App.navigate(jugador ? 'jugadores-admin' : 'entrenadores-admin',{},false);
-      }).catch(function(error) { showToast(error.message || 'No se pudo guardar','error'); });
+      },null,{ pending: 'Eliminando\u2026', success: 'Eliminado correctamente' }).catch(function() { /* App.operation muestra el error. */ });
     });
   }
 });
@@ -6826,6 +6998,38 @@ Object.assign(App.i18n.diccionario, {
   'Volver a alertas':'Back to alerts',
   'Completar ficha':'Complete profile',
 });
+Object.assign(App.i18n.diccionario, {
+  '¿Qué quieres avisar?':'What do you want to report?',
+  'No podrá ir al entrenamiento':'Will miss training',
+  'Llegará tarde':'Will arrive late',
+  '¿Cuántos minutos de retraso?':'How many minutes late?',
+  'Minutos de retraso':'Minutes late',
+  'Otro número de minutos':'Another number of minutes',
+  'Minutos de retraso (1–180)':'Minutes late (1–180)',
+  '¿Cuál es el motivo?':'What is the reason?',
+  'Detalles':'Details',
+  'Añade información si lo necesitas…':'Add information if needed…',
+  'Revisa el aviso':'Review the notice',
+  'Mensaje que recibirá el entrenador':'Message the coach will receive',
+  'Enviar':'Send',
+  'Escribe el código de 6 caracteres que te dio el club para confirmar.':'Enter the 6-character code the club gave you to confirm.',
+  'Confirmar y enviar':'Confirm and send',
+  'Confirmar cambios':'Confirm changes',
+  'Atrás':'Back',
+  'Paso anterior':'Previous step',
+  'Avisar al entrenador':'Notify the coach',
+  'Indica entre 1 y 180 minutos':'Enter between 1 and 180 minutes',
+  'Los minutos de retraso deben estar entre 1 y 180.':'Minutes late must be between 1 and 180.',
+  'Enviando…':'Sending…',
+  'Enviado correctamente':'Sent successfully',
+  'Eliminando…':'Deleting…',
+  'Eliminado correctamente':'Deleted successfully',
+  'Subiendo foto…':'Uploading photo…',
+  'Enviando código…':'Sending code…',
+  'Código enviado':'Code sent',
+  'Comprobando código…':'Checking code…',
+  'Código verificado':'Code verified',
+});
 App.i18n.patrones.push(
   [/^Alertas de ausencias de (.+?)(?:: (\d+) jugador(?:es)?)?$/, function(all,equipo,n) { return 'Absence alerts for ' + equipo + (n ? ': ' + n + (n === '1' ? ' player' : ' players') : ''); }],
   [/^(\d+) entrenos seguidos sin venir$/, '$1 training sessions missed in a row'],
@@ -6844,7 +7048,8 @@ App.i18n.patrones.push(
   [/^(\d+) registro$/, '$1 record'],
   [/^(\d+) min tarde$/, '$1 min late'],
   [/^(\d+) de (\d+) sesiones$/, '$1 of $2 sessions'],
-  [/^de (\d+) jugadores$/, 'of $1 players']
+  [/^de (\d+) jugadores$/, 'of $1 players'],
+  [/^Paso (\d+) de (\d+)$/, 'Step $1 of $2']
 );
 document.addEventListener('DOMContentLoaded',function() { App.i18n.iniciar(); });
 

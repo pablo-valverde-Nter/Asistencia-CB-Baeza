@@ -121,7 +121,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - La app es una **SPA**: una única `Index.html` con secciones que se muestran/ocultan con CSS.
 - No usar frameworks externos (React, Vue, etc.) — JavaScript vanilla + CSS puro.
 - Los estados de asistencia se renderizan como botones de colores (verde/rojo/amarillo) que el usuario toca para cambiar.
-- Usar `showToast(message, type)` para feedback de acciones (éxito/error).
+- Toda acción de guardar, enviar, borrar o subir usa `App.operation` (`run`, o `begin` + `succeed`/`fail`): logo girando con «Guardando…» y resultado o error en el mismo indicador; textos propios opcionales (`{ pending, success }`). Trabajo pesado (p. ej. comprimir la foto) va después de `App.operation.afterPaint()` o como `args` función de `run`. `showToast(message, type)` queda para validaciones y avisos que no son resultado de un guardado; muestra un único aviso a la vez.
 - Temas: `claro` (por defecto), `oscuro` y `patrimonio` (Baeza Patrimonio, granate `#7B1E24`). Los componentes usan solo los tokens CSS definidos al inicio de `ui/styles.html` (`--morado`, `--blanco`, `--brand-bg`, `--on-accent`, `--chart-ink`…); un tema nuevo o un color nuevo se declara como token en los tres bloques y mantiene contraste WCAG AA. La lista de temas vive en `App.preferences.temas` y en el script de arranque de `Index.html`, que migra los identificadores retirados.
 - Las tarjetas de sesión (Registrar asistencia e Historial) se generan con `App.calendar.tarjetaSesion`.
 - Los detalles de las gráficas de Estadísticas se generan con `_statsChartAttrs(descripcionAccesible, [etiqueta, valor, secundaria])`: el tooltip muestra solo la etiqueta y el valor (y como mucho una línea secundaria), se ancla al punto tocado y se cierra al tocar fuera.
@@ -174,19 +174,8 @@ function getSheetData(tableName) {
 
 ### Llamada cliente → servidor con feedback
 ```javascript
-// En app.html
-function guardarAsistencia(sesionId, asistencias) {
-  showLoading(true);
-  google.script.run
-    .withSuccessHandler(result => {
-      showLoading(false);
-      if (result.success) showToast('Asistencia guardada', 'success');
-      else showToast(result.error, 'error');
-    })
-    .withFailureHandler(err => {
-      showLoading(false);
-      showToast('Error de conexión', 'error');
-    })
-    .registrarAsistencia(sesionId, asistencias);
-}
+// En app.html: el indicador de guardado gestiona éxito y error; no añadir toasts propios.
+App.operation.run('attendance:' + sesionId, 'guardarAsistenciaCompleta', [sesionId, asistencias], function(res) {
+  App.views.sesion._applyAttendanceCache(/* … */);
+}).catch(function() { /* App.operation ya muestra el error */ });
 ```

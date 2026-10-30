@@ -768,12 +768,13 @@ function guardarAsistenciaCompleta(auth, sesionId, asistencias) {
 /**
  * Envía una justificación de ausencia/retraso.
  * Accesible por cualquier usuario autenticado: el CodigoPadres es la autorización real.
+ * minutosRetraso (1–180) solo aplica a Retraso y se guarda en Asist_Jugadores.MinutosRetraso.
  */
-function enviarJustificacion(auth, sesionId, jugadorId, codigoPadres, tipoIncidencia, motivo, detalle, horaIncorporacion) {
+function enviarJustificacion(auth, sesionId, jugadorId, codigoPadres, tipoIncidencia, motivo, detalle, minutosRetraso) {
   try {
     const v = Auth.validate(auth);
     if (!v.success) throw new Error(v.error);
-    return Asistencia.registrarJustificacion(sesionId, jugadorId, codigoPadres, tipoIncidencia, motivo, detalle, horaIncorporacion);
+    return Asistencia.registrarJustificacion(sesionId, jugadorId, codigoPadres, tipoIncidencia, motivo, detalle, minutosRetraso);
   } catch (e) { return { success: false, error: e.message }; }
 }
 

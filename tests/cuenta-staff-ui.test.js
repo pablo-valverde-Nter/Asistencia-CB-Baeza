@@ -176,13 +176,13 @@ test('entrenador elimina jugador con sus asignaciones; permisos impiden mutar en
   assert.equal(confirmations.length,0); assert.equal(calls.filter(c=>c.fn).length,1);
 });
 
-test('fallo de perfil conserva caché y borrador sin navegar a resumen', async () => {
+test('fallo de perfil conserva caché y borrador sin navegar a resumen ni duplicar el error del indicador', async () => {
   const {app,calls,notices}=client(); app.account.open('jugador','j'); app.state._formIsDirty=true;
   app.operation.run=()=>Promise.reject(new Error('No se pudo actualizar el jugador'));
   await app.account.guardarStaffPerfil({...playerData,Nombre:'Nuevo'});
   assert.equal(app.cache.getJugadorById('j').Nombre,'Ana');
   assert.equal(app.state._formIsDirty,true); assert.equal(calls.length,1);
-  assert.match(notices.at(-1).message,/No se pudo actualizar/);
+  assert.deepEqual(notices,[]);
 });
 
 test('una relación Visor antigua se muestra como Entrenador sin selector y el formulario de equipo la conserva', () => {

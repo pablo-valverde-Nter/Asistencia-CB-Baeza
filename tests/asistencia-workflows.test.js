@@ -112,7 +112,7 @@ test('permite editar una justificacion enviada sin cambiar un estado futuro', ()
   rows.asistJugadores = [{ ID: 'notice', ID_Sesion: 's1', ID_Jugador: 'member', Estado: null,
     TieneJustificacion: true, JustificadoPor: 'padre', MotivoCategoria: 'Anterior' }];
   const { asistencia, writes } = backend(rows);
-  const result = asistencia.registrarJustificacion('s1', 'member', 'ABC123', 'Retraso', 'Consulta', 'Llega tarde', '19:30');
+  const result = asistencia.registrarJustificacion('s1', 'member', 'ABC123', 'Retraso', 'Consulta', 'Llega tarde', 15);
   assert.equal(result.registro.MotivoCategoria, 'Consulta');
   assert.equal(result.registro.TipoJustificacion, 'Retraso');
   assert.equal(result.registro.Estado, null);
@@ -237,46 +237,187 @@ test('el swipe solo quita la fila despues de confirmar', () => {
   assert.equal(removed, 1);
 });
 
-test('el modal precarga una justificacion para editarla o eliminarla con codigo', () => {
-  const elements = new Map();
-  function element(id) {
-    if (!elements.has(id)) elements.set(id, {
-      value: '', classList: {
-        hidden: false,
-        toggle(_, hidden) { this.hidden = hidden; },
-        contains() { return this.hidden; },
-        remove() { this.hidden = false; },
-      },
-    });
-    return elements.get(id);
-  }
-  const radios = [{ value: 'Ausencia' }, { value: 'Retraso' }];
-  const document = {
-    addEventListener() {}, getElementById: element,
-    querySelectorAll: () => radios,
-    querySelector: () => radios.find(radio => radio.checked),
+function wizardClient() {
+  const classList = () => {
+    const set = new Set();
+    return { add: (...c) => c.forEach(x => set.add(x)), remove: (...c) => c.forEach(x => set.delete(x)),
+      toggle(c, on) { if (on) set.add(c); else set.delete(c); }, contains: c => set.has(c) };
   };
-  const code = fs.readFileSync(path.join(__dirname, '../ui/app.html'), 'utf8')
-    .replace(/^<script[^>]*>|<\/script>\s*$/g, '');
-  const context = vm.createContext({ document, window: { addEventListener() {} } });
+  const elements = new Map();
+  const element = id => {
+    if (!elements.has(id)) elements.set(id, { id, value: '', textContent: '', innerHTML: '', disabled: false, style: {},
+      classList: classList(), focus() {}, querySelector: () => null, setAttribute() {} });
+    return elements.get(id);
+  };
+  const button = (key, value) => ({ dataset: { [key]: value }, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
+  const steps = ['tipo', 'minutos', 'motivo', 'resumen', 'codigo'].map(step => ({ dataset: { step }, hidden: false, classList: classList() }));
+  const tipos = ['Ausencia', 'Retraso'].map(v => button('tipo', v));
+  const minutos = ['5', '10', '15', '30', 'otro'].map(v => button('minutos', v));
+  let motivos = { html: null, list: [] };
+  const document = {
+    addEventListener() {}, getElementById: element, querySelector: () => null,
+    querySelectorAll(selector) {
+      if (selector.includes('.justif-step')) return steps;
+      if (selector.includes('[data-tipo]')) return tipos;
+      if (selector.includes('[data-minutos]')) return minutos;
+      if (selector.includes('[data-motivo]')) {
+        const html = element('justif-motivos').innerHTML;
+        if (motivos.html !== html) motivos = { html, list: Array.from(html.matchAll(/data-motivo="([^"]+)"/g), m => button('motivo', m[1])) };
+        return motivos.list;
+      }
+      return [];
+    },
+  };
+  const code = fs.readFileSync(path.join(__dirname, '../ui/app.html'), 'utf8').replace(/^<script[^>]*>|<\/script>\s*$/g, '');
+  const context = vm.createContext({ document, window: { addEventListener() {} }, setTimeout, clearTimeout });
   vm.runInContext(code, context);
   const app = vm.runInContext('App', context);
+  context.showToast = () => {};
   app.state.jugador = { ID: 'member', Nombre: 'Ana', Apellidos: 'Baeza' };
-  app.state.motivosJustificacion = ['Consulta'];
-  app.cache.sesiones = [{ ID: 's1', Fecha: '2099-09-25' }];
+  app.state.motivosJustificacion = ['Consulta', 'Estudios'];
+  app.state.viewHistory = [];
+  app.cache.sesiones = [{ ID: 's1', ID_Equipo: 'team', Fecha: '2099-09-25', HoraInicio: '19:00' }];
+  app.cache.equipos = [{ ID: 'team', Nombre: 'Cadete' }];
+  app.cache.asistJugadores = [];
+  app.navigate = () => {};
+  const sent = [];
+  context.server = (fn, ...args) => { sent.push({ fn, args }); return Promise.resolve({ success: true, registro: { ID_Sesion: 's1', ID_Jugador: 'member' } }); };
+  const visible = () => steps.find(s => !s.hidden).dataset.step;
+  const pressed = list => list.filter(b => b.attrs['aria-pressed'] === 'true').map(b => Object.values(b.dataset)[0]);
+  return { app, element, visible, pressed, tipos, minutos, motivos: () => document.querySelectorAll('[data-motivo]'), sent };
+}
+
+test('el asistente de retraso avanza solo, pide minutos y envia los mismos datos al servidor', async () => {
+  const { app, element, visible, sent } = wizardClient();
+  const wizard = app.views.justificacion;
+  wizard.abrir('s1', 'sin');
+  assert.equal(visible(), 'tipo');
+  assert.equal(element('justif-progress-text').textContent, 'Paso 1 de 4');
+  assert.equal(element('justif-atras').style.visibility, 'hidden');
+  wizard.elegirTipo('Retraso');
+  assert.equal(visible(), 'minutos');
+  assert.equal(element('justif-progress-text').textContent, 'Paso 2 de 5');
+  assert.equal(element('justif-titulo').textContent, 'Justificar retraso');
+  wizard.elegirMinutos(15);
+  assert.equal(visible(), 'motivo');
+  assert.equal(element('justif-motivo-next').disabled, true);
+  wizard.elegirMotivo('Consulta');
+  assert.equal(visible(), 'motivo', 'el detalle opcional sigue disponible tras elegir motivo');
+  element('justif-detalle').value = '  Revisión médica ';
+  wizard.continuarMotivo();
+  assert.equal(visible(), 'resumen');
+  assert.match(element('justif-preview').textContent, /Motivo: Consulta\. Llegará con unos 15 minutos de retraso\. Información adicional: "Revisión médica"\.$/);
+  wizard.siguiente();
+  assert.equal(visible(), 'codigo');
+  assert.equal(element('justif-enviar').disabled, true);
+  wizard.atras();
+  assert.equal(visible(), 'resumen');
+  wizard.siguiente();
+  element('justif-codigo').value = 'abc123';
+  wizard.actualizarCodigo();
+  assert.equal(element('justif-enviar').disabled, false);
+  wizard.confirmar();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [{ fn: 'enviarJustificacion',
+    args: ['s1', 'member', 'ABC123', 'Retraso', 'Consulta', 'Revisión médica', 15] }]);
+});
+
+test('la ausencia salta el paso de minutos y no envia minutos aunque antes se eligiera retraso', async () => {
+  const { app, element, visible, pressed, tipos, sent } = wizardClient();
+  const wizard = app.views.justificacion;
+  wizard.abrir('s1', 'A');
+  assert.deepEqual(pressed(tipos), ['Ausencia']);
+  wizard.elegirTipo('Retraso');
+  wizard.elegirMinutos(30);
+  wizard.atras();
+  wizard.atras();
+  assert.equal(visible(), 'tipo');
+  wizard.elegirTipo('Ausencia');
+  assert.equal(visible(), 'motivo');
+  assert.equal(element('justif-progress-text').textContent, 'Paso 2 de 4');
+  wizard.elegirMotivo('Estudios');
+  wizard.continuarMotivo();
+  assert.doesNotMatch(element('justif-preview').textContent, /minutos/);
+  wizard.siguiente();
+  element('justif-codigo').value = 'ABC123';
+  wizard.confirmar();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(JSON.parse(JSON.stringify(sent[0].args)), ['s1', 'member', 'ABC123', 'Ausencia', 'Estudios', '', null]);
+});
+
+test('minutos personalizados fuera de 1-180 no avanzan', () => {
+  const { app, element, visible, pressed, minutos } = wizardClient();
+  const wizard = app.views.justificacion;
+  wizard.abrir('s1', 'sin');
+  wizard.elegirTipo('Retraso');
+  wizard.otrosMinutos();
+  assert.deepEqual(pressed(minutos), ['otro']);
+  assert.equal(element('justif-otros').classList.contains('hidden'), false);
+  for (const value of ['0', '181', '2.5', '']) {
+    element('justif-minutos').value = value;
+    wizard.confirmarMinutos();
+    assert.equal(visible(), 'minutos', value);
+  }
+  element('justif-minutos').value = '45';
+  wizard.confirmarMinutos();
+  assert.equal(visible(), 'motivo');
+  assert.equal(wizard._datos.minutos, 45);
+});
+
+test('el asistente precarga una justificacion para editarla o eliminarla con codigo', () => {
+  const { app, element, visible, pressed, tipos, minutos, motivos } = wizardClient();
   app.cache.asistJugadores = [{ ID_Jugador: 'member', ID_Sesion: 's1', TieneJustificacion: true,
-    TipoJustificacion: 'Retraso', MotivoCategoria: 'Consulta', MotivoDetalle: 'Llega tarde',
-    MensajeGenerado: 'Previsión de incorporación aproximada: 19:30.' }];
-  app.views.justificacion.abrir('s1', 'R');
+    TipoJustificacion: 'Retraso', MinutosRetraso: 45, MotivoCategoria: 'Consulta', MotivoDetalle: 'Llega tarde' }];
+  const wizard = app.views.justificacion;
+  wizard.abrir('s1', 'R');
   assert.equal(element('justif-titulo').textContent, 'Editar justificación');
+  assert.deepEqual(pressed(tipos), ['Retraso']);
+  assert.deepEqual(pressed(minutos), ['otro']);
+  assert.equal(element('justif-minutos').value, '45');
+  assert.deepEqual(pressed(motivos()), ['Consulta']);
   assert.equal(element('justif-detalle').value, 'Llega tarde');
-  assert.equal(element('justif-motivo').value, 'Consulta');
-  assert.equal(element('justif-hora').value, '19:30');
   assert.equal(element('justif-submit').textContent, 'Guardar cambios');
-  assert.equal(element('justif-delete').classList.hidden, false);
   assert.equal(element('justif-codigo').value, '');
-  app.views.justificacion.abrir('s1', 'R', null, true);
-  assert.equal(element('justif-submit').classList.hidden, true);
+  wizard.abrir('s1', 'R', null, true);
+  assert.equal(visible(), 'codigo');
+  assert.equal(element('justif-progress').classList.contains('hidden'), true);
+  assert.equal(element('justif-enviar').textContent, 'Eliminar justificación');
+});
+
+test('el resumen del cliente coincide con el mensaje que guarda el servidor', () => {
+  const { app } = wizardClient();
+  const context = vm.createContext({ CONFIG: { DIAS_SEMANA: { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado', 7: 'Domingo' } } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Notificaciones.gs'), 'utf8'), context);
+  const notificaciones = vm.runInContext('Notificaciones', context);
+  const jugador = { Nombre: 'Ana', Apellidos: 'Baeza' }, equipo = { Nombre: 'Cadete' };
+  for (const [fecha, tipo, detalle, minutos] of [['2026-10-04', 'Retraso', 'Médico', 20], ['2026-10-05', 'Ausencia', '', null]]) {
+    const sesion = { Fecha: fecha, HoraInicio: '18:30' };
+    assert.equal(app.views.justificacion.mensaje(jugador, sesion, equipo, tipo, 'Consulta', detalle, minutos),
+      notificaciones.generarMensajeJustificacion(jugador, sesion, equipo, tipo, 'Consulta', detalle, '', minutos));
+  }
+});
+
+test('los minutos del aviso se guardan sin sustituir los que registro el entrenador', () => {
+  const casos = [
+    [{ Estado: null }, 'Retraso', 20, 20],
+    [{ Estado: null, MinutosRetraso: 20 }, 'Ausencia', 20, null],
+    [{ Estado: 'R', MinutosRetraso: null }, 'Retraso', 25, 25],
+    [{ Estado: 'R', MinutosRetraso: 10 }, 'Retraso', 25, undefined],
+    [{ Estado: 'A' }, 'Retraso', 25, undefined],
+  ];
+  for (const [previo, tipo, minutos, esperado] of casos) {
+    const rows = sessionRows();
+    rows.asistJugadores = [{ ID: 'row', ID_Sesion: 's1', ID_Jugador: 'member', ...previo }];
+    const { asistencia, writes } = backend(rows);
+    asistencia.registrarJustificacion('s1', 'member', 'ABC123', tipo, 'Consulta', '', minutos);
+    const update = writes.find(write => write.op === 'update' && write.id === 'row');
+    assert.equal(update.changes.MinutosRetraso, esperado, JSON.stringify(previo));
+  }
+  for (const invalido of [0, 181, 2.5, '19:30']) {
+    const { asistencia, writes } = backend(sessionRows());
+    assert.throws(() => asistencia.registrarJustificacion('s1', 'member', 'ABC123', 'Retraso', 'Consulta', '', invalido), /entre 1 y 180/);
+    assert.equal(writes.length, 0);
+  }
 });
 
 test('el aviso de anulacion llega a entrenadores activos, incluidas las relaciones Visor antiguas', () => {
