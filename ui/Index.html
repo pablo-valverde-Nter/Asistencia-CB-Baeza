@@ -586,8 +586,10 @@
     </div>
   </div>
 
-  <!-- Asistente paso a paso de alta de jugador (entrenador/admin): tarjetas a pantalla completa, mismos componentes que el de justificación -->
+  <!-- Asistente paso a paso de alta de jugador (entrenador/admin): tarjeta flotante sobre fondo animado (App.wizardCards), mismos componentes que el de justificación -->
   <div id="modal-alta-jugador" class="modal-justif-overlay wizard-cards hidden" onclick="App.views.altaJugador.cerrar(event)">
+    <div class="wizard-fondo" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="wizard-deck">
     <div class="modal-justif-sheet justif-wizard alta-wizard" role="dialog" aria-modal="true" aria-labelledby="alta-titulo">
       <div class="modal-hdr justif-wizard-hdr">
         <button type="button" id="alta-atras" class="justif-back" onclick="App.views.altaJugador.atras()" aria-label="Paso anterior">&#8249; Atr&aacute;s</button>
@@ -688,10 +690,13 @@
         </section>
       </div>
     </div>
+    </div>
   </div>
 
-  <!-- Asistente de bienvenida (primera entrada de jugador/familia): tarjetas a pantalla completa como el alta de jugador -->
+  <!-- Asistente de bienvenida (primera entrada de jugador/familia): tarjeta flotante como el alta de jugador -->
   <div id="modal-bienvenida" class="modal-justif-overlay wizard-cards hidden">
+    <div class="wizard-fondo" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="wizard-deck">
     <div class="modal-justif-sheet justif-wizard alta-wizard bienvenida-wizard" role="dialog" aria-modal="true" aria-labelledby="bienvenida-titulo">
       <div class="modal-hdr justif-wizard-hdr">
         <button type="button" id="bienvenida-atras" class="justif-back" onclick="App.views.bienvenida.atras()" aria-label="Paso anterior">&#8249; Atr&aacute;s</button>
@@ -768,6 +773,7 @@
           </div>
         </section>
       </div>
+    </div>
     </div>
   </div>
 

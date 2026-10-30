@@ -3238,6 +3238,7 @@ const App = {
 
       // Muestra el paso indicado. direccion: 1 avanza, -1 retrocede, 0 sin animación.
       _irA: function(paso, direccion) {
+        App.wizardCards.salida('modal-alta-jugador', direccion);
         this._paso = paso;
         var indice = this.PASOS.indexOf(paso), final = paso === 'credenciales';
         if (paso === 'completar') this._pintarResumen();
@@ -3256,6 +3257,7 @@ const App = {
         document.getElementById('alta-progress-text').textContent = 'Paso ' + (indice + 1) + ' de ' + this.PASOS.length;
         document.getElementById('alta-progress-fill').style.width = Math.round((indice + 1) * 100 / this.PASOS.length) + '%';
         document.getElementById('alta-atras').style.visibility = indice > 0 && !final ? 'visible' : 'hidden';
+        App.wizardCards.entrada('modal-alta-jugador', direccion, final ? 0 : this.PASOS.length - 1 - indice);
         var contenedor = document.getElementById('alta-steps');
         contenedor.scrollTop = 0;
         if (!direccion || !contenedor.querySelector) return;
@@ -3492,6 +3494,7 @@ const App = {
 
       // Muestra el paso indicado. direccion: 1 avanza, -1 retrocede, 0 sin animación. La portada no cuenta como paso.
       _irA: function(paso, direccion) {
+        App.wizardCards.salida('modal-bienvenida', direccion);
         this._paso = paso;
         var indice = this.PASOS.indexOf(paso), total = this.PASOS.length - 1;
         if (paso === 'resumen') this._pintarResumen();
@@ -3509,6 +3512,7 @@ const App = {
         document.getElementById('bienvenida-progress-text').textContent = 'Paso ' + indice + ' de ' + total;
         document.getElementById('bienvenida-progress-fill').style.width = Math.round(indice * 100 / total) + '%';
         document.getElementById('bienvenida-atras').style.visibility = indice > 0 ? 'visible' : 'hidden';
+        App.wizardCards.entrada('modal-bienvenida', direccion, total - indice);
         var contenedor = document.getElementById('bienvenida-steps');
         contenedor.scrollTop = 0;
         if (!direccion || !contenedor.querySelector) return;
@@ -5148,6 +5152,71 @@ App.escritura = {
   },
 };
 document.addEventListener('focusout', function() { setTimeout(function() { App.escritura._reanudar(); }, 0); });
+
+// Asistentes en tarjetas flotantes (alta de jugador y bienvenida): solo presentación; los pasos y su lógica viven en
+// cada asistente. Al cambiar de paso, una copia inerte de la tarjeta sale (avanzar: vuela de lado; retroceder: vuelve
+// a la pila) y la tarjeta real entra desde la pila o desde el lado. El overlay sigue al viewport visible (teclado).
+App.wizardCards = {
+  _tarjeta: function(modalId) {
+    var modal = document.getElementById(modalId);
+    var tarjeta = modal && modal.querySelector ? modal.querySelector('.alta-wizard') : null;
+    return tarjeta && tarjeta.cloneNode && tarjeta.getBoundingClientRect ? { modal: modal, tarjeta: tarjeta } : null;
+  },
+
+  // Antes de pintar el paso nuevo. direccion: 1 avanza, -1 retrocede, 0 sin animación.
+  salida: function(modalId, direccion) {
+    var t = this._tarjeta(modalId);
+    if (!t || !direccion || t.modal.classList.contains('hidden')) return;
+    t.modal.querySelectorAll('.wizard-card-saliente').forEach(function(n) { n.remove(); });
+    var rect = t.tarjeta.getBoundingClientRect(), copia = t.tarjeta.cloneNode(true);
+    // cloneNode no copia lo escrito ni el desplazamiento.
+    var origen = t.tarjeta.querySelectorAll('input, textarea'), destino = copia.querySelectorAll('input, textarea');
+    origen.forEach(function(el, i) { if (destino[i]) { destino[i].value = el.value; destino[i].checked = el.checked; } });
+    copia.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+    ['role', 'aria-modal', 'aria-labelledby'].forEach(function(a) { copia.removeAttribute(a); });
+    copia.setAttribute('aria-hidden', 'true');
+    copia.inert = true;
+    copia.classList.remove('wizard-entra-avanza', 'wizard-entra-retrocede');
+    copia.classList.add('wizard-card-saliente', direccion > 0 ? 'wizard-sale-avanza' : 'wizard-sale-retrocede');
+    copia.style.cssText = 'top:' + rect.top + 'px;left:' + rect.left + 'px;width:' + rect.width + 'px;height:' + rect.height + 'px';
+    t.modal.appendChild(copia);
+    var cuerpo = t.tarjeta.querySelector('.justif-steps'), cuerpoCopia = copia.querySelector('.justif-steps');
+    if (cuerpo && cuerpoCopia) cuerpoCopia.scrollTop = cuerpo.scrollTop;
+    var quitar = function() { copia.remove(); };
+    copia.addEventListener('animationend', function(e) { if (e.target === copia) quitar(); });
+    setTimeout(quitar, 700);
+  },
+
+  // Tras pintar el paso nuevo. restantes: pasos que quedan detrás (la pila muestra hasta 2).
+  entrada: function(modalId, direccion, restantes) {
+    var t = this._tarjeta(modalId);
+    if (!t) return;
+    t.tarjeta.parentNode.dataset.restantes = String(Math.max(0, Math.min(2, restantes)));
+    t.tarjeta.classList.remove('wizard-entra-avanza', 'wizard-entra-retrocede');
+    if (!direccion || t.modal.classList.contains('hidden')) return;
+    void t.tarjeta.offsetWidth;
+    t.tarjeta.classList.add(direccion > 0 ? 'wizard-entra-avanza' : 'wizard-entra-retrocede');
+  },
+
+  // El teclado del móvil reduce el viewport visible: el overlay se ajusta a él y el campo con foco se desplaza dentro
+  // del cuerpo de la tarjeta para quedar por encima del pie con los botones.
+  _viewport: function(redimensionado) {
+    var vv = window.visualViewport, raiz = document.documentElement;
+    raiz.style.setProperty('--wizard-vh', vv.height + 'px');
+    raiz.style.setProperty('--wizard-vt', vv.offsetTop + 'px');
+    var el = document.activeElement, cuerpo = redimensionado && el && el.closest ? el.closest('.wizard-cards .justif-steps') : null;
+    if (!cuerpo) return;
+    var r = el.getBoundingClientRect(), c = cuerpo.getBoundingClientRect();
+    var pie = cuerpo.querySelector('.justif-step:not([hidden]) .justif-actions'), abajo = c.bottom - (pie ? pie.offsetHeight : 0);
+    if (r.bottom > abajo) cuerpo.scrollTop += r.bottom - abajo + 12;
+    else if (r.top < c.top) cuerpo.scrollTop -= c.top - r.top + 12;
+  },
+};
+if (typeof window !== 'undefined' && window.visualViewport) {
+  window.visualViewport.addEventListener('resize', function() { App.wizardCards._viewport(true); });
+  window.visualViewport.addEventListener('scroll', function() { App.wizardCards._viewport(false); });
+  App.wizardCards._viewport(false);
+}
 
 var STATS_VIEWS = ['equipos','equipos-admin','jugadores-admin','entrenadores-admin','equipo-detalle','jugador-detalle','entrenador-detalle','perfil-jugador','mis-stats','mi-equipo','informes'];
 App.stats = {

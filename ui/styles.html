@@ -14,7 +14,13 @@
   --morado-xs:    #FAF0FF;
   --blanco:       #FFFFFF;
   --fondo:        #F7F7F8;
-  --wizard-bg:    #FFFFFF;
+  --wizard-bg:    #FAF5FF;   /* asistentes en tarjetas: degradado del fondo, manchas difusas y sombra de la tarjeta */
+  --wizard-bg-mid:#F3EAFB;
+  --wizard-bg-end:#FDF3EA;
+  --wizard-blob-1:rgba(150,92,226,.55);
+  --wizard-blob-2:rgba(255,179,71,.42);
+  --wizard-blob-3:rgba(236,120,168,.34);
+  --wizard-shadow:0 28px 64px -18px rgba(74,20,140,.36), 0 10px 24px -12px rgba(74,20,140,.16);
   --texto:        #1A1A1A;
   --texto-sec:    #5F5F5F;
   --borde:        #E5E5E5;
@@ -61,7 +67,10 @@
 html[data-theme="oscuro"] {
   color-scheme: dark;
   --morado:#CEADFF; --morado-m:#BC93EE; --morado-s:#352342; --morado-xs:#2B1D37;
-  --blanco:#21142F; --fondo:#180E22; --wizard-bg:#180E22; --texto:#F5EEF9; --texto-sec:#C2B2CE; --borde:#51405F;
+  --blanco:#21142F; --fondo:#180E22; --texto:#F5EEF9; --texto-sec:#C2B2CE; --borde:#51405F;
+  --wizard-bg:#120A1B; --wizard-bg-mid:#1A0F28; --wizard-bg-end:#21112A;
+  --wizard-blob-1:rgba(140,84,220,.72); --wizard-blob-2:rgba(74,70,196,.6); --wizard-blob-3:rgba(204,96,164,.42);
+  --wizard-shadow:0 30px 70px -16px rgba(0,0,0,.78), 0 10px 26px -10px rgba(0,0,0,.5);
   --verde:#81D897; --verde-s:#193D2B; --rojo:#FFACA9; --rojo-s:#492126;
   --naranja:#FFD08B; --naranja-s:#463321; --ambar:#FFD181; --ambar-s:#44351E;
   --stats-positive:#C49AF3; --stats-gold:#E3BF6C; --stats-coral:#E9A397; --programado:#BC93EE;
@@ -73,7 +82,10 @@ html[data-theme="oscuro"] {
 /* Equipación Baeza Patrimonio: granate, blanco y gris claro. */
 html[data-theme="patrimonio"] {
   --morado:#7B1E24; --morado-m:#A3343C; --morado-s:#EFEAEA; --morado-xs:#F8F5F5;
-  --blanco:#FFFFFF; --fondo:#F4F4F4; --wizard-bg:#F4F4F4; --texto:#211A1B; --texto-sec:#5C5455; --borde:#E0DCDC;
+  --blanco:#FFFFFF; --fondo:#F4F4F4; --texto:#211A1B; --texto-sec:#5C5455; --borde:#E0DCDC;
+  --wizard-bg:#FBF7F7; --wizard-bg-mid:#F3EBEB; --wizard-bg-end:#FBF4EC;
+  --wizard-blob-1:rgba(163,52,60,.42); --wizard-blob-2:rgba(227,184,92,.38); --wizard-blob-3:rgba(123,30,36,.24);
+  --wizard-shadow:0 28px 64px -18px rgba(123,30,36,.34), 0 10px 24px -12px rgba(60,16,20,.14);
   --stats-positive:#8F2830; --stats-gold:#E0A93A; --stats-coral:#EC967A; --programado:#8C8586;
   --fuego-ext:#C4391D; --fuego-med:#EE7A1F; --fuego-int:#F6B530; --fuego-nucleo:#FFF1C9; --fuego-azul:#3FA9E0; --fuego-blanco:#FFFDF7;
   --brand-bg:#7B1E24; --brand-end:#9A2A33; --on-accent-error:#FFCDD2;
@@ -1701,21 +1713,96 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
   flex: 1; min-width: 0; padding: 10px 12px; border: 1.5px solid var(--borde); border-radius: 8px;
   background: var(--fondo); color: var(--texto); font-size: 1rem;
 }
-/* ── Asistentes en tarjetas a pantalla completa (alta de jugador y bienvenida): fondo limpio del tema y una tarjeta
-   centrada de altura fija (no salta entre pasos). Solo desplaza el contenido; los botones quedan fijos abajo. ── */
-.modal-justif-overlay.wizard-cards { align-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px)); background: var(--wizard-bg); }
-.wizard-cards .alta-wizard { max-width: 460px; height: min(680px, 100%); max-height: 100%; min-height: 0; border: 1px solid var(--borde); border-radius: 24px; box-shadow: var(--sombra-lg); overflow: hidden; transform: translateY(14px) scale(.98); transition: transform .22s cubic-bezier(.2,.8,.3,1); }
-.wizard-cards:not(.hidden) .alta-wizard { transform: none; }
-.wizard-cards .justif-wizard-hdr { padding: 10px 8px 4px; }
-.alta-wizard .justif-steps { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.wizard-cards .justif-wizard .justif-steps { padding-bottom: 0; }
-.wizard-cards .justif-actions { position: sticky; bottom: 0; z-index: 1; margin: auto -16px 0; padding: 12px 16px 16px; background: var(--blanco); }
-.wizard-cards .justif-actions:has(> .btn-secondary) { flex-direction: row-reverse; }
-.wizard-cards .justif-actions:has(> .btn-secondary) > .btn { flex: 1 1 0; min-width: 0; min-height: 48px; }
-@media (max-width: 400px) {
-  .modal-justif-overlay.wizard-cards { padding-left: 12px; padding-right: 12px; }
-  .wizard-cards .alta-wizard { border-radius: 20px; }
+/* ── Asistentes en tarjetas flotantes (alta de jugador y bienvenida), estilo NotebookLM ──
+   Tarjeta pequeña (altura según contenido) sobre un degradado con manchas difusas del tema; detrás se intuye la pila
+   de pasos restantes (.wizard-deck[data-restantes]). App.wizardCards anima el cambio de paso y ajusta el overlay al
+   viewport visible (--wizard-vh/--wizard-vt) para que el teclado del móvil no tape los botones. Todo va bajo
+   .wizard-cards: el asistente de justificación sigue como bottom sheet. ── */
+.modal-justif-overlay.wizard-cards {
+  --wizard-spring: cubic-bezier(.34, 1.36, .64, 1);
+  inset: auto 0; top: var(--wizard-vt, 0px); height: var(--wizard-vh, 100dvh);
+  align-items: center; overflow: hidden;
+  padding: max(env(safe-area-inset-top, 0px) + 16px, min(76px, calc(var(--wizard-vh, 100dvh) * .11))) 20px
+           max(env(safe-area-inset-bottom, 0px) + 28px, min(84px, calc(var(--wizard-vh, 100dvh) * .125)));
+  background: linear-gradient(165deg, var(--wizard-bg) 0%, var(--wizard-bg-mid) 55%, var(--wizard-bg-end) 100%);
+  transition: opacity .28s ease, visibility 0s;
 }
+.modal-justif-overlay.wizard-cards.hidden { visibility: hidden; transition: opacity .2s ease, visibility 0s .2s; }
+.wizard-fondo { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.wizard-fondo span {
+  position: absolute; width: 72vmax; height: 72vmax; border-radius: 50%; filter: blur(48px);
+  background: radial-gradient(circle, var(--wizard-blob-1) 0%, transparent 66%);
+  animation: wizard-deriva 26s ease-in-out infinite alternate; will-change: transform;
+}
+.wizard-fondo span:nth-child(1) { top: -30vmax; left: -26vmax; }
+.wizard-fondo span:nth-child(2) { right: -30vmax; bottom: -32vmax; background: radial-gradient(circle, var(--wizard-blob-2) 0%, transparent 66%); animation-duration: 32s; animation-direction: alternate-reverse; }
+.wizard-fondo span:nth-child(3) { top: 34%; left: 40%; width: 46vmax; height: 46vmax; background: radial-gradient(circle, var(--wizard-blob-3) 0%, transparent 66%); animation-name: wizard-deriva-2; animation-duration: 22s; }
+.wizard-cards.hidden .wizard-fondo span { animation-play-state: paused; }
+@keyframes wizard-deriva { 0% { transform: translate3d(0, 0, 0) scale(1); } 50% { transform: translate3d(7vmax, 5vmax, 0) scale(1.08); } 100% { transform: translate3d(-3vmax, 9vmax, 0) scale(.95); } }
+@keyframes wizard-deriva-2 { 0% { transform: translate3d(0, 0, 0) scale(1); } 50% { transform: translate3d(-12vmax, -6vmax, 0) scale(1.12); } 100% { transform: translate3d(-4vmax, 6vmax, 0) scale(.9); } }
+/* Mazo: la tarjeta activa y, detrás, hasta dos tarjetas de los pasos que quedan. */
+.wizard-deck { position: relative; z-index: 1; display: flex; flex-direction: column; width: 100%; max-width: 420px; max-height: 100%; }
+.wizard-deck::before, .wizard-deck::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; border: 1px solid var(--borde); border-radius: 28px;
+  background: var(--blanco); box-shadow: 0 16px 34px -18px var(--shadow-color); pointer-events: none; transform-origin: 50% 100%;
+  transform: translateY(13px) scale(.93); opacity: .8; transition: transform .42s var(--wizard-spring), opacity .3s ease;
+}
+.wizard-deck::after { z-index: -2; transform: translateY(26px) scale(.86); opacity: .5; }
+.wizard-deck:is([data-restantes="0"], [data-restantes="1"])::after { transform: translateY(6px) scale(.88); opacity: 0; }
+.wizard-deck[data-restantes="0"]::before { transform: translateY(2px) scale(.95); opacity: 0; }
+.wizard-cards .alta-wizard {
+  position: relative; flex: 0 1 auto; width: 100%; max-width: none; min-height: 0; max-height: min(100%, 680px);
+  border: 1px solid var(--borde); border-radius: 28px; background: var(--blanco); box-shadow: var(--wizard-shadow); overflow: hidden;
+  opacity: 0; transform: translateY(28px) scale(.94); transition: transform .5s var(--wizard-spring), opacity .24s ease;
+}
+.wizard-cards:not(.hidden) .alta-wizard { opacity: 1; transform: none; }
+.wizard-cards .justif-wizard-hdr { padding: 12px 10px 2px; border-bottom: 0; }
+.wizard-cards .justif-wizard-hdr h3 { text-align: center; font-size: .92rem; color: var(--texto-sec); }
+.wizard-cards .justif-progress { padding: 4px 22px 0; }
+.wizard-cards .justif-progress-track { height: 8px; border-radius: 4px; background: var(--morado-s); }
+.wizard-cards .justif-progress-fill { background: linear-gradient(90deg, var(--morado-m), var(--morado)); transition: width .6s var(--wizard-spring); }
+.alta-wizard .justif-steps { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.wizard-cards .justif-wizard .justif-steps { padding: 16px 20px 0; scrollbar-width: thin; scrollbar-color: var(--borde) transparent; }
+.wizard-cards .form-group { margin-bottom: 12px; }
+.wizard-cards .alta-wizard .form-group > label:not(.parent-email-notify) { margin-bottom: 4px; }
+/* El paso no se anima por dentro: es la tarjeta entera la que entra y sale. */
+.wizard-cards .justif-step.enter-forward, .wizard-cards .justif-step.enter-back { animation: none; }
+/* Pie fijo de la tarjeta: los botones del paso siempre visibles; el contenido se desvanece al pasar por debajo. */
+.wizard-cards .justif-actions { position: sticky; bottom: 0; z-index: 1; margin: auto -20px 0; padding: 14px 20px 18px; background: var(--blanco); }
+.wizard-cards .justif-actions::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 18px; background: linear-gradient(to top, var(--blanco), transparent); pointer-events: none; }
+.wizard-cards .justif-actions .btn { min-height: 48px; border-radius: 999px; }
+.wizard-cards .justif-actions:has(> .btn-secondary) { flex-direction: row-reverse; }
+.wizard-cards .justif-actions:has(> .btn-secondary) > .btn { flex: 1 1 0; min-width: 0; }
+.wizard-cards .bienvenida-hero { margin: -16px -20px 16px; padding: 20px 18px 18px; border-radius: 0 0 24px 24px; }
+.wizard-cards .bienvenida-escudo { width: 76px; height: 76px; padding: 5px; }
+.wizard-cards .bienvenida-hero .justif-question { margin-top: 12px; font-size: 1.16rem; }
+.wizard-cards .bienvenida-lista { gap: 6px; margin-bottom: 14px; }
+.wizard-cards .bienvenida-lista li { padding: 8px 10px; font-size: .86rem; }
+.wizard-cards .bienvenida-lista svg { width: 30px; height: 30px; padding: 6px; }
+/* Cambio de paso: una copia inerte de la tarjeta sale (App.wizardCards.salida) y la real entra (entrada). */
+.wizard-cards .wizard-card-saliente { position: fixed; z-index: 3; margin: 0; max-height: none; pointer-events: none; opacity: 1; transform: none; transition: none; }
+.wizard-cards .wizard-card-saliente.wizard-sale-retrocede { z-index: 0; }
+.wizard-sale-avanza { animation: wizard-sale-avanza .36s cubic-bezier(.55, 0, .75, .3) forwards; }
+.wizard-sale-retrocede { animation: wizard-sale-retrocede .32s cubic-bezier(.4, 0, .6, 1) forwards; }
+.wizard-entra-avanza { animation: wizard-entra-pila .46s var(--wizard-spring) .04s backwards; }
+.wizard-entra-retrocede { animation: wizard-entra-lado .46s var(--wizard-spring) backwards; }
+@keyframes wizard-sale-avanza { from { opacity: 1; transform: none; } to { opacity: 0; transform: translate3d(-64%, 10px, 0) rotate(-7deg) scale(.92); } }
+@keyframes wizard-sale-retrocede { from { opacity: 1; transform: none; } to { opacity: 0; transform: translate3d(0, 16px, 0) scale(.92); } }
+@keyframes wizard-entra-pila { from { opacity: .4; transform: translate3d(0, 16px, 0) scale(.92); } to { opacity: 1; transform: none; } }
+@keyframes wizard-entra-lado { from { opacity: 0; transform: translate3d(-64%, 10px, 0) rotate(-7deg) scale(.92); } to { opacity: 1; transform: none; } }
+/* Con un asistente abierto, «Guardando…» y los avisos van arriba, sobre el fondo: nunca tapan la tarjeta ni sus botones. */
+body:has(.wizard-cards:not(.hidden)) .operation-status { top: calc(env(safe-area-inset-top, 0px) + 8px); bottom: auto; }
+body:has(.wizard-cards:not(.hidden)) #toast-container { top: calc(env(safe-area-inset-top, 0px) + 8px); bottom: auto; }
+body:has(.wizard-cards:not(.hidden)):has(.operation-status.pending:not(.hidden)) #toast-container { top: calc(env(safe-area-inset-top, 0px) + 54px); }
+@media (prefers-reduced-motion: reduce) {
+  .wizard-fondo span { animation: none; }
+  .wizard-cards .alta-wizard { transform: none; transition: opacity .16s linear; }
+  .wizard-deck::before, .wizard-deck::after, .wizard-cards .justif-progress-fill { transition: none; }
+  .wizard-sale-avanza, .wizard-sale-retrocede { animation: wizard-fundido-sale .14s linear forwards; }
+  .wizard-entra-avanza, .wizard-entra-retrocede { animation: wizard-fundido-entra .16s linear backwards; }
+}
+@keyframes wizard-fundido-sale { from { opacity: 1; } to { opacity: 0; } }
+@keyframes wizard-fundido-entra { from { opacity: 0; } to { opacity: 1; } }
 .alta-wizard .form-group :is(input:not([type="checkbox"])) { min-height: 44px; min-width: 0; }
 .alta-wizard .form-group > label:not(.parent-email-notify) { display: block; margin-bottom: 6px; font-size: .8rem; font-weight: 600; color: var(--texto-sec); }
 .alta-label-row { display: flex; align-items: center; gap: 4px; margin: 0 0 6px; }
