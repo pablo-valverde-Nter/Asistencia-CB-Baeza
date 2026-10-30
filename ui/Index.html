@@ -603,13 +603,13 @@
 
         <section class="justif-step" data-step="nombre">
           <h4 class="justif-question" tabindex="-1">&iquest;C&oacute;mo se llama el jugador?</h4>
-          <p class="justif-hint">Es el &uacute;nico dato obligatorio.</p>
+          <p class="justif-hint">El nombre y los apellidos son los &uacute;nicos datos obligatorios.</p>
           <div class="alta-label-row">
             <span class="alta-label">Nombre y apellidos</span>
-            <span class="avisos-info"><button type="button" class="avisos-info-btn" aria-label="Por qu&eacute; es obligatorio" aria-expanded="false" aria-controls="alta-nombre-info" onclick="App.account.toggleAvisosInfo(this)"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5m0-8v1"/></svg></button><span class="avisos-popover" id="alta-nombre-info" role="note" hidden>Es obligatorio porque con &eacute;l se genera el usuario del jugador</span></span>
+            <span class="avisos-info"><button type="button" class="avisos-info-btn" aria-label="Por qu&eacute; son obligatorios" aria-expanded="false" aria-controls="alta-nombre-info" onclick="App.account.toggleAvisosInfo(this)"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5m0-8v1"/></svg></button><span class="avisos-popover" id="alta-nombre-info" role="note" hidden>El nombre y los apellidos son los &uacute;nicos datos obligatorios: con ellos se genera el usuario del jugador</span></span>
           </div>
-          <div class="form-group"><label for="alta-nombre">Nombre</label><input type="text" id="alta-nombre" placeholder="Nombre" autocomplete="off"></div>
-          <div class="form-group"><label for="alta-apellidos">Apellidos</label><input type="text" id="alta-apellidos" placeholder="Apellidos" autocomplete="off"></div>
+          <div class="form-group"><label for="alta-nombre">Nombre</label><input type="text" id="alta-nombre" placeholder="Nombre" autocomplete="off" aria-describedby="alta-nombre-error" oninput="App.views.altaJugador._limpiarError(this)"><p class="alta-field-error" id="alta-nombre-error" role="alert" hidden>Escribe el nombre del jugador</p></div>
+          <div class="form-group"><label for="alta-apellidos">Apellidos</label><input type="text" id="alta-apellidos" placeholder="Apellidos" autocomplete="off" aria-describedby="alta-apellidos-error" oninput="App.views.altaJugador._limpiarError(this)"><p class="alta-field-error" id="alta-apellidos-error" role="alert" hidden>Escribe los apellidos del jugador</p></div>
           <div class="justif-actions">
             <button type="button" class="btn btn-primary btn-full" onclick="App.views.altaJugador.continuar()">Continuar</button>
           </div>

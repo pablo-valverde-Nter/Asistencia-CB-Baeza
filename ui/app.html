@@ -3113,6 +3113,8 @@ const App = {
           var el = document.getElementById(id);
           if (el) el.value = '';
         });
+        this._limpiarError(document.getElementById('alta-nombre'));
+        this._limpiarError(document.getElementById('alta-apellidos'));
         ['alta-p1-notificar', 'alta-p2-notificar'].forEach(function(id) {
           var el = document.getElementById(id);
           if (el) el.checked = true;
@@ -3168,7 +3170,28 @@ const App = {
         return null;
       },
 
+      // Nombre y apellidos: error en línea bajo cada campo vacío y foco en el primero.
+      _marcarError: function(input) {
+        var msg = document.getElementById(input.id + '-error');
+        input.classList.add('is-invalid');
+        input.setAttribute('aria-invalid', 'true');
+        if (msg) msg.hidden = false;
+      },
+
+      _limpiarError: function(input) {
+        if (!input) return;
+        var msg = document.getElementById(input.id + '-error');
+        input.classList.remove('is-invalid');
+        input.removeAttribute('aria-invalid');
+        if (msg) msg.hidden = true;
+      },
+
       continuar: function() {
+        if (this._paso === 'nombre') {
+          var self = this, vacios = ['alta-nombre', 'alta-apellidos'].filter(function(id) { return !self._valor(id); });
+          vacios.forEach(function(id) { self._marcarError(document.getElementById(id)); });
+          if (vacios.length) { document.getElementById(vacios[0]).focus(); return false; }
+        }
         var error = this._errorPaso(this._paso, this._leer());
         if (error) { showToast(error, 'error'); return false; }
         this._mover(1);
@@ -7394,8 +7417,11 @@ App.i18n = {
   "Omitir": "Skip",
   "Copiar": "Copy",
   "¿Cómo se llama el jugador?": "What is the player's name?",
-  "Es el único dato obligatorio.": "It is the only required field.",
-  "Es obligatorio porque con él se genera el usuario del jugador": "It is required because the player's username is generated from it",
+  "El nombre y los apellidos son los únicos datos obligatorios.": "First and last names are the only required fields.",
+  "El nombre y los apellidos son los únicos datos obligatorios: con ellos se genera el usuario del jugador": "First and last names are the only required fields: the player's username is generated from them",
+  "Por qué son obligatorios": "Why they are required",
+  "Escribe el nombre del jugador": "Enter the player's first name",
+  "Escribe los apellidos del jugador": "Enter the player's last name",
   "¿Qué dorsal lleva?": "Which jersey number?",
   "Opcional. No puede repetirse en el mismo equipo.": "Optional. It cannot be repeated within the same team.",
   "Opcionales. Puedes completarlos más adelante.": "Optional. You can complete them later.",

@@ -7,14 +7,14 @@ const vm = require('node:vm');
 function elemento() {
   return { value: '', checked: false, hidden: false, disabled: false, textContent: '', innerHTML: '', style: {}, dataset: {},
     classList: { _c: new Set(), add(c) { this._c.add(c); }, remove(c) { this._c.delete(c); }, contains(c) { return this._c.has(c); }, toggle(c, on) { on ? this._c.add(c) : this._c.delete(c); } },
-    setAttribute() {}, focus() {}, querySelector: () => null };
+    setAttribute() {}, removeAttribute() {}, focus() { this.focused = true; }, querySelector: () => null };
 }
 
 function client({ clipboard, execCommand = true, userAgent = 'Mozilla/5.0 (X11; Linux x86_64)' } = {}) {
   const els = {}, appended = [];
   const document = {
     addEventListener() {}, querySelectorAll: () => [], activeElement: null,
-    getElementById: id => (els[id] ||= elemento()),
+    getElementById: id => (els[id] ||= Object.assign(elemento(), { id })),
     createElement: () => Object.assign(elemento(), { select() {} }),
     body: { appendChild: n => appended.push(n), removeChild() {} },
     execCommand: cmd => { document.copiado = appended.at(-1).value; return cmd === 'copy' && execCommand; },
@@ -41,17 +41,22 @@ function client({ clipboard, execCommand = true, userAgent = 'Mozilla/5.0 (X11; 
   return { app, wizard, els, set, notices, calls, opened, document };
 }
 
-test('el nombre y los apellidos son obligatorios: sin ellos no se avanza', () => {
-  const { wizard, set, notices } = client();
+test('el nombre y los apellidos son obligatorios: error en línea bajo el campo vacío, foco y se limpia al escribir', () => {
+  const { wizard, set, els, notices } = client();
   wizard.abrir(false);
   set('alta-nombre', '   ');
   set('alta-apellidos', 'Pérez');
   assert.equal(wizard.continuar(), false);
   assert.equal(wizard._paso, 'nombre');
-  assert.deepEqual(notices.pop(), { message: 'Escribe el nombre y los apellidos del jugador', type: 'error' });
+  assert.equal(els['alta-nombre-error'].hidden, false);
+  assert.equal(els['alta-apellidos-error'].hidden, true);
+  assert.ok(els['alta-nombre'].focused);
+  assert.equal(notices.length, 0, 'el error es en línea, sin toast');
   wizard.omitir();
   assert.equal(wizard._paso, 'nombre', 'el paso del nombre no se puede omitir');
   set('alta-nombre', 'Luis');
+  wizard._limpiarError(els['alta-nombre']);
+  assert.equal(els['alta-nombre-error'].hidden, true);
   assert.equal(wizard.continuar(), true);
   assert.equal(wizard._paso, 'dorsal');
 });
