@@ -61,16 +61,19 @@ const CONFIG = {
   },
 
   // ── Motivos de justificación de ausencia/retraso ──────────────────────────────
+  // «Salud» no admite detalle: no se guardan ni envían diagnósticos (dato de categoría especial).
   MOTIVOS_JUSTIFICACION: [
     'Estudios / Examen',
     'Estudios / Recuperación de materia',
     'Otra actividad deportiva',
     'Otra actividad extraescolar',
-    'Lesión',
-    'Enfermedad',
+    'Salud',
     'Motivo familiar/personal',
     'Otro',
   ],
+  MOTIVO_SALUD: 'Salud',
+  // Motivos retirados: sus registros no se migran, se leen y agrupan como «Salud».
+  MOTIVOS_SALUD_ANTIGUOS: ['Lesión', 'Enfermedad'],
 
   // ── Estadísticas de asistencia ────────────────────────────────────────────────
   ESTADISTICAS: {
@@ -103,6 +106,16 @@ const CONFIG = {
     7: 'Domingo',
   },
 };
+
+// Motivo con el que se muestra, agrupa y guarda una justificación (los antiguos de salud pasan a «Salud»).
+function motivoJustificacion_(motivo) {
+  return CONFIG.MOTIVOS_SALUD_ANTIGUOS.includes(motivo) ? CONFIG.MOTIVO_SALUD : motivo;
+}
+
+// Texto libre de una justificación: con «Salud» siempre se descarta.
+function detalleJustificacion_(motivo, detalle) {
+  return motivoJustificacion_(motivo) === CONFIG.MOTIVO_SALUD ? '' : (detalle || '');
+}
 
 // El publicador fija estos valores solo en la copia de cada versión; nunca secretos.
 // El código fuente sin preparar no puede conectarse a ninguna base de datos.

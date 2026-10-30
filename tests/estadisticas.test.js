@@ -20,10 +20,18 @@ test('P=2, R=1 y A=1 dan 75/67; justificar no convierte A en presencia', () => {
   assert.equal(j.retrasoMedioMin, 15);
   assert.equal(j.retrasosConMinutos, 1);
   assert.deepEqual(j.avisos, { total: 2, previos: 1, programadas: 1, antelacionMedianaHoras: 2 });
-  assert.deepEqual(j.motivos, [{ motivo: 'Estudios / Examen', A: 0, R: 1 }, { motivo: 'Lesión', A: 1, R: 0 }]);
+  assert.deepEqual(j.motivos, [{ motivo: 'Estudios / Examen', A: 0, R: 1 }, { motivo: 'Salud', A: 1, R: 0 }]);
   assert.equal(j.carga.horasAsistidas, 4.5);
   assert.equal(j.sesiones.length, 4);
   assert.equal(j.sesiones[0].estado, 'A');
+});
+
+test('los motivos retirados Lesión y Enfermedad se agrupan con «Salud» sin cambiar los registros', () => {
+  const f = copia();
+  const estudios = f.asistJugadores.find(r => r.ID_Jugador === 'jugador-ana' && r.MotivoCategoria === 'Estudios / Examen');
+  estudios.MotivoCategoria = 'Enfermedad';
+  assert.deepEqual(consultar('jugador', 'jugador-ana', {}, f).datos.motivos, [{ motivo: 'Salud', A: 1, R: 1 }]);
+  assert.ok(f.asistJugadores.some(r => r.ID_Jugador === 'jugador-ana' && r.MotivoCategoria === 'Lesión'));
 });
 
 test('solo computan sesiones terminadas guardadas de la temporada y estados explícitos no excluidos', () => {

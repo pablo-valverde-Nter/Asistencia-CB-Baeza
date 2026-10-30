@@ -218,7 +218,7 @@ const Asistencia = {
    * @param {string} codigoPadres     - Código de 6 caracteres del jugador
    * @param {string} tipoIncidencia   - 'Ausencia' | 'Retraso'
    * @param {string} motivo           - Categoría del motivo (ver CONFIG.MOTIVOS_JUSTIFICACION)
-   * @param {string} detalle          - Texto libre adicional (puede ser vacío)
+   * @param {string} detalle          - Texto libre adicional (puede ser vacío; se descarta con «Salud»)
    * @param {number} [minutosRetraso] - Solo para Retraso: minutos previstos (1–180)
    * @returns {{ success: boolean, registro?: Object, error?: string }}
    */
@@ -250,6 +250,8 @@ const Asistencia = {
     }
 
     const timestamp = Asistencia._timestamp_();
+    motivo = motivoJustificacion_(motivo);
+    detalle = detalleJustificacion_(motivo, detalle);
 
     const mensaje = Notificaciones.generarMensajeJustificacion(
       jugador, sesion, equipo, tipoIncidencia, motivo, detalle, '', minutos
@@ -259,7 +261,7 @@ const Asistencia = {
       TieneJustificacion:   true,
       TipoJustificacion:    tipoIncidencia,
       MotivoCategoria:      motivo,
-      MotivoDetalle:        detalle || '',
+      MotivoDetalle:        detalle,
       FechaJustificacion:   timestamp,
       JustificadoPor:       'padre',
       MensajeGenerado:      mensaje,
@@ -367,8 +369,8 @@ const Asistencia = {
       ID_Equipo: horario.ID_Equipo,
       ID_Horario: horario.ID,
       TipoIncidencia: datos.tipoIncidencia,
-      MotivoCategoria: datos.motivo,
-      MotivoDetalle: datos.detalle || '',
+      MotivoCategoria: motivoJustificacion_(datos.motivo),
+      MotivoDetalle: detalleJustificacion_(datos.motivo, datos.detalle),
       HoraIncorporacion: datos.horaIncorporacion || '',
       Activo: true,
       FechaCreacion: timestamp,
@@ -391,8 +393,8 @@ const Asistencia = {
       ID_Equipo: horario.ID_Equipo,
       ID_Horario: horario.ID,
       TipoIncidencia: datos.tipoIncidencia,
-      MotivoCategoria: datos.motivo,
-      MotivoDetalle: datos.detalle || '',
+      MotivoCategoria: motivoJustificacion_(datos.motivo),
+      MotivoDetalle: detalleJustificacion_(datos.motivo, datos.detalle),
       HoraIncorporacion: datos.horaIncorporacion || '',
       Activo: datos.activo !== false,
       FechaActualizacion: Asistencia._timestamp_(),
@@ -426,12 +428,15 @@ const Asistencia = {
       const jugador = findById(CONFIG.SHEETS.JUGADORES, regla.ID_Jugador);
       const equipo = findById(CONFIG.SHEETS.EQUIPOS, sesion.ID_Equipo);
       if (!jugador || !equipo || existentes.some(r => r.TieneJustificacion === true || r.TieneJustificacion === 'TRUE')) return;
+      // Las reglas antiguas con Lesión/Enfermedad se aplican como «Salud», sin su detalle.
+      const motivo = motivoJustificacion_(regla.MotivoCategoria);
+      const detalle = detalleJustificacion_(regla.MotivoCategoria, regla.MotivoDetalle);
       const mensaje = Notificaciones.generarMensajeJustificacion(
-        jugador, sesion, equipo, regla.TipoIncidencia, regla.MotivoCategoria, regla.MotivoDetalle, regla.HoraIncorporacion
+        jugador, sesion, equipo, regla.TipoIncidencia, motivo, detalle, regla.HoraIncorporacion
       );
       const cambios = {
         TieneJustificacion: true, TipoJustificacion: regla.TipoIncidencia,
-        MotivoCategoria: regla.MotivoCategoria, MotivoDetalle: regla.MotivoDetalle || '',
+        MotivoCategoria: motivo, MotivoDetalle: detalle,
         FechaJustificacion: Asistencia._timestamp_(), JustificadoPor: 'programacion',
         MensajeGenerado: mensaje, NotificadoEntrenador: false, EsProgramada: true,
       };
@@ -446,7 +451,7 @@ const Asistencia = {
         });
       }
       const enviado = Notificaciones.notificarJustificacionAEntrenadores(
-        jugador, sesion, equipo, regla.TipoIncidencia, regla.MotivoCategoria, regla.MotivoDetalle, mensaje, true
+        jugador, sesion, equipo, regla.TipoIncidencia, motivo, detalle, mensaje, true
       );
       if (enviado) updateRow(CONFIG.SHEETS.ASIST_JUGADORES, registro.ID, { NotificadoEntrenador: true });
       aplicadas++;

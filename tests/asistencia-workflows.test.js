@@ -7,11 +7,12 @@ const vm = require('node:vm');
 function backend(rows) {
   const writes = [];
   const notifications = [];
+  const avisos = [];
   const tables = { SESIONES: 'sesiones', EQUIPOS: 'equipos', JUGADORES: 'jugadores',
     ASIST_JUGADORES: 'asistJugadores', ASIST_ENTRENADORES: 'asistEntrenadores',
-    JUGADORES_EQUIPOS: 'jugadoresEquipos', ENTRENADORES_EQUIPOS: 'entrenadoresEquipos' };
+    JUGADORES_EQUIPOS: 'jugadoresEquipos', ENTRENADORES_EQUIPOS: 'entrenadoresEquipos',
+    HORARIOS: 'horarios', PROGRAMACIONES_JUSTIFICACIONES: 'programaciones' };
   const context = vm.createContext({
-    CONFIG: { SHEETS: tables, ESTADOS_ASISTENCIA: { PRESENTE: 'P', AUSENTE: 'A', RETRASO: 'R' } },
     Auth: { verificarCodigoPadres: (_, codigo) => codigo === 'ABC123' },
     findById: (table, id) => (rows[table] || []).find(row => row.ID === id),
     findWhere: (table, field, value) => (rows[table] || []).filter(row => String(row[field]) === String(value)),
@@ -21,13 +22,16 @@ function backend(rows) {
       writes.push({ op: 'append', table, fields });
       return { ID: 'new-row', ...fields };
     },
-    Notificaciones: { notificarAusenciaAFamilia(...args) { notifications.push(args); }, notificarJustificacionAEntrenadores() { return false; },
+    Notificaciones: { notificarAusenciaAFamilia(...args) { notifications.push(args); },
+      notificarJustificacionAEntrenadores(...args) { avisos.push(args); return false; },
       notificarCancelacionJustificacionAEntrenadores(...args) { notifications.push(args); return true; },
       generarMensajeJustificacion() { return 'mensaje'; } },
     Logger: { log() {} },
   });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Config.gs'), 'utf8'), context);
+  vm.runInContext('CONFIG.SHEETS = ' + JSON.stringify(tables), context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Asistencia.gs'), 'utf8'), context);
-  return { asistencia: vm.runInContext('Asistencia', context), writes, notifications };
+  return { asistencia: vm.runInContext('Asistencia', context), writes, notifications, avisos };
 }
 
 function sessionRows() {
@@ -391,17 +395,44 @@ test('el asistente precarga una justificacion para editarla o eliminarla con cod
   assert.equal(element('justif-enviar').textContent, 'Eliminar justificación');
 });
 
-test('el resumen del cliente coincide con el mensaje que guarda el servidor', () => {
+test('el resumen del cliente coincide con el mensaje que guarda el servidor, también con «Salud» y los motivos retirados', () => {
   const { app } = wizardClient();
-  const context = vm.createContext({ CONFIG: { DIAS_SEMANA: { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado', 7: 'Domingo' } } });
+  const context = vm.createContext({});
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Config.gs'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Notificaciones.gs'), 'utf8'), context);
   const notificaciones = vm.runInContext('Notificaciones', context);
   const jugador = { Nombre: 'Ana', Apellidos: 'Baeza' }, equipo = { Nombre: 'Cadete' };
-  for (const [fecha, tipo, detalle, minutos] of [['2026-10-04', 'Retraso', 'Médico', 20], ['2026-10-05', 'Ausencia', '', null]]) {
+  for (const [fecha, tipo, motivo, detalle, minutos] of [['2026-10-04', 'Retraso', 'Consulta', 'Médico', 20], ['2026-10-05', 'Ausencia', 'Consulta', '', null],
+    ['2026-10-06', 'Ausencia', 'Salud', 'Fiebre', null], ['2026-10-07', 'Retraso', 'Lesión', 'Esguince', 10], ['2026-10-08', 'Ausencia', 'Enfermedad', 'Gripe', null]]) {
     const sesion = { Fecha: fecha, HoraInicio: '18:30' };
-    assert.equal(app.views.justificacion.mensaje(jugador, sesion, equipo, tipo, 'Consulta', detalle, minutos),
-      notificaciones.generarMensajeJustificacion(jugador, sesion, equipo, tipo, 'Consulta', detalle, '', minutos));
+    const servidor = notificaciones.generarMensajeJustificacion(jugador, sesion, equipo, tipo, motivo, detalle, '', minutos);
+    assert.equal(app.views.justificacion.mensaje(jugador, sesion, equipo, tipo, motivo, detalle, minutos), servidor);
+    if (motivo !== 'Consulta') assert.match(servidor, /Motivo: Salud\.( Llegará con unos 10 minutos de retraso\.)?$/);
   }
+});
+
+test('con «Salud» el asistente oculta y desactiva el detalle y no envía texto libre', async () => {
+  const { app, element, visible, sent } = wizardClient();
+  app.state.motivosJustificacion = ['Estudios', 'Salud'];
+  const wizard = app.views.justificacion;
+  wizard.abrir('s1', 'A');
+  wizard.elegirTipo('Ausencia');
+  assert.equal(visible(), 'motivo');
+  wizard.elegirMotivo('Estudios');
+  assert.equal(element('justif-detalle-grupo').classList.contains('hidden'), false);
+  element('justif-detalle').value = 'Tiene fiebre';
+  wizard.elegirMotivo('Salud');
+  assert.equal(element('justif-detalle-grupo').classList.contains('hidden'), true);
+  assert.equal(element('justif-detalle').disabled, true);
+  assert.equal(element('justif-detalle').value, '');
+  element('justif-detalle').value = 'Tiene fiebre';
+  wizard.continuarMotivo();
+  assert.equal(element('justif-preview').textContent.endsWith('Motivo: Salud.'), true);
+  wizard.siguiente();
+  element('justif-codigo').value = 'ABC123';
+  wizard.confirmar();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(JSON.parse(JSON.stringify(sent[0].args)), ['s1', 'member', 'ABC123', 'Ausencia', 'Salud', '', null]);
 });
 
 test('la programación usa el mismo asistente con un paso previo de entrenamientos y guarda un aviso por entrenamiento', async () => {
@@ -563,6 +594,54 @@ test('los minutos del aviso se guardan sin sustituir los que registro el entrena
     assert.throws(() => asistencia.registrarJustificacion('s1', 'member', 'ABC123', 'Retraso', 'Consulta', '', invalido), /entre 1 y 180/);
     assert.equal(writes.length, 0);
   }
+});
+
+test('el servidor guarda «Salud» sin texto libre, también si llega Lesión o Enfermedad, y no lo pasa al aviso', () => {
+  for (const motivo of ['Salud', 'Lesión', 'Enfermedad']) {
+    const { asistencia, writes, avisos } = backend(sessionRows());
+    asistencia.registrarJustificacion('s1', 'member', 'ABC123', 'Ausencia', motivo, 'Fiebre de 39', null);
+    const fila = writes.find(w => w.op === 'append' && w.table === 'asistJugadores').fields;
+    assert.deepEqual([fila.MotivoCategoria, fila.MotivoDetalle], ['Salud', ''], motivo);
+    assert.deepEqual(avisos[0].slice(4, 6), ['Salud', ''], motivo);
+  }
+  const { asistencia, writes } = backend(sessionRows());
+  asistencia.registrarJustificacion('s1', 'member', 'ABC123', 'Ausencia', 'Otro', 'Boda familiar', null);
+  assert.equal(writes.find(w => w.op === 'append').fields.MotivoDetalle, 'Boda familiar');
+});
+
+test('las programaciones con «Salud» descartan el detalle y las antiguas se aplican como «Salud» sin reescribirlas', () => {
+  const rows = { ...sessionRows(), horarios: [{ ID: 'h1', ID_Equipo: 'team', HoraInicio: '18:00', HoraFin: '19:00' }] };
+  rows.sesiones[0].ID_Horario = 'h1';
+  rows.programaciones = [{ ID: 'p-old', ID_Jugador: 'member', ID_Horario: 'h1', TipoIncidencia: 'Ausencia',
+    MotivoCategoria: 'Lesión', MotivoDetalle: 'Esguince', Activo: true }];
+  const { asistencia, writes, avisos } = backend(rows);
+  asistencia.crearProgramacion('member', 'ABC123', { idHorario: 'h1', tipoIncidencia: 'Ausencia', motivo: 'Enfermedad', detalle: 'Gripe' });
+  const creada = writes.find(w => w.op === 'append' && w.table === 'programaciones').fields;
+  assert.deepEqual([creada.MotivoCategoria, creada.MotivoDetalle], ['Salud', '']);
+  assert.equal(asistencia.aplicarProgramacionesSesion(rows.sesiones[0]), 1);
+  const aplicada = writes.find(w => w.op === 'append' && w.table === 'asistJugadores').fields;
+  assert.deepEqual([aplicada.MotivoCategoria, aplicada.MotivoDetalle], ['Salud', '']);
+  assert.deepEqual(avisos[0].slice(4, 6), ['Salud', '']);
+  assert.ok(writes.every(w => w.table !== 'programaciones' || w.op === 'append'));
+  assert.equal(rows.programaciones[0].MotivoCategoria, 'Lesión');
+});
+
+test('el correo al entrenador nunca incluye detalle de salud, tampoco de motivos antiguos', () => {
+  const sent = [];
+  const context = vm.createContext({
+    findWhere: () => [{ ID_Entrenador: 'coach', Activo: true }],
+    findWhereIn: (_, __, ids) => ids.map(id => ({ Email: id + '@example.com' })),
+    MailApp: { sendEmail: mail => sent.push(mail) }, Logger: { log() {} },
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Config.gs'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Notificaciones.gs'), 'utf8'), context);
+  const notificaciones = vm.runInContext('Notificaciones', context);
+  const datos = [{ Nombre: 'Ana', Apellidos: 'Baeza' }, { Fecha: '2026-10-06', HoraInicio: '18:00', HoraFin: '19:00' }, { ID: 'team', Nombre: 'Cadete' }, 'Ausencia'];
+  for (const motivo of ['Salud', 'Enfermedad', 'Otro']) {
+    notificaciones.notificarJustificacionAEntrenadores(...datos, motivo, motivo === 'Otro' ? 'Boda familiar' : 'Gripe fuerte', 'mensaje');
+  }
+  assert.ok(sent.slice(0, 2).every(mail => /Motivo:\s+Salud\n/.test(mail.body) && !mail.body.includes('Gripe')));
+  assert.match(sent[2].body, /Información adicional: Boda familiar/);
 });
 
 test('el aviso de anulacion llega a entrenadores activos, incluidas las relaciones Visor antiguas', () => {

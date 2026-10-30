@@ -167,6 +167,7 @@ Registro de asistencia de jugadores por sesión.
 - `EsInvitado = true` para jugadores de otros equipos que suben a entrenar puntualmente.
 - El estado cicla en la UI: sin registrar → P (verde) → A (rojo) → R (amarillo) → P...
 - `Estado` solo lo escribe el entrenador. Un aviso o justificación de la familia no rellena `Estado`: una A justificada sigue contando como ausencia.
+- Motivo **Salud** (`MotivoCategoria`, `CONFIG.MOTIVO_SALUD`): sin texto libre. Apps Script descarta `MotivoDetalle` al guardar justificaciones y programaciones y nunca lo incluye en mensajes ni correos. Los motivos retirados `Lesión` y `Enfermedad` (`CONFIG.MOTIVOS_SALUD_ANTIGUOS`) no se migran: `cargarDatos` los entrega como «Salud» sin `MotivoDetalle` ni `MensajeGenerado`, y las estadísticas los agrupan con «Salud».
 
 ---
 

@@ -308,7 +308,7 @@ const Estadisticas = {
     for (const r of filas) {
       if (r.estado === 'P' || !this.verdadero_(r.fila.TieneJustificacion)) continue;
       avisos.total++;
-      const motivo = r.fila.MotivoCategoria || 'Sin motivo';
+      const motivo = motivoJustificacion_(r.fila.MotivoCategoria) || 'Sin motivo';
       if (!motivos.has(motivo)) motivos.set(motivo, { motivo, A: 0, R: 0 });
       motivos.get(motivo)[r.estado]++;
       if (r.fila.JustificadoPor === 'programacion') avisos.programadas++;

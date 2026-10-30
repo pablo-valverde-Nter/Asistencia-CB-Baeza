@@ -5,13 +5,14 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { datos, AHORA } = require('./fixtures/estadisticas-fixture.js');
 
-function cargar(contexto) {
+function cargar(contexto, cambios = {}) {
   const tablas = {
     Temporadas: datos.temporadas, Equipos: datos.equipos, Horarios: datos.horarios, Jugadores: datos.jugadores,
     Jugadores_Equipos: datos.jugadoresEquipos, Entrenadores: datos.entrenadores,
     Entrenadores_Equipos: datos.entrenadoresEquipos, Sesiones: datos.sesiones,
     Asist_Jugadores: datos.asistJugadores, Asist_Entrenadores: datos.asistEntrenadores,
     Programaciones_Justificaciones: [{ ID: 'p1', ID_Jugador: contexto.jugador && contexto.jugador.ID }, { ID: 'p2', ID_Jugador: 'otro' }],
+    ...cambios,
   };
   const context = vm.createContext({
     Logger: { log() {} },
@@ -86,4 +87,19 @@ test('getEstadisticas aplica permisos del motor', () => {
   assert.deepEqual(lote.resultados.map(r => r.success ? r.estadisticas.entidad : r.error),
     ['equipo', 'Consulta de estadísticas no permitida.', 'Jugador no encontrado.']);
   assert.deepEqual(lote.resultados[0].estadisticas, JSON.parse(JSON.stringify(ok.estadisticas)));
+});
+
+test('cargarDatos entrega las justificaciones de salud antiguas como «Salud» y sin texto libre, sin escribir', () => {
+  const asistencias = datos.asistJugadores.map(r => r.MotivoCategoria === 'Lesión'
+    ? { ...r, MotivoDetalle: 'Esguince tobillo', MensajeGenerado: 'Motivo: Lesión. Información adicional: "Esguince tobillo".' } : r);
+  const programaciones = [{ ID: 'p1', ID_Jugador: 'jugador-ana', MotivoCategoria: 'Enfermedad', MotivoDetalle: 'Gripe' },
+    { ID: 'p2', ID_Jugador: 'jugador-ana', MotivoCategoria: 'Otro', MotivoDetalle: 'Boda familiar' }];
+  const res = cargar({ success: true, rol: 'admin', jugador: null },
+    { Asist_Jugadores: asistencias, Programaciones_Justificaciones: programaciones }).cargarDatos({});
+  const legado = res.asistJugadores.filter(r => r.ID === asistencias.find(a => a.MotivoCategoria === 'Lesión').ID);
+  assert.deepEqual(legado.map(r => [r.MotivoCategoria, r.MotivoDetalle, r.MensajeGenerado]), [['Salud', '', '']]);
+  assert.ok(!JSON.stringify(res.asistJugadores).includes('Esguince'));
+  assert.ok(res.asistJugadores.some(r => r.MotivoCategoria === 'Estudios / Examen'));
+  assert.deepEqual(res.programacionesJustificaciones.map(p => [p.MotivoCategoria, p.MotivoDetalle]), [['Salud', ''], ['Otro', 'Boda familiar']]);
+  assert.equal(asistencias.find(a => a.MotivoCategoria === 'Lesión').MotivoDetalle, 'Esguince tobillo');
 });

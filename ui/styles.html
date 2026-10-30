@@ -165,6 +165,10 @@ input, select, textarea { font-family: inherit; }
 .user-menu-logout { color: var(--rojo); }
 .user-menu-logout > span { color: var(--rojo); }
 .user-menu-divider { height: 1px; margin: 4px 5px; background: var(--borde); }
+/* Enlace «Privacidad · Cookies» del menú de usuario (todos los perfiles) */
+.user-menu-legal { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 2px 10px 4px; color: var(--texto-sec); font-size: .78rem; }
+.user-menu-legal button { min-height: 36px; padding: 4px 6px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.user-menu-legal button:hover, .user-menu-legal button:focus-visible { background: var(--fondo); color: var(--texto); outline: none; }
 #user-badge-avatar {
   width: 28px; height: 28px; border-radius: 50%;
   background: var(--on-accent-wash); color: var(--on-accent);
@@ -1543,6 +1547,11 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
   .login-error { animation: none; }
   .btn-login.is-loading .login-submit-logo { animation-duration: 3s; }
 }
+/* Enlace «Privacidad · Cookies» bajo el formulario de acceso */
+.login-legal { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 18px; color: var(--on-accent-muted); font-size: .78rem; }
+.login-legal button { min-height: 36px; padding: 4px 6px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; touch-action: manipulation; }
+.login-legal button:hover { color: var(--on-accent); }
+.login-legal button:focus-visible { outline: 2px solid var(--on-accent); outline-offset: 2px; }
 
 /* ── 3c-2: Badge admin en lista de entrenadores ── */
 .badge-admin {
@@ -1701,6 +1710,7 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 .justif-step .justif-preview-wrap { margin: 0; padding: 16px; }
 .justif-step .justif-preview { font-size: .9rem; line-height: 1.6; }
 .justif-optional { font-weight: 500; }
+.justif-salud-aviso { margin: 8px 0 0; color: var(--texto-sec); font-size: .78rem; line-height: 1.4; }
 .justif-codigo {
   width: 100%; padding: 16px 12px; border: 1.5px solid var(--borde); border-radius: 10px;
   background: var(--fondo); color: var(--texto); text-align: center; text-transform: uppercase;
@@ -2307,6 +2317,7 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 .policy-text p,.policy-text li { font-size:.8rem; line-height:1.8; }
 .policy-text ul { padding-left:20px; color:var(--texto-sec); }
 .policy-text code { overflow-wrap:anywhere; font-size:.75rem; }
+.policy-text .policy-version { margin:-8px 0 0; font-size:.74rem; font-weight:600; }
 @media(max-width:360px) { .avatar-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } .account-card { padding:16px; } }
 
 /* Preferencias locales y ajustes de componentes que separan superficies y tinta de marca en los tres temas. */

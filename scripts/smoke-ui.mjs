@@ -348,7 +348,8 @@ function driveViews() {
         if (accountState === 'menu') {
           App.toggleUserMenu();
           const menu = document.getElementById('user-menu');
-          if (menu.classList.contains('hidden') || menu.querySelectorAll('[role="menuitem"]').length !== 4) throw new Error('Menú de cuenta incompleto');
+          if (menu.classList.contains('hidden') || menu.querySelectorAll('[role="menuitem"]').length !== 6) throw new Error('Menú de cuenta incompleto');
+          if (!/(?:Privacidad|Privacy)\s*·\s*Cookies/.test(menu.querySelector('.user-menu-legal')?.textContent || '')) throw new Error('Falta el enlace Privacidad · Cookies del menú');
           if (document.activeElement !== menu.querySelector('button')) throw new Error('El menú no recibe el foco');
           document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
           if (document.activeElement !== document.getElementById('user-badge')) throw new Error('Escape no devuelve el foco');

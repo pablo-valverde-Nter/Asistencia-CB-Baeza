@@ -221,9 +221,9 @@ function cargarDatos(auth) {
       horarios:            horariosFinal,
       sesiones:            sesionesFinal,
       temporadas:          temporadasR.data,
-      asistJugadores:      asistJugFinal,
+      asistJugadores:      asistJugFinal.map(justificacionLegible_),
       asistEntrenadores:   asistEntFinal,
-      programacionesJustificaciones: programacionesR.data,
+      programacionesJustificaciones: programacionesR.data.map(justificacionLegible_),
       motivosJustificacion: CONFIG.MOTIVOS_JUSTIFICACION,
       estadisticas:        estadisticas,
       estadisticasError:   estadisticasError,
@@ -239,6 +239,14 @@ function cargarDatos(auth) {
       traceId: traceId,
     };
   }
+}
+
+// Lectura de justificaciones: Lesión/Enfermedad se envían como «Salud» y ningún registro de salud
+// lleva texto libre al navegador. Los datos guardados no cambian.
+function justificacionLegible_(fila) {
+  const motivo = motivoJustificacion_(fila.MotivoCategoria);
+  if (motivo !== CONFIG.MOTIVO_SALUD) return fila;
+  return Object.assign({}, fila, { MotivoCategoria: motivo, MotivoDetalle: '', MensajeGenerado: '' });
 }
 
 function ahoraMadrid_() { return Utilities.formatDate(new Date(), 'Europe/Madrid', 'yyyy-MM-dd HH:mm'); }

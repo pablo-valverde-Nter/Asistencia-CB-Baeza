@@ -78,6 +78,9 @@
         <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.account.target=null;App.navigate('perfil-usuario')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg>Perfil</button>
         <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('ajustes')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.7 2.4-2.2 1L3.8 6l-2 3.5 1.8 1.8v2.4L1.8 15.5l2 3.5 2.3-.4 2.2 1L9 22h4l.7-2.4 2.2-1 2.3.4 2-3.5-1.8-1.8v-2.4l1.8-1.8-2-3.5-2.3.4-2.2-1L13 3Z" transform="translate(1 -1) scale(.95)"/><circle cx="12" cy="12" r="3"/></svg>Ajustes</button>
         <button class="user-menu-item" type="button" role="menuitem" onclick="App.closeUserMenu();App.account.target=null;App.navigate('seguridad')"><svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Seguridad</button>
+        <div class="user-menu-legal" role="group" aria-label="Privacidad y cookies">
+          <button type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('politica-privacidad')">Privacidad</button><span aria-hidden="true">&middot;</span><button type="button" role="menuitem" onclick="App.closeUserMenu();App.navigate('politica-cookies')">Cookies</button>
+        </div>
         <div class="user-menu-divider"></div>
         <button class="user-menu-item user-menu-logout" type="button" role="menuitem" onclick="event.stopPropagation();App.closeUserMenu();App.confirmarCerrarSesion()">
           <svg class="account-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4v16h6m4-12 4 4-4 4m-6-4h13"/></svg>Cerrar sesión
@@ -144,6 +147,7 @@
             <span id="login-submit-text">Entrar</span>
           </button>
         </form>
+        <p class="login-legal"><button type="button" onclick="App.navigate('politica-privacidad')">Privacidad</button><span aria-hidden="true">&middot;</span><button type="button" onclick="App.navigate('politica-cookies')">Cookies</button></p>
       </div>
     </section>
 
@@ -591,10 +595,11 @@
         <section class="justif-step" data-step="motivo" hidden>
           <h4 class="justif-question" tabindex="-1">&iquest;Cu&aacute;l es el motivo?</h4>
           <div id="justif-motivos" class="justif-chips justif-motivos" role="group" aria-label="Motivo"></div>
-          <div class="form-group justif-detalle">
+          <div class="form-group justif-detalle" id="justif-detalle-grupo">
             <label for="justif-detalle">Detalles <span class="justif-optional">(opcional)</span></label>
-            <textarea id="justif-detalle" rows="2" maxlength="300" placeholder="A&ntilde;ade informaci&oacute;n si lo necesitas&hellip;"></textarea>
+            <textarea id="justif-detalle" rows="2" maxlength="300" placeholder="A&ntilde;ade informaci&oacute;n si lo necesitas&hellip;" aria-describedby="justif-salud-aviso"></textarea>
           </div>
+          <p id="justif-salud-aviso" class="justif-salud-aviso">No indiques diagn&oacute;sticos ni detalles de salud.</p>
           <div class="justif-actions">
             <button type="button" id="justif-motivo-next" class="btn btn-primary btn-full" disabled onclick="App.views.justificacion.continuarMotivo()">Continuar</button>
           </div>

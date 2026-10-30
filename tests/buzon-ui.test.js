@@ -73,6 +73,7 @@ test('el chip «Justificada» de la sesión abre el mismo mensaje sin escapar ma
 });
 
 // Registros migrados: TipoJustificacion guarda el momento ('pre'/'post') y MensajeGenerado el texto "false".
+// «Lesión» es un motivo retirado: se lee como «Salud» y su detalle de salud nunca se muestra.
 function clienteHeredado() {
   const c = cliente();
   c.app.cache.equipos = [{ ID: 'sm', Nombre: 'Senior Masculino' }];
@@ -84,7 +85,7 @@ function clienteHeredado() {
     { ID: 'h1', ID_Sesion: 's12', ID_Jugador: 'raul', Estado: 'A', TieneJustificacion: true, TipoJustificacion: 'pre',
       MotivoCategoria: 'Lesión', MotivoDetalle: 'Esguince tobillo derecho', JustificadoPor: 'padres', MensajeGenerado: 'false' },
     { ID: 'h2', ID_Sesion: 's12', ID_Jugador: 'leo', Estado: 'R', MinutosRetraso: 20, TieneJustificacion: true, TipoJustificacion: 'post',
-      MotivoCategoria: 'Estudios', MotivoDetalle: '', JustificadoPor: 'padres', MensajeGenerado: 'false' },
+      MotivoCategoria: 'Estudios', MotivoDetalle: 'Examen de inglés', JustificadoPor: 'padres', MensajeGenerado: 'false' },
   ];
   c.app.state.sesionId = 's12';
   return c;
@@ -95,13 +96,14 @@ test('el mensaje se formatea desde tipo, minutos, motivo y detalle, nunca desde 
   const ausencia = app.notifications.justificacion(app.cache.asistJugadores[0]);
   assert.equal(ausencia.tipo, 'Ausencia');
   assert.equal(ausencia.minutos, null);
+  assert.equal(ausencia.motivo, 'Salud');
   assert.equal(ausencia.mensaje, 'Los padres/tutores de Raúl Delgado Martínez han notificado una ausencia al entrenamiento del Martes 12/05/2026 a las 20:00 ' +
-    'del equipo Senior Masculino. Motivo: Lesión. Información adicional: "Esguince tobillo derecho".');
+    'del equipo Senior Masculino. Motivo: Salud.');
   const retraso = app.notifications.justificacion(app.cache.asistJugadores[1]);
   assert.equal(retraso.tipo, 'Retraso');
   assert.equal(retraso.minutos, 20);
   assert.equal(retraso.mensaje, 'Los padres/tutores de Leo Ruiz han notificado una llegada con retraso al entrenamiento del Martes 12/05/2026 a las 20:00 ' +
-    'del equipo Senior Masculino. Motivo: Estudios. Llegará con unos 20 minutos de retraso.');
+    'del equipo Senior Masculino. Motivo: Estudios. Llegará con unos 20 minutos de retraso. Información adicional: "Examen de inglés".');
 });
 
 test('la sesión guardada muestra el chip «Justificada» y abre la misma hoja que el pase de lista', () => {
@@ -120,7 +122,8 @@ test('la sesión guardada muestra el chip «Justificada» y abre la misma hoja q
   app.views['sesion-guardada'].verJustif('raul');
   app.views.sesion.verJustificacion('raul');
   const [hoja, paseDeLista] = modals;
-  assert.ok(hoja.html.includes('Información adicional: &quot;Esguince tobillo derecho&quot;.'));
+  assert.ok(hoja.html.includes('Motivo: Salud.'));
+  assert.doesNotMatch(hoja.html, /Esguince|Lesión/);
   assert.match(hoja.html, /is-absent">Ausencia</);
   assert.doesNotMatch(hoja.html, />false<|\bpre\b/);
   assert.equal(hoja.title, paseDeLista.title);

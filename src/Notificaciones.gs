@@ -86,7 +86,7 @@ CB Baeza — Gestión de Asistencia`;
    * @param {Object} equipo         - Registro de Equipos
    * @param {string} tipoIncidencia - 'Ausencia' | 'Retraso'
    * @param {string} motivo         - Categoría del motivo
-   * @param {string} detalle        - Texto libre adicional
+   * @param {string} detalle        - Texto libre adicional (nunca se envía con «Salud»)
    * @param {string} mensaje        - Mensaje auto-generado
    * @returns {boolean}
    */
@@ -99,6 +99,9 @@ CB Baeza — Gestión de Asistencia`;
     const marca = esProgramada ? ' [Programada]' : '';
     const asunto    = `CB Baeza — Justificación${marca}: ${jugador.Nombre} ${jugador.Apellidos} (${fechaForm})`;
 
+    // Datos de salud: el correo solo dice «Salud», nunca el detalle (aunque venga de un registro antiguo).
+    motivo = motivoJustificacion_(motivo);
+    detalle = detalleJustificacion_(motivo, detalle);
     const cuerpoDetalle = detalle ? `\nInformación adicional: ${detalle}` : '';
     const cuerpo = `Hola,
 
@@ -164,6 +167,8 @@ CB Baeza — Gestión de Asistencia`;
    * El cliente replica este texto en App.views.justificacion.mensaje para el resumen previo al envío.
    */
   generarMensajeJustificacion(jugador, sesion, equipo, tipoIncidencia, motivo, detalle, horaIncorporacion, minutosRetraso) {
+    motivo = motivoJustificacion_(motivo);
+    detalle = detalleJustificacion_(motivo, detalle);
     const fechaForm   = Notificaciones._formatFecha(sesion.Fecha);
     const diaNombre   = Notificaciones._diaSemana(sesion.Fecha);
     const tipoTexto   = tipoIncidencia === 'Ausencia' ? 'una ausencia' : 'una llegada con retraso';

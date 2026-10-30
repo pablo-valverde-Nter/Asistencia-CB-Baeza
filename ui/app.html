@@ -534,7 +534,7 @@ const App = {
       if (!sesion || !jugador) return null;
       var tipo = this._tipo(registro);
       var minutos = tipo === 'Retraso' && Number(registro.MinutosRetraso) > 0 ? Number(registro.MinutosRetraso) : null;
-      var motivo = registro.MotivoCategoria || 'Sin especificar', detalle = registro.MotivoDetalle || '';
+      var motivo = _motivoJustificacion(registro.MotivoCategoria) || 'Sin especificar', detalle = registro.MotivoDetalle || '';
       return {
         jugador: jugador, sesion: sesion, tipo: tipo, minutos: minutos, motivo: motivo,
         mensaje: App.views.justificacion.mensaje(jugador, sesion, App.cache.getEquipoById(sesion.ID_Equipo), tipo, motivo, detalle, minutos),
@@ -1177,10 +1177,11 @@ const App = {
     var el = document.getElementById('view-' + view);
     if (el) el.classList.add('active');
 
-    // Ocultar header y nav inferior si es la pantalla de Login
-    var isLogin = (view === 'login');
+    // Ocultar header y nav inferior si es la pantalla de Login; sin sesión (políticas abiertas desde el login) solo queda volver.
+    var isLogin = (view === 'login'), sinSesion = !App.state.rol;
     document.getElementById('app-header').classList.toggle('hidden', isLogin);
-    document.getElementById('bottom-nav').classList.toggle('hidden', isLogin);
+    document.getElementById('bottom-nav').classList.toggle('hidden', isLogin || sinSesion);
+    document.getElementById('user-menu-wrap').classList.toggle('hidden', sinSesion);
 
     document.querySelectorAll('.nav-tab').forEach(function(tab) {
       var navView = (view === 'mis-stats' || view === 'mi-equipo') ? 'perfil-jugador' : view === 'informes' ? 'gestion' : view;
@@ -1658,7 +1659,7 @@ const App = {
             tipoJustif: reg ? (reg.TipoJustificacion || '') : '',
             // Tipo legible (Ausencia/Retraso): los registros heredados guardan 'pre'/'post' en TipoJustificacion.
             tipoAviso: tieneJustif ? App.notifications._tipo(reg) : '',
-            motivoJustif: reg ? (reg.MotivoCategoria || '') : '',
+            motivoJustif: reg ? (_motivoJustificacion(reg.MotivoCategoria) || '') : '',
           };
         });
 
@@ -3898,7 +3899,8 @@ const App = {
         if (!App.account.allowed()) return;
         var entries = [{icon:'seguridad',titulo:jugador ? 'Cambiar PIN y usuario' : 'Cambiar PIN',descripcion:'Actualiza tus credenciales de acceso',action:"App.navigate('seguridad-opcion',{opcion:'pin'})"}];
         if (jugador && (!staff || App.state.esAdmin)) entries.push({icon:'privacidad',titulo:'Cambiar código de seguridad',descripcion:'Protege tus datos y justificaciones',action:"App.navigate('seguridad-opcion',{opcion:'codigo'})"});
-        if (!staff) entries.push({icon:'correo',titulo:'¿Olvidaste tu PIN o código?',descripcion:'Recupera el acceso con un código por email',view:'recuperar-acceso'},{icon:'privacidad',titulo:'Política de privacidad',descripcion:'Cómo protegemos los datos del club',view:'politica-privacidad'},{icon:'cookies',titulo:'Política de cookies',descripcion:'Qué guarda la aplicación en tu dispositivo',view:'politica-cookies'});
+        if (!staff) entries.push({icon:'correo',titulo:'¿Olvidaste tu PIN o código?',descripcion:'Recupera el acceso con un código por email',view:'recuperar-acceso'});
+        entries.push({icon:'privacidad',titulo:'Política de privacidad',descripcion:'Cómo protegemos los datos del club',view:'politica-privacidad'},{icon:'cookies',titulo:'Política de cookies',descripcion:'Qué guarda la aplicación en tu dispositivo',view:'politica-cookies'});
         document.getElementById('seguridad-contenido').innerHTML = '<div class="account-intro"><span class="account-eyebrow">TU CUENTA, PROTEGIDA</span><h2>Seguridad</h2><p>Controla cómo accedes y cómo recuperar tus credenciales.</p></div>' + App.accountList(entries);
         App.state._formIsDirty = false;
       },
@@ -4036,12 +4038,12 @@ const App = {
     },
     'politica-privacidad': {
       render: function() {
-        document.getElementById('politica-privacidad-contenido').innerHTML = '<article class="account-card policy-text"><h2>Política de privacidad</h2><h3>Responsable del tratamiento</h3><p>El Club de Baloncesto Baeza es el responsable de los datos utilizados en esta aplicación. Puedes contactar con el club a través de sus entrenadores o de su directiva para cualquier consulta sobre privacidad.</p><h3>Qué datos tratamos</h3><p>Datos de identificación, credenciales de acceso, información de contacto, contactos familiares, asignación a equipos, asistencia a entrenamientos, justificaciones de ausencias o retrasos y, si decides añadirla, tu fotografía de perfil. Las justificaciones pueden contener información sensible: incluye únicamente lo necesario para comunicar la incidencia.</p><h3>Para qué los utilizamos</h3><p>Gestionamos la actividad deportiva y la asistencia del club, facilitamos el trabajo de los entrenadores y enviamos avisos relacionados con la asistencia a las familias que los tengan activados. No utilizamos los datos para publicidad.</p><h3>Base jurídica y menores</h3><p>El tratamiento se apoya en el consentimiento para las funciones que lo requieren y en el interés legítimo del club en organizar su actividad deportiva, respetando los derechos de las personas. Los datos de menores se facilitan y gestionan mediante sus madres, padres o tutores legales. Puedes retirar tu consentimiento cuando corresponda, sin afectar a los tratamientos anteriores a su retirada.</p><h3>Destinatarios e infraestructura</h3><p>No cedemos tus datos a terceros para sus propios fines. El personal autorizado del club accede solo a la información necesaria para sus funciones. Google (Apps Script y Gmail) y Supabase actúan como proveedores de infraestructura y encargados del tratamiento. Sus servicios pueden implicar tratamiento fuera del Espacio Económico Europeo, sujeto a las garantías de protección de datos aplicables.</p><h3>Conservación</h3><p>Conservamos los datos durante la relación deportiva y el tiempo necesario para gestionar las temporadas, atender solicitudes y cumplir las obligaciones legales aplicables. Después se eliminan o anonimizan cuando dejan de ser necesarios. El club revisa la necesidad de conservar el historial y los contactos familiares.</p><h3>Tus derechos</h3><p>Puedes solicitar acceso, rectificación, supresión, oposición, limitación del tratamiento y portabilidad de tus datos, en los casos previstos por la normativa, contactando con la directiva o los entrenadores del club. Para proteger tu información puede ser necesario acreditar tu identidad o representación legal. También puedes presentar una reclamación ante la Agencia Española de Protección de Datos (AEPD), en <a href="https://www.aepd.es" target="_blank" rel="noopener noreferrer">www.aepd.es</a>.</p><h3>Seguridad</h3><p>Aplicamos controles de acceso por perfil y medidas técnicas y organizativas para proteger la información. No compartas tu PIN ni tu código de seguridad y cierra la sesión en dispositivos compartidos. Comunica al club cualquier acceso no autorizado que detectes.</p></article>';
+        document.getElementById('politica-privacidad-contenido').innerHTML = '<article class="account-card policy-text"><h2>Política de privacidad</h2><p class="policy-version">Última actualización: 30/10/2026</p><h3>Responsable del tratamiento</h3><p>El Club de Baloncesto Baeza es el responsable de los datos utilizados en esta aplicación. Puedes contactar con el club a través de sus entrenadores o de su directiva para cualquier consulta sobre privacidad.</p><h3>Qué datos tratamos</h3><p>Datos de identificación, credenciales de acceso, información de contacto, contactos familiares, asignación a equipos, asistencia a entrenamientos, justificaciones de ausencias o retrasos y, si decides añadirla, tu fotografía de perfil.</p><p>Si una ausencia o un retraso se debe a la salud, la justificación solo indica «Salud», sin diagnósticos ni detalles: con ese motivo la aplicación no admite texto libre y los correos solo dicen «Salud». En los demás motivos, incluye únicamente lo necesario para comunicar la incidencia.</p><h3>Para qué los utilizamos</h3><p>Gestionamos la actividad deportiva y la asistencia del club, facilitamos el trabajo de los entrenadores y enviamos avisos relacionados con la asistencia a las familias que los tengan activados. No utilizamos los datos para publicidad.</p><h3>Ranking de asistencia del equipo</h3><p>Los jugadores de un mismo equipo ven en «Mi equipo» un ranking de asistencia con el nombre y la foto de perfil de sus compañeros, junto a su porcentaje de asistencia, su racha y sus logros. El ranking no muestra ausencias concretas, motivos ni justificaciones.</p><h3>Base jurídica y menores</h3><p>El tratamiento se apoya en el consentimiento para las funciones que lo requieren y en el interés legítimo del club en organizar su actividad deportiva, respetando los derechos de las personas. Los datos de menores se facilitan y gestionan mediante sus madres, padres o tutores legales. Puedes retirar tu consentimiento cuando corresponda, sin afectar a los tratamientos anteriores a su retirada.</p><h3>Destinatarios e infraestructura</h3><p>No cedemos tus datos a terceros para sus propios fines. El personal autorizado del club accede solo a la información necesaria para sus funciones. La aplicación funciona sobre Google Apps Script y los datos se guardan en Supabase, que actúa como proveedor de infraestructura y encargado del tratamiento. Estos servicios pueden implicar tratamiento fuera del Espacio Económico Europeo, sujeto a las garantías de protección de datos aplicables.</p><h3>Correos automáticos</h3><p>Los avisos de asistencia, las justificaciones y los códigos de recuperación se envían automáticamente desde la cuenta de Gmail de la persona que gestiona la aplicación para el club. Google presta ese servicio de correo como proveedor y su uso puede implicar una transferencia de datos a Estados Unidos, cubierta por el Marco de Privacidad de Datos UE-EE. UU. (EU-US Data Privacy Framework).</p><h3>Conservación</h3><p>Conservamos los datos durante la relación deportiva y el tiempo necesario para gestionar las temporadas, atender solicitudes y cumplir las obligaciones legales aplicables. Después se eliminan o anonimizan cuando dejan de ser necesarios. El club revisa la necesidad de conservar el historial y los contactos familiares.</p><h3>Tus derechos</h3><p>Puedes solicitar acceso, rectificación, supresión, oposición, limitación del tratamiento y portabilidad de tus datos, en los casos previstos por la normativa, contactando con la directiva o los entrenadores del club. Para proteger tu información puede ser necesario acreditar tu identidad o representación legal. También puedes presentar una reclamación ante la Agencia Española de Protección de Datos (AEPD), en <a href="https://www.aepd.es" target="_blank" rel="noopener noreferrer">www.aepd.es</a>.</p><h3>Seguridad</h3><p>Aplicamos controles de acceso por perfil y medidas técnicas y organizativas para proteger la información. No compartas tu PIN ni tu código de seguridad y cierra la sesión en dispositivos compartidos. Comunica al club cualquier acceso no autorizado que detectes.</p></article>';
       },
     },
     'politica-cookies': {
       render: function() {
-        document.getElementById('politica-cookies-contenido').innerHTML = '<article class="account-card policy-text"><h2>Política de cookies y almacenamiento</h2><h3>Sin publicidad ni analítica</h3><p>Esta aplicación no utiliza cookies de publicidad ni de analítica. Guarda información técnica en el almacenamiento local de tu navegador (localStorage) para que puedas utilizarla.</p><h3>Qué se guarda en tu dispositivo</h3><ul><li><code>cb_baeza_auth</code>: mantiene tu sesión y tus credenciales de acceso hasta que cierres sesión o borres el almacenamiento.</li><li><code>cb_baeza_prefs</code>: recuerda el idioma y el tema visual elegidos.</li><li>Borradores locales: permiten recuperar cambios pendientes en formularios de la aplicación.</li></ul><p>El almacenamiento local no se envía automáticamente como una cookie. La aplicación utiliza la sesión guardada para autenticar las peticiones al servidor. Quien tenga acceso a tu dispositivo puede acceder a la sesión: evita guardar el acceso en equipos compartidos.</p><h3>Cookies técnicas de Google</h3><p>Google puede establecer cookies técnicas necesarias para servir la aplicación mediante Apps Script y para la seguridad o funcionamiento de su plataforma, según tu navegador y tu sesión de Google.</p><h3>Cómo borrar estos datos</h3><p>Puedes cerrar sesión desde el menú de usuario. Para borrar preferencias, borradores y cookies, abre la configuración de privacidad de tu navegador, busca los datos de sitios de Google Apps Script y elimina sus cookies y almacenamiento. También puedes borrar todos los datos de navegación. Perderás la sesión, las preferencias y los borradores guardados. Bloquear el almacenamiento o las cookies técnicas puede impedir algunas funciones.</p></article>';
+        document.getElementById('politica-cookies-contenido').innerHTML = '<article class="account-card policy-text"><h2>Política de cookies y almacenamiento</h2><h3>Sin publicidad ni analítica</h3><p>Esta aplicación no utiliza cookies de publicidad ni de analítica. Guarda información técnica en el almacenamiento local de tu navegador (localStorage) para que puedas utilizarla.</p><h3>Qué se guarda en tu dispositivo</h3><ul><li><code>cb_baeza_auth</code>: mantiene tu sesión y tus credenciales de acceso hasta que cierres sesión o borres el almacenamiento.</li><li><code>cb_baeza_prefs</code>: recuerda el idioma y el tema visual elegidos.</li><li><code>cb-baeza-notifications-v1:&lt;id&gt;</code>: recuerda qué notificaciones del buzón has leído o borrado.</li><li><code>cb-baeza-alertas-v1:&lt;id&gt;</code>: recuerda qué alertas de ausencias seguidas has marcado como «Contactado» (entrenadores y administración).</li><li>Borradores locales: permiten recuperar cambios pendientes en formularios de la aplicación.</li></ul><p>El final &lt;id&gt; de estas dos claves identifica tu cuenta, para que cada persona que use el dispositivo conserve su propio estado.</p><p>El almacenamiento local no se envía automáticamente como una cookie. La aplicación utiliza la sesión guardada para autenticar las peticiones al servidor. Quien tenga acceso a tu dispositivo puede acceder a la sesión: evita guardar el acceso en equipos compartidos.</p><h3>Cookies técnicas de Google</h3><p>Google puede establecer cookies técnicas necesarias para servir la aplicación mediante Apps Script y para la seguridad o funcionamiento de su plataforma, según tu navegador y tu sesión de Google.</p><h3>Cómo borrar estos datos</h3><p>Puedes cerrar sesión desde el menú de usuario. Para borrar preferencias, borradores y cookies, abre la configuración de privacidad de tu navegador, busca los datos de sitios de Google Apps Script y elimina sus cookies y almacenamiento. También puedes borrar todos los datos de navegación. Perderás la sesión, las preferencias y los borradores guardados. Bloquear el almacenamiento o las cookies técnicas puede impedir algunas funciones.</p></article>';
       },
     },
 
@@ -4234,6 +4236,7 @@ const App = {
         });
         document.getElementById('justif-otros').classList.toggle('hidden', !this._otrosMinutos);
         document.querySelectorAll('#justif-steps [data-motivo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.motivo === datos.motivo)); });
+        this._mostrarDetalle();
         document.getElementById('justif-motivo-next').disabled = !datos.motivo;
         var progreso = document.getElementById('justif-progress');
         progreso.classList.toggle('hidden', pasos.length < 2);
@@ -4301,20 +4304,31 @@ const App = {
       elegirMotivo: function(motivo) {
         this._datos.motivo = motivo;
         document.querySelectorAll('#justif-steps [data-motivo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.motivo === motivo)); });
+        this._mostrarDetalle();
         var continuar = document.getElementById('justif-motivo-next');
         continuar.disabled = false;
         // El detalle es opcional: se desplaza hasta él y hasta Continuar sin cambiar de paso.
         if (continuar.scrollIntoView) continuar.scrollIntoView({ block: 'nearest', behavior: this._sinMovimiento() ? 'auto' : 'smooth' });
       },
 
+      // Con «Salud» no hay texto libre (datos de salud): el campo se oculta, se desactiva y se vacía.
+      _mostrarDetalle: function() {
+        var salud = _motivoJustificacion(this._datos.motivo) === MOTIVO_SALUD, campo = document.getElementById('justif-detalle');
+        document.getElementById('justif-detalle-grupo').classList.toggle('hidden', salud);
+        campo.disabled = salud;
+        if (salud) { campo.value = ''; this._datos.detalle = ''; }
+      },
+
       continuarMotivo: function() {
         if (!this._datos.motivo) return;
-        this._datos.detalle = document.getElementById('justif-detalle').value.trim();
+        this._datos.detalle = _detalleJustificacion(this._datos.motivo, document.getElementById('justif-detalle').value.trim());
         this.siguiente();
       },
 
       // Réplica de Notificaciones.generarMensajeJustificacion: lo que se muestra es lo que recibe el entrenador.
       mensaje: function(jugador, sesion, equipo, tipo, motivo, detalle, minutos) {
+        motivo = _motivoJustificacion(motivo);
+        detalle = _detalleJustificacion(motivo, detalle);
         var partes = String(sesion.Fecha || '').split('-'), numeros = partes.map(Number);
         var valida = partes.length === 3 && numeros.every(function(n) { return Number.isInteger(n); });
         var dias = ['Domingo', 'Lunes', 'Martes', 'Mi\u00e9rcoles', 'Jueves', 'Viernes', 'S\u00e1bado'];
@@ -4331,6 +4345,8 @@ const App = {
       // Resumen de una programación: el mismo estilo de mensaje, aplicado a cada entrenamiento elegido.
       // Con entrenamientos de varios equipos se nombra cada equipo («de Infantil los lunes… y de Cadete los martes…»).
       mensajeProgramacion: function(jugador, horarios, tipo, motivo, detalle, minutos) {
+        motivo = _motivoJustificacion(motivo);
+        detalle = _detalleJustificacion(motivo, detalle);
         var plurales = ['lunes', 'martes', 'mi\u00e9rcoles', 'jueves', 'viernes', 's\u00e1bados', 'domingos'], porEquipo = {}, orden = [];
         horarios.forEach(function(h) {
           if (!porEquipo[h.ID_Equipo]) { porEquipo[h.ID_Equipo] = []; orden.push(h.ID_Equipo); }
@@ -5369,6 +5385,16 @@ function _minutosEntre(inicio, fin) {
   var a = String(inicio || '').split(':').map(Number), b = String(fin || '').split(':').map(Number);
   var minutos = (b[0] * 60 + b[1]) - (a[0] * 60 + a[1]);
   return Number.isInteger(minutos) && minutos >= 1 && minutos <= 180 ? minutos : null;
+}
+
+// Réplica de motivoJustificacion_/detalleJustificacion_ (Config.gs): Lesión/Enfermedad se leen como «Salud»
+// y con «Salud» nunca hay texto libre.
+var MOTIVO_SALUD = 'Salud', MOTIVOS_SALUD_ANTIGUOS = ['Lesi\u00f3n', 'Enfermedad'];
+function _motivoJustificacion(motivo) {
+  return MOTIVOS_SALUD_ANTIGUOS.indexOf(motivo) >= 0 ? MOTIVO_SALUD : motivo;
+}
+function _detalleJustificacion(motivo, detalle) {
+  return _motivoJustificacion(motivo) === MOTIVO_SALUD ? '' : (detalle || '');
 }
 
 // «a», «a y b», «a, b y c».
@@ -6749,13 +6775,19 @@ App.i18n = {
 "Responsable del tratamiento":"Data controller",
 "El Club de Baloncesto Baeza es el responsable de los datos utilizados en esta aplicación. Puedes contactar con el club a través de sus entrenadores o de su directiva para cualquier consulta sobre privacidad.":"Club de Baloncesto Baeza is responsible for the data used in this application. Contact the club's coaches or board with any privacy questions.",
 "Qué datos tratamos":"What data we process",
-"Datos de identificación, credenciales de acceso, información de contacto, contactos familiares, asignación a equipos, asistencia a entrenamientos, justificaciones de ausencias o retrasos y, si decides añadirla, tu fotografía de perfil. Las justificaciones pueden contener información sensible: incluye únicamente lo necesario para comunicar la incidencia.":"Identification details, sign-in credentials, contact information, family contacts, team assignments, training attendance, absence or lateness explanations and, if you add one, your profile photo. Explanations may contain sensitive information: include only what is needed to communicate the incident.",
+"Datos de identificación, credenciales de acceso, información de contacto, contactos familiares, asignación a equipos, asistencia a entrenamientos, justificaciones de ausencias o retrasos y, si decides añadirla, tu fotografía de perfil.":"Identification details, sign-in credentials, contact information, family contacts, team assignments, training attendance, absence or lateness explanations and, if you add one, your profile photo.",
+"Si una ausencia o un retraso se debe a la salud, la justificación solo indica «Salud», sin diagnósticos ni detalles: con ese motivo la aplicación no admite texto libre y los correos solo dicen «Salud». En los demás motivos, incluye únicamente lo necesario para comunicar la incidencia.":"If an absence or late arrival is health-related, the explanation only says «Health», with no diagnosis or details: with that reason the app accepts no free text and emails only say «Health». For other reasons, include only what is needed to communicate the incident.",
+"Última actualización: 30/10/2026":"Last updated: 30/10/2026",
+"Ranking de asistencia del equipo":"Team attendance ranking",
+"Los jugadores de un mismo equipo ven en «Mi equipo» un ranking de asistencia con el nombre y la foto de perfil de sus compañeros, junto a su porcentaje de asistencia, su racha y sus logros. El ranking no muestra ausencias concretas, motivos ni justificaciones.":"Players on the same team see an attendance ranking in «My team» showing their teammates' names and profile photos, together with their attendance rate, streak and achievements. The ranking does not show specific absences, reasons or explanations.",
+"Correos automáticos":"Automatic emails",
+"Los avisos de asistencia, las justificaciones y los códigos de recuperación se envían automáticamente desde la cuenta de Gmail de la persona que gestiona la aplicación para el club. Google presta ese servicio de correo como proveedor y su uso puede implicar una transferencia de datos a Estados Unidos, cubierta por el Marco de Privacidad de Datos UE-EE. UU. (EU-US Data Privacy Framework).":"Attendance notices, explanations and recovery codes are sent automatically from the Gmail account of the person who manages the app for the club. Google provides that email service as a provider, and its use may involve a transfer of data to the United States, covered by the EU-US Data Privacy Framework.",
 "Para qué los utilizamos":"How we use your data",
 "Gestionamos la actividad deportiva y la asistencia del club, facilitamos el trabajo de los entrenadores y enviamos avisos relacionados con la asistencia a las familias que los tengan activados. No utilizamos los datos para publicidad.":"We manage the club's sporting activities and attendance, support coaches and send attendance notifications to families who enable them. We do not use your data for advertising.",
 "Base jurídica y menores":"Legal basis and minors",
 "El tratamiento se apoya en el consentimiento para las funciones que lo requieren y en el interés legítimo del club en organizar su actividad deportiva, respetando los derechos de las personas. Los datos de menores se facilitan y gestionan mediante sus madres, padres o tutores legales. Puedes retirar tu consentimiento cuando corresponda, sin afectar a los tratamientos anteriores a su retirada.":"Processing relies on consent where required and on the club's legitimate interest in organising its sporting activities while respecting individual rights. Minors' data is provided and managed by parents or legal guardians. Where applicable, you may withdraw consent without affecting processing carried out before withdrawal.",
 "Destinatarios e infraestructura":"Recipients and infrastructure",
-"No cedemos tus datos a terceros para sus propios fines. El personal autorizado del club accede solo a la información necesaria para sus funciones. Google (Apps Script y Gmail) y Supabase actúan como proveedores de infraestructura y encargados del tratamiento. Sus servicios pueden implicar tratamiento fuera del Espacio Económico Europeo, sujeto a las garantías de protección de datos aplicables.":"We do not share your data with third parties for their own purposes. Authorised club staff access only information needed for their roles. Google (Apps Script and Gmail) and Supabase provide infrastructure and act as data processors. Their services may involve processing outside the European Economic Area, subject to applicable data protection safeguards.",
+"No cedemos tus datos a terceros para sus propios fines. El personal autorizado del club accede solo a la información necesaria para sus funciones. La aplicación funciona sobre Google Apps Script y los datos se guardan en Supabase, que actúa como proveedor de infraestructura y encargado del tratamiento. Estos servicios pueden implicar tratamiento fuera del Espacio Económico Europeo, sujeto a las garantías de protección de datos aplicables.":"We do not share your data with third parties for their own purposes. Authorised club staff access only information needed for their roles. The app runs on Google Apps Script and data is stored in Supabase, which provides infrastructure and acts as a data processor. These services may involve processing outside the European Economic Area, subject to applicable data protection safeguards.",
 "Conservación":"Retention",
 "Conservamos los datos durante la relación deportiva y el tiempo necesario para gestionar las temporadas, atender solicitudes y cumplir las obligaciones legales aplicables. Después se eliminan o anonimizan cuando dejan de ser necesarios. El club revisa la necesidad de conservar el historial y los contactos familiares.":"We retain data throughout your sporting relationship with the club and as long as needed to manage seasons, respond to requests and meet applicable legal obligations. Data is then deleted or anonymised when no longer needed. The club reviews the need to retain historical records and family contacts.",
 "Tus derechos":"Your rights",
@@ -6767,6 +6799,10 @@ App.i18n = {
 "Qué se guarda en tu dispositivo":"What is saved on your device",
 ": mantiene tu sesión y tus credenciales de acceso hasta que cierres sesión o borres el almacenamiento.":": keeps your session and sign-in credentials until you sign out or clear storage.",
 ": recuerda el idioma y el tema visual elegidos.":": remembers your chosen language and theme.",
+": recuerda qué notificaciones del buzón has leído o borrado.":": remembers which inbox notifications you have read or deleted.",
+": recuerda qué alertas de ausencias seguidas has marcado como «Contactado» (entrenadores y administración).":": remembers which consecutive-absence alerts you have marked as «Contacted» (coaches and administration).",
+"El final <id> de estas dos claves identifica tu cuenta, para que cada persona que use el dispositivo conserve su propio estado.":"The <id> ending of these two keys identifies your account, so each person using the device keeps their own state.",
+"No indiques diagnósticos ni detalles de salud.":"Do not include diagnoses or health details.",
 "Borradores locales: permiten recuperar cambios pendientes en formularios de la aplicación.":"Local drafts: allow you to recover unsaved changes in app forms.",
 "El almacenamiento local no se envía automáticamente como una cookie. La aplicación utiliza la sesión guardada para autenticar las peticiones al servidor. Quien tenga acceso a tu dispositivo puede acceder a la sesión: evita guardar el acceso en equipos compartidos.":"Local storage is not automatically sent like a cookie. The app uses your saved session to authenticate server requests. Anyone with access to your device may access your session: avoid saving sign-in details on shared devices.",
 "Cookies técnicas de Google":"Google technical cookies",
@@ -7087,6 +7123,7 @@ App.i18n = {
   "Motivos": "Reasons",
   "Sin motivo": "No reason",
   "Otro": "Other",
+  "Salud": "Health",
   "Observaciones": "Notes",
   "Fecha": "Date",
   "Hora": "Time",
