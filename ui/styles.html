@@ -14,6 +14,7 @@
   --morado-xs:    #FAF0FF;
   --blanco:       #FFFFFF;
   --fondo:        #F7F7F8;
+  --wizard-bg:    #FFFFFF;
   --texto:        #1A1A1A;
   --texto-sec:    #5F5F5F;
   --borde:        #E5E5E5;
@@ -60,7 +61,7 @@
 html[data-theme="oscuro"] {
   color-scheme: dark;
   --morado:#CEADFF; --morado-m:#BC93EE; --morado-s:#352342; --morado-xs:#2B1D37;
-  --blanco:#21142F; --fondo:#180E22; --texto:#F5EEF9; --texto-sec:#C2B2CE; --borde:#51405F;
+  --blanco:#21142F; --fondo:#180E22; --wizard-bg:#180E22; --texto:#F5EEF9; --texto-sec:#C2B2CE; --borde:#51405F;
   --verde:#81D897; --verde-s:#193D2B; --rojo:#FFACA9; --rojo-s:#492126;
   --naranja:#FFD08B; --naranja-s:#463321; --ambar:#FFD181; --ambar-s:#44351E;
   --stats-positive:#C49AF3; --stats-gold:#E3BF6C; --stats-coral:#E9A397; --programado:#BC93EE;
@@ -72,7 +73,7 @@ html[data-theme="oscuro"] {
 /* Equipación Baeza Patrimonio: granate, blanco y gris claro. */
 html[data-theme="patrimonio"] {
   --morado:#7B1E24; --morado-m:#A3343C; --morado-s:#EFEAEA; --morado-xs:#F8F5F5;
-  --blanco:#FFFFFF; --fondo:#F4F4F4; --texto:#211A1B; --texto-sec:#5C5455; --borde:#E0DCDC;
+  --blanco:#FFFFFF; --fondo:#F4F4F4; --wizard-bg:#F4F4F4; --texto:#211A1B; --texto-sec:#5C5455; --borde:#E0DCDC;
   --stats-positive:#8F2830; --stats-gold:#E0A93A; --stats-coral:#EC967A; --programado:#8C8586;
   --fuego-ext:#C4391D; --fuego-med:#EE7A1F; --fuego-int:#F6B530; --fuego-nucleo:#FFF1C9; --fuego-azul:#3FA9E0; --fuego-blanco:#FFFDF7;
   --brand-bg:#7B1E24; --brand-end:#9A2A33; --on-accent-error:#FFCDD2;
@@ -1700,9 +1701,21 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
   flex: 1; min-width: 0; padding: 10px 12px; border: 1.5px solid var(--borde); border-radius: 8px;
   background: var(--fondo); color: var(--texto); font-size: 1rem;
 }
-/* ── Asistente de alta de jugador: altura fija (no salta entre pasos); el cuerpo desplaza si un paso no cabe. ── */
-.alta-wizard { height: min(86vh, 640px); max-height: min(86vh, 640px); min-height: 0; }
+/* ── Asistentes en tarjetas a pantalla completa (alta de jugador y bienvenida): fondo limpio del tema y una tarjeta
+   centrada de altura fija (no salta entre pasos). Solo desplaza el contenido; los botones quedan fijos abajo. ── */
+.modal-justif-overlay.wizard-cards { align-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px)); background: var(--wizard-bg); }
+.wizard-cards .alta-wizard { max-width: 460px; height: min(680px, 100%); max-height: 100%; min-height: 0; border: 1px solid var(--borde); border-radius: 24px; box-shadow: var(--sombra-lg); overflow: hidden; transform: translateY(14px) scale(.98); transition: transform .22s cubic-bezier(.2,.8,.3,1); }
+.wizard-cards:not(.hidden) .alta-wizard { transform: none; }
+.wizard-cards .justif-wizard-hdr { padding: 10px 8px 4px; }
 .alta-wizard .justif-steps { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.wizard-cards .justif-wizard .justif-steps { padding-bottom: 0; }
+.wizard-cards .justif-actions { position: sticky; bottom: 0; z-index: 1; margin: auto -16px 0; padding: 12px 16px 16px; background: var(--blanco); }
+.wizard-cards .justif-actions:has(> .btn-secondary) { flex-direction: row-reverse; }
+.wizard-cards .justif-actions:has(> .btn-secondary) > .btn { flex: 1 1 0; min-width: 0; min-height: 48px; }
+@media (max-width: 400px) {
+  .modal-justif-overlay.wizard-cards { padding-left: 12px; padding-right: 12px; }
+  .wizard-cards .alta-wizard { border-radius: 20px; }
+}
 .alta-wizard .form-group :is(input:not([type="checkbox"])) { min-height: 44px; min-width: 0; }
 .alta-wizard .form-group > label:not(.parent-email-notify) { display: block; margin-bottom: 6px; font-size: .8rem; font-weight: 600; color: var(--texto-sec); }
 .alta-label-row { display: flex; align-items: center; gap: 4px; margin: 0 0 6px; }

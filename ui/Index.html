@@ -586,10 +586,9 @@
     </div>
   </div>
 
-  <!-- Asistente paso a paso de alta de jugador (entrenador/admin): mismos componentes que el de justificación -->
-  <div id="modal-alta-jugador" class="modal-justif-overlay hidden" onclick="App.views.altaJugador.cerrar(event)">
+  <!-- Asistente paso a paso de alta de jugador (entrenador/admin): tarjetas a pantalla completa, mismos componentes que el de justificación -->
+  <div id="modal-alta-jugador" class="modal-justif-overlay wizard-cards hidden" onclick="App.views.altaJugador.cerrar(event)">
     <div class="modal-justif-sheet justif-wizard alta-wizard" role="dialog" aria-modal="true" aria-labelledby="alta-titulo">
-      <div class="modal-handle"></div>
       <div class="modal-hdr justif-wizard-hdr">
         <button type="button" id="alta-atras" class="justif-back" onclick="App.views.altaJugador.atras()" aria-label="Paso anterior">&#8249; Atr&aacute;s</button>
         <h3 id="alta-titulo">Nuevo jugador</h3>
@@ -691,13 +690,12 @@
     </div>
   </div>
 
-  <!-- Asistente de bienvenida (primera entrada de jugador/familia): mismos componentes que el alta de jugador -->
-  <div id="modal-bienvenida" class="modal-justif-overlay hidden">
+  <!-- Asistente de bienvenida (primera entrada de jugador/familia): tarjetas a pantalla completa como el alta de jugador -->
+  <div id="modal-bienvenida" class="modal-justif-overlay wizard-cards hidden">
     <div class="modal-justif-sheet justif-wizard alta-wizard bienvenida-wizard" role="dialog" aria-modal="true" aria-labelledby="bienvenida-titulo">
-      <div class="modal-handle"></div>
       <div class="modal-hdr justif-wizard-hdr">
         <button type="button" id="bienvenida-atras" class="justif-back" onclick="App.views.bienvenida.atras()" aria-label="Paso anterior">&#8249; Atr&aacute;s</button>
-        <h3 id="bienvenida-titulo">Bienvenida</h3>
+        <h3 id="bienvenida-titulo">Bienvenido/a</h3>
         <button type="button" class="modal-x" onclick="App.views.bienvenida.cerrar()" aria-label="Cerrar">&#x2715;</button>
       </div>
       <div id="bienvenida-progress" class="justif-progress">
