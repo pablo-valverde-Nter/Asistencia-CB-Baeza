@@ -173,19 +173,15 @@ const App = {
       var rangoSemana = inicioSemana.toLocaleDateString(App.preferences.locale(), { day: 'numeric', month: 'short' }) +
         ' - ' + finSemana.toLocaleDateString(App.preferences.locale(), { day: 'numeric', month: 'short' });
       var state = App.state.calendar[scope];
-      if (!state) {
-        var mesActual = new Date();
+      // Se rehace cada día para no arrancar en una fecha obsoleta; durante el día conserva el día elegido.
+      if (!state || state.hoy !== hoy) {
+        var inicial = this.fechaInicial(sesiones, hoy, desdeSemana, hastaSemana);
         state = App.state.calendar[scope] = {
-          year: mesActual.getFullYear(),
-          month: mesActual.getMonth(),
-          selected: hoy,
+          hoy: hoy,
+          year: Number(inicial.slice(0, 4)),
+          month: Number(inicial.slice(5, 7)) - 1,
+          selected: inicial,
         };
-        if (!sesiones.some(function(s) { return s.Fecha === hoy; })) {
-          var primeraDelMes = sesiones.find(function(s) {
-            return s.Fecha.slice(0, 7) === hoy.slice(0, 7);
-          });
-          if (primeraDelMes) state.selected = primeraDelMes.Fecha;
-        }
       }
 
       var primero = new Date(state.year, state.month, 1);
@@ -389,6 +385,18 @@ const App = {
       }
       html += '</div></div></div></div></section></div>';
       container.innerHTML = html;
+    },
+
+    // Hoy si tiene entrenamientos; si no, el más cercano de esta semana (a igual distancia, el próximo); si no hay, hoy.
+    fechaInicial: function(sesiones, hoy, desdeSemana, hastaSemana) {
+      var dia = function(fecha) { return Date.UTC(Number(fecha.slice(0, 4)), Number(fecha.slice(5, 7)) - 1, Number(fecha.slice(8, 10))) / 86400000; };
+      var elegida = hoy, distancia = Infinity;
+      sesiones.forEach(function(s) {
+        if (s.Fecha < desdeSemana || s.Fecha > hastaSemana) return;
+        var d = Math.abs(dia(s.Fecha) - dia(hoy));
+        if (d < distancia || (d === distancia && s.Fecha > elegida)) { elegida = s.Fecha; distancia = d; }
+      });
+      return elegida;
     },
 
     move: function(scope, amount) {
@@ -1197,7 +1205,7 @@ const App = {
           }
         });
 
-        App.calendar.render('team', 'sesiones-calendar', sesiones, 'coach');
+        App.calendar.render('team:' + App.state.equipoSesionesId, 'sesiones-calendar', sesiones, 'coach');
       },
 
       abrirSesion: function(sesionId) {
@@ -2418,6 +2426,8 @@ const App = {
           App.views['equipo-form']._renderListas();
           showToast(item.Nombre + ' anadido', 'success');
         } else {
+          var errorDorsal = _errorDorsalFormEquipo(item.ID, (App.cache.getJugadorById(item.ID) || item).Dorsal);
+          if (errorDorsal) { showToast(errorDorsal, 'error'); return; }
           App.state._jugadorPendiente = item;
           App.state._tipoJugSelec = 'Principal';
           document.getElementById('modal-body').innerHTML =
@@ -2670,22 +2680,26 @@ const App = {
         var idsEntAntes = App.state.formEntOriginales;
         var idsJugAhora = App.state.formJugadores.map(function(j) { return j.ID; });
         var idsJugAntes = App.state.formJugOriginales;
-        var promesas = [];
+        var previas = [], altasJugadores = [];
 
         idsEntAhora.filter(function(id) { return idsEntAntes.indexOf(id) < 0; }).forEach(function(id) {
-          promesas.push(server('asignarEntrenadorAEquipo', id, equipoId));
+          previas.push(function() { return server('asignarEntrenadorAEquipo', id, equipoId); });
         });
         idsEntAntes.filter(function(id) { return idsEntAhora.indexOf(id) < 0; }).forEach(function(id) {
-          promesas.push(server('desasignarEntrenadorDeEquipo', id, equipoId));
-        });
-        App.state.formJugadores.filter(function(j) { return idsJugAntes.indexOf(j.ID) < 0; }).forEach(function(j) {
-          promesas.push(server('asignarJugadorAEquipo', j.ID, equipoId, j.Tipo));
+          previas.push(function() { return server('desasignarEntrenadorDeEquipo', id, equipoId); });
         });
         idsJugAntes.filter(function(id) { return idsJugAhora.indexOf(id) < 0; }).forEach(function(id) {
-          promesas.push(server('desasignarJugadorDeEquipo', id, equipoId));
+          previas.push(function() { return server('desasignarJugadorDeEquipo', id, equipoId); });
         });
+        // Las altas de jugadores van tras las bajas: el servidor valida el dorsal contra la plantilla activa.
+        App.state.formJugadores.filter(function(j) { return idsJugAntes.indexOf(j.ID) < 0; }).forEach(function(j) {
+          altasJugadores.push(function() { return server('asignarJugadorAEquipo', j.ID, equipoId, j.Tipo); });
+        });
+        var lanzar = function(lote) { return Promise.all(lote.map(function(fn) { return fn(); })); };
 
-        return Promise.all(promesas).then(function(resultados) {
+        return lanzar(previas).then(function(primeros) {
+          return lanzar(altasJugadores).then(function(segundos) { return primeros.concat(segundos); });
+        }).then(function(resultados) {
           var errores = resultados.filter(function(r) { return r && r.success === false; });
           if (errores.length > 0) {
             throw new Error(errores.map(function(r) { return r.error; }).filter(Boolean).join('; '));
@@ -2868,6 +2882,10 @@ const App = {
         if (datos.TelefonoPadre1 && !_validarTel(datos.TelefonoPadre1)) { showToast('El teléfono del familiar 1 no es válido', 'error'); return; }
         if (datos.EmailPadre2 && !_validarEmail(datos.EmailPadre2)) { showToast('El email del familiar 2 no es válido', 'error'); return; }
         if (datos.TelefonoPadre2 && !_validarTel(datos.TelefonoPadre2)) { showToast('El teléfono del familiar 2 no es válido', 'error'); return; }
+        if (App.state._volverAEquipoFormDespues) {
+          var errorDorsal = _errorDorsalFormEquipo(null, datos.Dorsal);
+          if (errorDorsal) { showToast(errorDorsal, 'error'); return; }
+        }
         if (!force) {
           var dup = App.cache.jugadores.find(function(j) {
             return String(j.Nombre || '').toLowerCase() === datos.Nombre.toLowerCase() &&
@@ -3398,7 +3416,8 @@ const App = {
             : '';
         }
         var statsEl = document.getElementById('perfil-stats');
-        var propio = App.stats.resumen && App.stats.resumen.datos.jugador;
+        // Mientras se recalculan (o si fallan) no se muestran cifras anteriores: carga o error en su lugar.
+        var propio = !App.stats.refreshing && !App.stats.error && App.stats.resumen && App.stats.resumen.datos.jugador;
         document.getElementById('perfil-racha').innerHTML = propio ? _statsRacha(propio) : '';
         statsEl.innerHTML = propio ? _statsHero(propio) + _statsBloque('Últimas 12 sesiones', _htmlHeatmap(propio.sesiones.slice(0,12))) + '<div class="p-16"><button class="btn btn-primary btn-full" onclick="App.navigate(\'mis-stats\')">Ver mis estadísticas</button></div>' : _statsResumenEstado();
       },
@@ -4631,6 +4650,37 @@ function _validarTel(tel) {
   var digits = tel.replace(/[\s\-\.\(\)]/g, '');
   return /^\+?[0-9]{9,15}$/.test(digits);
 }
+// Igual que Equipos._normalizarDorsal_ en el servidor: "04" y "4" son el mismo dorsal; '' = sin dorsal.
+function _normalizarDorsal(dorsal) {
+  var texto = String(dorsal == null ? '' : dorsal).trim();
+  return /^\d+$/.test(texto) ? String(Number(texto)) : texto.toLowerCase();
+}
+// Mensaje si otro de `miembros` (plantilla de un equipo) ya lleva `dorsal`; null si está libre.
+function _errorDorsalEnUso(jugadorId, dorsal, miembros, equipoNombre) {
+  var buscado = _normalizarDorsal(dorsal);
+  if (!buscado) return null;
+  var otro = miembros.find(function(m) {
+    return m.ID !== jugadorId && _normalizarDorsal((App.cache.getJugadorById(m.ID) || m).Dorsal) === buscado;
+  });
+  return otro ? 'El dorsal ' + String(dorsal).trim() + ' ya lo lleva ' + otro.Nombre + ' ' + otro.Apellidos + ' en ' + (equipoNombre || 'este equipo') + '. Elige otro dorsal.' : null;
+}
+// Comprueba `dorsal` en todos los equipos donde el jugador está activo.
+function _errorDorsalEquiposJugador(jugadorId, dorsal) {
+  var equipoIds = App.cache.jugadoresEquipos.filter(function(r) {
+    return r.ID_Jugador === jugadorId && (r.Activo === true || r.Activo === 'TRUE');
+  }).map(function(r) { return r.ID_Equipo; });
+  for (var i = 0; i < equipoIds.length; i++) {
+    var equipo = App.cache.getEquipoById(equipoIds[i]);
+    var error = _errorDorsalEnUso(jugadorId, dorsal, App.cache.getJugadoresByEquipo(equipoIds[i]), equipo && equipo.Nombre);
+    if (error) return error;
+  }
+  return null;
+}
+// Plantilla en edición del formulario de equipo (incluye altas y bajas aún sin guardar).
+function _errorDorsalFormEquipo(jugadorId, dorsal) {
+  var nombre = (document.getElementById('eq-nombre') || {}).value;
+  return _errorDorsalEnUso(jugadorId, dorsal, App.state.formJugadores || [], String(nombre || '').trim());
+}
 
 function server(fn) {
   var args = [].slice.call(arguments, 1);
@@ -4853,16 +4903,16 @@ function _statsAnimate() {
     var previous = _statsRingValues.get(key);
     _statsRingValues.set(key,value);
     if (reduced || value === '' || previous === value) return;
-    var target = Number(value), from = previous == null || previous === '' ? 0 : Number(previous), circle = el.querySelector('.stats-ring-progress'), number = el.querySelector('.stats-ring-number'), start;
+    // Solo se anima el trazo: la cifra visible es siempre el valor real (una captura a mitad de animación mostraba p. ej. 71% en vez de 89%).
+    var target = Number(value), from = previous == null || previous === '' ? 0 : Number(previous), circle = el.querySelector('.stats-ring-progress'), start;
     function tick(now) {
       if (!el.isConnected) return;
       if (start == null) start = now;
       var progress = Math.min(1,(now-start)/800), current = from+(target-from)*(1-Math.pow(1-progress,3));
       circle.setAttribute('stroke-dashoffset',100-Math.max(0,Math.min(100,current)));
-      number.textContent = (progress === 1 ? target : Math.round(current)) + '%';
       if (progress < 1) requestAnimationFrame(tick);
     }
-    circle.setAttribute('stroke-dashoffset',100-from); number.textContent = from + '%'; requestAnimationFrame(tick);
+    circle.setAttribute('stroke-dashoffset',100-from); requestAnimationFrame(tick);
   });
 }
 
@@ -4919,7 +4969,7 @@ function _csvDescargar(nombre, filas) {
 }
 function _statsHero(d, comparativa) {
   _statsQueueMotion();
-  return (App.state.currentView === 'perfil-jugador' && App.stats.refreshing ? '<div class="stat-grid-1"><p class="stats-refresh" role="status"><span aria-hidden="true"></span>Actualizando…</p></div>' : '') + '<div class="stat-grid-2 stats-hero-grid">' + _htmlKpi('Asistencia',_pctTexto(d.asistenciaPct),_htmlTendencia(d.tendenciaPp) + (comparativa == null ? '' : '<span class="stats-comparison">' + (comparativa === 0 ? 'Igual que el club' : Math.abs(comparativa) + (Math.abs(comparativa) === 1 ? ' punto' : ' puntos') + (comparativa > 0 ? ' sobre el club' : ' bajo el club')) + '</span>' + _statsInfoBoton('Comparativa con el club','comparativa')),'kpi-hero') + '<div class="stat-widget kpi-punctual"><div class="stat-widget-title">' + _statsIcon('Puntualidad') + 'Puntualidad' + _statsInfoBoton('Puntualidad') + '</div>' + _statsRing(d.puntualidadPct,'Puntualidad',true) + '<div class="stat-label">Llegadas a tiempo entre quienes asistieron</div><span class="stats-mini-pill">Cada minuto cuenta</span></div></div>';
+  return '<div class="stat-grid-2 stats-hero-grid">' + _htmlKpi('Asistencia',_pctTexto(d.asistenciaPct),_htmlTendencia(d.tendenciaPp) + (comparativa == null ? '' : '<span class="stats-comparison">' + (comparativa === 0 ? 'Igual que el club' : Math.abs(comparativa) + (Math.abs(comparativa) === 1 ? ' punto' : ' puntos') + (comparativa > 0 ? ' sobre el club' : ' bajo el club')) + '</span>' + _statsInfoBoton('Comparativa con el club','comparativa')),'kpi-hero') + '<div class="stat-widget kpi-punctual"><div class="stat-widget-title">' + _statsIcon('Puntualidad') + 'Puntualidad' + _statsInfoBoton('Puntualidad') + '</div>' + _statsRing(d.puntualidadPct,'Puntualidad',true) + '<div class="stat-label">Llegadas a tiempo entre quienes asistieron</div><span class="stats-mini-pill">Cada minuto cuenta</span></div></div>';
 }
 function _statsPorDia(serie) {
   var dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
@@ -5288,6 +5338,10 @@ Object.assign(App.account, {
       for (var n = 1; n <= 2; n++) {
         if (datos['EmailPadre'+n] && !_validarEmail(datos['EmailPadre'+n])) { showToast('El email del familiar ' + n + ' no es válido','error'); return; }
         if (datos['TelefonoPadre'+n] && !_validarTel(datos['TelefonoPadre'+n])) { showToast('El teléfono del familiar ' + n + ' no es válido','error'); return; }
+      }
+      if (datos.Dorsal !== undefined && _normalizarDorsal(datos.Dorsal) !== _normalizarDorsal(persona.Dorsal)) {
+        var errorDorsal = _errorDorsalEquiposJugador(persona.ID, datos.Dorsal);
+        if (errorDorsal) { showToast(errorDorsal,'error'); return; }
       }
     } else {
       if (App.cache.entrenadores.some(function(e) { return e.ID !== persona.ID && String(e.Email || '').toLowerCase() === datos.Email.toLowerCase(); })) { showToast('Ya existe un entrenador con ese email','error'); return; }
@@ -6428,6 +6482,7 @@ App.i18n = {
     [/^El usuario "(.+)" ya está en uso\.$/, 'The username "$1" is already in use.'],
     [/^El email "(.+)" ya está en uso por otro entrenador\.$/, 'The email "$1" is already used by another coach.'],
     [/^Ya existe un entrenador con el email: (.+)$/, 'A coach already exists with the email: $1'],
+    [/^El dorsal (.+) ya lo lleva (.+) en (.+)\. Elige otro dorsal\.$/, 'Jersey number $1 is already worn by $2 in $3. Choose another number.'],
     [/^Vías de contacto de (.+)$/, 'Contact channels for $1'],
     [/^Posición (.+)$/, 'Position $1'],
     [/^([0-9]+) años$/, '$1 years old'],

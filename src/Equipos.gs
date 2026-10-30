@@ -174,7 +174,38 @@ const Equipos = {
       'TelefonoPadre1', 'TelefonoPadre2', 'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2'
     ];
     permitidos.forEach(k => { if (datos[k] !== undefined) campos[k] = datos[k]; });
+    if (campos.Dorsal !== undefined) {
+      const actual = findById(CONFIG.SHEETS.JUGADORES, jugadorId);
+      // Solo se valida un cambio de dorsal: los duplicados heredados no bloquean editar otros datos.
+      if (!actual || Equipos._normalizarDorsal_(actual.Dorsal) !== Equipos._normalizarDorsal_(campos.Dorsal)) {
+        const equipoIds = findWhere(CONFIG.SHEETS.JUGADORES_EQUIPOS, 'ID_Jugador', jugadorId)
+          .filter(r => r.Activo === true || r.Activo === 'TRUE')
+          .map(r => r.ID_Equipo);
+        Equipos._validarDorsalUnico_(jugadorId, campos.Dorsal, equipoIds);
+      }
+    }
     return updateRow(CONFIG.SHEETS.JUGADORES, jugadorId, campos);
+  },
+
+  /** Dorsal comparable: sin espacios y sin ceros a la izquierda ("04" y "4" son el mismo). '' = sin dorsal. */
+  _normalizarDorsal_(dorsal) {
+    const texto = String(dorsal == null ? '' : dorsal).trim();
+    return /^\d+$/.test(texto) ? String(Number(texto)) : texto.toLowerCase();
+  },
+
+  /** Lanza un error si otro jugador activo de alguno de `equipoIds` ya lleva `dorsal`. */
+  _validarDorsalUnico_(jugadorId, dorsal, equipoIds) {
+    const buscado = Equipos._normalizarDorsal_(dorsal);
+    if (!buscado) return;
+    for (const equipoId of new Set(equipoIds)) {
+      for (const rel of findWhere(CONFIG.SHEETS.JUGADORES_EQUIPOS, 'ID_Equipo', equipoId)) {
+        if (rel.ID_Jugador === jugadorId || (rel.Activo !== true && rel.Activo !== 'TRUE')) continue;
+        const otro = findById(CONFIG.SHEETS.JUGADORES, rel.ID_Jugador);
+        if (!otro || Equipos._normalizarDorsal_(otro.Dorsal) !== buscado) continue;
+        const equipo = findById(CONFIG.SHEETS.EQUIPOS, equipoId);
+        throw new Error(`El dorsal ${String(dorsal).trim()} ya lo lleva ${otro.Nombre} ${otro.Apellidos} en ${equipo ? equipo.Nombre : 'este equipo'}. Elige otro dorsal.`);
+      }
+    }
   },
 
   /**
@@ -240,6 +271,9 @@ const Equipos = {
       if (!actualizado) throw new Error('No se pudo actualizar la asignación del jugador.');
       return { ...existentes[0], Tipo: tipo };
     }
+
+    const jugador = findById(CONFIG.SHEETS.JUGADORES, jugadorId);
+    if (jugador) Equipos._validarDorsalUnico_(jugadorId, jugador.Dorsal, [equipoId]);
 
     return appendRow(CONFIG.SHEETS.JUGADORES_EQUIPOS, {
       ID_Jugador: jugadorId,

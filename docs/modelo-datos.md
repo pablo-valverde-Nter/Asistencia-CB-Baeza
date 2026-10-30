@@ -59,7 +59,7 @@ Registro global de jugadores del club, independiente de equipos o temporadas.
 | `Telefono` | String | Teléfono de contacto (o de los padres en menores) |
 | `Email` | String | Email de contacto |
 | `FotoURL` | String | Foto anterior (URL), avatar `avatar:<slug>` o JPEG `data:image/jpeg;base64,...` (máximo 16000 caracteres); vacío elimina la foto |
-| `Dorsal` | Number | Número de camiseta (puede variar por equipo, aquí es referencia) |
+| `Dorsal` | Number | Número de camiseta. Único entre los jugadores activos de cada equipo (validado en la app al cambiarlo o al asignar a un equipo; sin restricción en BD) |
 
 ---
 

@@ -69,6 +69,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - Cada jugador tiene un **equipo principal** (`Tipo = "Principal"`) y puede tener equipos secundarios (`Tipo = "Secundario"`) para los que dobla regularmente.
 - En el formulario de asistencia se puede añadir de forma **puntual** cualquier jugador del club como invitado (`EsInvitado = true`). No modifica su `Jugadores_Equipos`.
 - Campos: `ID`, `Nombre`, `Apellidos`, `FechaNac`, `Telefono`, `Email`, `FotoURL`, `Dorsal`.
+- El `Dorsal` es único entre los jugadores activos de cada equipo ("04" equivale a "4"). Se valida en la UI y en Apps Script (`Equipos._validarDorsalUnico_`) al cambiar el dorsal o al asignar el jugador a un equipo; los duplicados ya existentes no impiden editar otros datos. No hay restricción en BD.
 
 ### Entrenadores
 - Identificados por su **email de Google** (usado para control de acceso).
