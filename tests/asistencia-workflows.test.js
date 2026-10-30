@@ -254,7 +254,7 @@ function wizardClient() {
   const tipos = ['Ausencia', 'Retraso'].map(v => button('tipo', v));
   const minutos = ['5', '10', '15', '30', 'otro'].map(v => button('minutos', v));
   let motivos = { html: null, list: [] };
-  let dias = { html: null, list: [] };
+  let entrenamientos = { html: null, list: [] };
   const document = {
     addEventListener() {}, getElementById: element, querySelector: () => null,
     querySelectorAll(selector) {
@@ -266,10 +266,10 @@ function wizardClient() {
         if (motivos.html !== html) motivos = { html, list: Array.from(html.matchAll(/data-motivo="([^"]+)"/g), m => button('motivo', m[1])) };
         return motivos.list;
       }
-      if (selector.includes('[data-dia]')) {
+      if (selector.includes('[data-horario]')) {
         const html = element('justif-dias').innerHTML;
-        if (dias.html !== html) dias = { html, list: Array.from(html.matchAll(/data-dia="([^"]+)"/g), m => button('dia', m[1])) };
-        return dias.list;
+        if (entrenamientos.html !== html) entrenamientos = { html, list: Array.from(html.matchAll(/data-horario="([^"]+)"/g), m => button('horario', m[1])) };
+        return entrenamientos.list;
       }
       return [];
     },
@@ -291,7 +291,7 @@ function wizardClient() {
   const visible = () => steps.find(s => !s.hidden).dataset.step;
   const pressed = list => list.filter(b => b.attrs['aria-pressed'] === 'true').map(b => Object.values(b.dataset)[0]);
   return { app, context, element, visible, pressed, tipos, minutos, motivos: () => document.querySelectorAll('[data-motivo]'),
-    dias: () => document.querySelectorAll('[data-dia]'), sent };
+    entrenamientos: () => document.querySelectorAll('[data-horario]'), sent };
 }
 
 test('el asistente de retraso avanza solo, pide minutos y envia los mismos datos al servidor', async () => {
@@ -404,8 +404,8 @@ test('el resumen del cliente coincide con el mensaje que guarda el servidor', ()
   }
 });
 
-test('la programación usa el mismo asistente con un paso previo de días y guarda un aviso por entrenamiento', async () => {
-  const { app, context, element, visible, pressed, dias, sent } = wizardClient();
+test('la programación usa el mismo asistente con un paso previo de entrenamientos y guarda un aviso por entrenamiento', async () => {
+  const { app, context, element, visible, pressed, entrenamientos, sent } = wizardClient();
   app.cache.jugadoresEquipos = [{ ID_Jugador: 'member', ID_Equipo: 'team', Activo: true }];
   app.cache.horarios = [
     { ID: 'h-lun', ID_Equipo: 'team', DiaSemana: 1, HoraInicio: '18:00', HoraFin: '19:30' },
@@ -426,10 +426,11 @@ test('la programación usa el mismo asistente con un paso previo de días y guar
   app.views.programaciones.abrir('p1');
   assert.equal(visible(), 'dias');
   assert.equal(element('justif-titulo').textContent, 'Editar programación');
-  assert.deepEqual(dias().map(b => b.dataset.dia), ['1', '3'], 'solo días con entreno propio y sin otra programación');
-  assert.deepEqual(pressed(dias()), ['1']);
+  assert.deepEqual(entrenamientos().map(b => b.dataset.horario), ['h-lun', 'h-mie'], 'solo entrenamientos propios y sin otra programación');
+  assert.doesNotMatch(element('justif-dias').innerHTML, /justif-equipo/, 'con un solo equipo no se agrupa');
+  assert.deepEqual(pressed(entrenamientos()), ['h-lun']);
   assert.equal(element('justif-progress-text').textContent, 'Paso 1 de 5');
-  app.views.justificacion.elegirDia(3);
+  app.views.justificacion.elegirHorario('h-mie');
   app.views.justificacion.continuarDias();
   assert.equal(visible(), 'tipo');
   app.views.justificacion.elegirTipo('Retraso');
@@ -458,6 +459,87 @@ test('la programación usa el mismo asistente con un paso previo de días y guar
   app.cache.programacionesJustificaciones[0].TipoIncidencia = 'Retraso';
   app.views.programaciones.abrir('p1');
   assert.equal(app.views.justificacion._datos.minutos, 15);
+});
+
+function variosEquipos() {
+  const cliente = wizardClient();
+  const { app, context, sent } = cliente;
+  app.cache.equipos = [{ ID: 'cad', Nombre: 'Cadete' }, { ID: 'inf', Nombre: 'Infantil' }];
+  app.cache.jugadoresEquipos = [
+    { ID_Jugador: 'member', ID_Equipo: 'inf', Tipo: 'Secundario', Activo: true },
+    { ID_Jugador: 'member', ID_Equipo: 'cad', Tipo: 'Principal', Activo: true },
+  ];
+  app.cache.horarios = [
+    { ID: 'cad-lun', ID_Equipo: 'cad', DiaSemana: 1, HoraInicio: '18:00', HoraFin: '19:30' },
+    { ID: 'inf-lun', ID_Equipo: 'inf', DiaSemana: 1, HoraInicio: '17:00', HoraFin: '18:00' },
+    { ID: 'cad-mie', ID_Equipo: 'cad', DiaSemana: 3, HoraInicio: '19:00', HoraFin: '20:30' },
+    { ID: 'inf-jue', ID_Equipo: 'inf', DiaSemana: 4, HoraInicio: '18:00', HoraFin: '19:00' },
+  ];
+  app.cache.programacionesJustificaciones = [];
+  let id = 0;
+  context.server = (fn, ...args) => {
+    sent.push({ fn, args });
+    const datos = args[args.length - 1];
+    return Promise.resolve({ success: true, programacion: { ID: fn === 'actualizarProgramacionJustificacion' ? args[0] : 'nueva-' + ++id, ID_Horario: datos.idHorario } });
+  };
+  return cliente;
+}
+
+async function completarAusencia(cliente) {
+  const wizard = cliente.app.views.justificacion;
+  wizard.continuarDias();
+  wizard.elegirTipo('Ausencia');
+  wizard.elegirMotivo('Estudios');
+  wizard.continuarMotivo();
+  const preview = cliente.element('justif-preview').textContent;
+  wizard.siguiente();
+  cliente.element('justif-codigo').value = 'ABC123';
+  wizard.confirmar();
+  await new Promise(resolve => setImmediate(resolve));
+  return preview;
+}
+
+test('con varios equipos se eligen entrenamientos concretos agrupados por equipo, no días', async () => {
+  const cliente = variosEquipos();
+  const { app, element, pressed, entrenamientos, sent } = cliente;
+  app.views.programaciones.abrir();
+  const html = element('justif-dias').innerHTML;
+  const grupos = Array.from(html.matchAll(/<h5 class="justif-equipo-nombre"[^>]*>([^<]+)</g), m => m[1]);
+  assert.deepEqual(grupos, ['Cadete', 'Infantil'], 'un grupo por equipo, el principal primero');
+  const cadete = html.slice(html.indexOf('Cadete'), html.indexOf('Infantil'));
+  assert.deepEqual(Array.from(cadete.matchAll(/data-horario="([^"]+)"/g), m => m[1]), ['cad-lun', 'cad-mie']);
+  assert.match(cadete, /<strong>Lunes<\/strong><small data-no-i18n>18:00–19:30<\/small>/);
+  assert.deepEqual(entrenamientos().map(b => b.dataset.horario).sort(), ['cad-lun', 'cad-mie', 'inf-jue', 'inf-lun']);
+  // El lunes de Infantil no arrastra el lunes de Cadete.
+  app.views.justificacion.elegirHorario('inf-lun');
+  assert.deepEqual(pressed(entrenamientos()), ['inf-lun']);
+  assert.equal(element('justif-dias-next').disabled, false);
+  app.views.justificacion.elegirHorario('cad-mie');
+  app.views.justificacion.elegirHorario('cad-mie');
+  assert.deepEqual(app.views.justificacion._horariosElegidos().map(h => h.ID), ['inf-lun']);
+  app.views.justificacion.elegirHorario('cad-mie');
+  const preview = await completarAusencia(cliente);
+  assert.equal(preview, 'Los padres/tutores de Ana Baeza avisan de una ausencia en los entrenamientos de Infantil los lunes a las 17:00 y de Cadete los miércoles a las 19:00. Motivo: Estudios.');
+  assert.deepEqual(sent.map(s => [s.fn, s.args[2].idHorario]), [
+    ['crearProgramacionJustificacion', 'inf-lun'], ['crearProgramacionJustificacion', 'cad-mie'],
+  ]);
+});
+
+test('editar una programación de un equipo solo marca su entrenamiento y no crea otras en otros equipos', async () => {
+  const cliente = variosEquipos();
+  const { app, element, pressed, entrenamientos, sent } = cliente;
+  app.cache.programacionesJustificaciones = [
+    { ID: 'p-inf', ID_Jugador: 'member', ID_Equipo: 'inf', ID_Horario: 'inf-lun', TipoIncidencia: 'Ausencia', MotivoCategoria: 'Estudios', MotivoDetalle: '', HoraIncorporacion: '', Activo: true },
+  ];
+  app.views.programaciones.abrir('p-inf');
+  assert.equal(element('justif-titulo').textContent, 'Editar programación');
+  assert.deepEqual(entrenamientos().map(b => b.dataset.horario), ['inf-lun', 'inf-jue'], 'solo entrenamientos de su equipo');
+  assert.doesNotMatch(element('justif-dias').innerHTML, /Cadete|justif-equipo/);
+  assert.deepEqual(pressed(entrenamientos()), ['inf-lun'], 'no marca el lunes de Cadete');
+  await completarAusencia(cliente);
+  assert.deepEqual(sent.map(s => s.fn), ['actualizarProgramacionJustificacion']);
+  assert.equal(sent[0].args[0], 'p-inf');
+  assert.equal(sent[0].args[3].idHorario, 'inf-lun');
 });
 
 test('los minutos del aviso se guardan sin sustituir los que registro el entrenador', () => {

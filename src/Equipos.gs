@@ -174,6 +174,10 @@ const Equipos = {
       'TelefonoPadre1', 'TelefonoPadre2', 'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2'
     ];
     permitidos.forEach(k => { if (datos[k] !== undefined) campos[k] = datos[k]; });
+    // Avisos por email: solo llegan aquí desde entrenador/admin (el perfil del jugador los filtra) y se guardan como booleano.
+    ['NotificarAusenciasPadre1', 'NotificarAusenciasPadre2'].forEach(k => {
+      if (campos[k] !== undefined) campos[k] = campos[k] === true || String(campos[k]).toUpperCase() === 'TRUE';
+    });
     if (campos.Dorsal !== undefined) {
       const actual = findById(CONFIG.SHEETS.JUGADORES, jugadorId);
       // Solo se valida un cambio de dorsal: los duplicados heredados no bloquean editar otros datos.

@@ -21,16 +21,20 @@ test('avatares del club: doce SVG y fuentes no ejecutables', () => {
   assert.match(app.avatarHtml('', 'Ana Baeza',40), />AB</);
 });
 
-test('perfil conserva contacto familiar y ambos interruptores de avisos', () => {
+test('perfil del jugador conserva el contacto familiar pero no deja cambiar los avisos por email', () => {
   const fields = { 'perfil-usuario-contenido': {}, 'perfil-editar-contenido': {}, 'perfil-form': {} };
   const {app} = client(fields);
   app.state.rol = 'jugador';
   app.state.jugador = {ID:'j', Nombre:'Ana', Apellidos:'Baeza', EmailPadre1:'familia@example.test', NotificarAusenciasPadre1:false};
   app.views['perfil-usuario'].render();
   assert.doesNotMatch(fields['perfil-usuario-contenido'].innerHTML,/<input|<form/);
+  assert.match(fields['perfil-usuario-contenido'].innerHTML,/Avisos de ausencia por email desactivados\. Solo el entrenador puede cambiarlo\./);
   app.views['perfil-usuario'].editar();
   const html = fields['perfil-editar-contenido'].innerHTML;
-  for (const name of ['FechaNac','Telefono','Email','NombrePadre1','ApellidosPadre1','TelefonoPadre1','EmailPadre1','NombrePadre2','ApellidosPadre2','TelefonoPadre2','EmailPadre2','NotificarAusenciasPadre1','NotificarAusenciasPadre2']) assert.ok(html.includes('data-perfil="'+name+'"'),name);
+  for (const name of ['FechaNac','Telefono','Email','NombrePadre1','ApellidosPadre1','TelefonoPadre1','EmailPadre1','NombrePadre2','ApellidosPadre2','TelefonoPadre2','EmailPadre2']) assert.ok(html.includes('data-perfil="'+name+'"'),name);
+  assert.doesNotMatch(html,/NotificarAusencias|type="checkbox"/, 'la familia no ve interruptores de avisos');
+  assert.match(html,/Avisos de ausencia por email desactivados\. Solo el entrenador puede cambiarlo\./);
+  assert.match(html,/Avisos de ausencia por email activados\. Solo el entrenador puede cambiarlo\./, 'el familiar 2 sin valor queda activado por defecto');
   assert.match(html,/id="perfil-codigo"/);
   assert.doesNotMatch(html,/data-perfil="(?:PIN|CodigoPadres|Usuario)"/);
 });

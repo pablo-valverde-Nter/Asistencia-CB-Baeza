@@ -383,7 +383,7 @@ function driveViews() {
               if (document.querySelectorAll('.avatar-choice').length < 12) throw new Error('Faltan avatares de club');
             }
             if (accountState === 'perfil-usuario' && document.querySelectorAll('#perfil-usuario-contenido input').length) throw new Error('Perfil no es solo lectura');
-            if (accountState === 'perfil-editar' && window.__role === 'jugador' && document.querySelectorAll('.account-check input').length !== 2) throw new Error('Faltan preferencias familiares');
+            if (accountState === 'perfil-editar' && window.__role === 'jugador' && (document.querySelectorAll('#perfil-form input[type="checkbox"]').length || document.querySelectorAll('#perfil-form fieldset .account-hint').length !== 2)) throw new Error('La familia no debe poder cambiar los avisos por email');
             if (accountState === 'seguridad' && document.querySelectorAll('#seguridad-contenido .account-settings-row').length < 4) throw new Error('Seguridad no muestra listado');
             if (accountState === 'pin' && !document.getElementById('seg-pin-actual')) throw new Error('Falta el PIN actual');
           }

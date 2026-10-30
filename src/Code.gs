@@ -462,6 +462,7 @@ function actualizarPerfilJugador(auth, jugadorId, datos, codigoSeguridad) {
           throw new Error('La fecha de nacimiento no es válida o es futura.');
         }
       }
+      // NotificarAusenciasPadre1/2 quedan fuera a propósito: solo entrenadores y admin activan o desactivan los avisos.
       const camposPermitidos = ['FechaNac', 'Telefono', 'Email',
         'NombrePadre1', 'ApellidosPadre1', 'TelefonoPadre1', 'EmailPadre1',
         'NombrePadre2', 'ApellidosPadre2', 'TelefonoPadre2', 'EmailPadre2'];

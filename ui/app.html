@@ -1360,8 +1360,8 @@ const App = {
           var rolLabel = App.state.esAdmin ? 'Administrador' : 'Entrenador';
           perfilEl.innerHTML = '<div class="equipos-perfil-bloque">' +
             '<div class="eq-perfil-avatar">' + App.avatarHtml(usuario && usuario.FotoURL,nombrePerfil,80) + '</div>' +
-            '<div class="eq-perfil-nombre">' + (nombrePerfil || '') + '</div>' +
-            (emailPerfil ? '<div class="eq-perfil-email">' + emailPerfil + '</div>' : '') +
+            '<div class="eq-perfil-nombre">' + _esc(nombrePerfil) + '</div>' +
+            (emailPerfil ? '<div class="eq-perfil-email">' + _esc(emailPerfil) + '</div>' : '') +
             '<div class="eq-perfil-rol">' + rolLabel + '</div>' +
             '</div>';
         }
@@ -1393,7 +1393,7 @@ const App = {
             '<div class="eq-home-bar" role="img" aria-label="Asistencia: ' + _pctTexto(asistencia) + '"><span style="width:' + (asistencia == null ? 0 : asistencia) + '%"></span></div>' +
             '<div class="eq-home-next">' + (proxima ? 'Próximo entreno · <strong>' + _statsTexto(_fmtFecha(proxima.Fecha).d + ' ' + _fmtFecha(proxima.Fecha).m) + ' · ' + _statsTexto(proxima.HoraInicio) + '</strong>' : 'Sin próximos entrenamientos') + '</div></div>' +
             '<div class="eq-big-btns">' +
-              '<button class="btn-eq-asist" onclick="App.views.equipos.abrirEquipo(\'' + eqId + '\',\'' + eqNombre + '\')">Registrar asistencia' + (pendientes ? '<span class="eq-pending-badge" aria-label="' + pendienteLabel + '" title="' + pendienteLabel + '">!</span>' : '') + '</button>' +
+              '<button class="btn-eq-asist" onclick="App.views.equipos.abrirEquipo(' + _statsArgumento(eqId) + ',' + _statsArgumento(eq.Nombre) + ')">Registrar asistencia' + (pendientes ? '<span class="eq-pending-badge" aria-label="' + pendienteLabel + '" title="' + pendienteLabel + '">!</span>' : '') + '</button>' +
               '<button class="btn-eq-stats" onclick="App.views.equipos.abrirEstadisticas(\'' + eqId + '\')">Estadísticas</button>' +
             '</div></article>';
         }).join('');
@@ -1419,10 +1419,10 @@ const App = {
           return;
         }
         var rows = otros.map(function(eq) {
-          return '<div class="sr-item" onclick="App.views.equipos._sustituirEnEquipo(\'' + eq.ID + '\',\'' + _esc(eq.Nombre) + '\')">' +
-            '<div class="li-avatar" style="flex-shrink:0">' + (eq.Nombre ? eq.Nombre[0] : '?') + '</div>' +
-            '<div><div class="li-name">' + eq.Nombre + '</div>' +
-            '<div class="li-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div></div>' +
+          return '<div class="sr-item" onclick="App.views.equipos._sustituirEnEquipo(' + _statsArgumento(eq.ID) + ',' + _statsArgumento(eq.Nombre) + ')">' +
+            '<div class="li-avatar" style="flex-shrink:0">' + _esc(eq.Nombre ? eq.Nombre[0] : '?') + '</div>' +
+            '<div><div class="li-name">' + _esc(eq.Nombre) + '</div>' +
+            '<div class="li-sub">' + _esc(eq.Categoria) + ' &middot; ' + _esc(eq.Modalidad) + '</div></div>' +
             '</div>';
         }).join('');
         App.openModal('Sustituir en otro equipo',
@@ -1697,7 +1697,7 @@ const App = {
         document.getElementById('sesion-hdr').innerHTML =
           '<h2>' + f.dn + ', ' + f.d + ' de ' + f.ml + '</h2>' +
           '<div class="vh-sub">' + sesion.HoraInicio + '&ndash;' + sesion.HoraFin + extra + '</div>' +
-          (sesion.Notas ? '<div class="vh-horario">' + sesion.Notas + '</div>' : '');
+          (sesion.Notas ? '<div class="vh-horario">' + _esc(sesion.Notas) + '</div>' : '');
 
         document.getElementById('sesion-jugs').innerHTML = jugadores.length
           ? jugadores.map(function(item) {
@@ -1707,8 +1707,8 @@ const App = {
               var inv = item.esInvitado;
               return '<div class="jug-card ' + estado + (preaviso ? ' has-preaviso' : '') + '" data-id="' + j.ID + '" data-estado="' + estado + '" data-preaviso="' + preaviso + '" data-min="' + (item.minutosRetraso || '') + '" data-inv="' + inv + '" data-justif="' + (item.tieneJustif ? 'true' : 'false') + '" data-tipo-justif="' + _esc(item.tipoAviso) + '" onclick="App.views.sesion.toggleEstado(this)">' +
                 '<div class="jug-dorsal has-avatar">' + App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,32) + (j.Dorsal ? '<span class="jug-dorsal-num">' + _esc(String(j.Dorsal)) + '</span>' : '') + '</div>' +
-                '<div style="flex:1;min-width:0"><div class="jug-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
-                '<div class="jug-tipo">' + (inv ? 'Invitado' : (j.Tipo || '')) + '</div>' +
+                '<div style="flex:1;min-width:0"><div class="jug-nombre">' + _esc(j.Apellidos + ', ' + j.Nombre) + '</div>' +
+                '<div class="jug-tipo">' + (inv ? 'Invitado' : _esc(j.Tipo || '')) + '</div>' +
                 (preaviso ? '<div class="preaviso-tag">Avisó: ' + (preaviso === 'A' ? 'Ausencia' : 'Retraso') + (item.motivoJustif ? ' · ' + _esc(item.motivoJustif) : '') + '</div>' : '') +
                 (item.tieneJustif ? App.notifications.chipHtml(j, 'App.views.sesion.verJustificacion(' + _statsArgumento(j.ID) + ')', preaviso ? '' : item.motivoJustif) : '') +
                 '</div>' +
@@ -1721,7 +1721,7 @@ const App = {
           ? entrenadores.map(function(item) {
               var e = item.entrenador; var asistio = item.asistio; var inv = item.esInvitado;
               return '<div class="ent-row" data-id="' + e.ID + '" data-inv="' + inv + '">' +
-                App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,28) + '<div><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
+                App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,28) + '<div><div class="ent-nombre">' + _esc(e.Apellidos + ', ' + e.Nombre) + '</div>' +
                 '<div class="ent-sub">' + (inv ? 'Invitado' : '') + '</div></div>' +
                 '<label class="toggle-sw"><input type="checkbox" ' + (asistio ? 'checked' : '') + ' onchange="App.state._formIsDirty=true;App.state._sesionEditVersion++">' +
                 '<div class="toggle-sl"></div></label></div>';
@@ -2158,10 +2158,10 @@ const App = {
 
       _htmlBuscadorItem: function(i) {
         var sub = i.Dorsal ? 'Dorsal ' + i.Dorsal : (i.Email || '');
-        return '<div class="sr-item" onclick=\'App.views.sesion._seleccionar(' + JSON.stringify(i) + ')\'>' +
+        return '<div class="sr-item" onclick="App.views.sesion._seleccionar(' + _statsArgumento(i) + ')">' +
           App.avatarHtml(i.FotoURL,i.Nombre + ' ' + i.Apellidos,36) +
-          '<div><div class="sr-name">' + i.Apellidos + ', ' + i.Nombre + '</div>' +
-          '<div class="sr-sub">' + sub + '</div></div></div>';
+          '<div><div class="sr-name">' + _esc(i.Apellidos + ', ' + i.Nombre) + '</div>' +
+          '<div class="sr-sub">' + _esc(sub) + '</div></div></div>';
       },
 
       _filtrarBuscador: function(q) {
@@ -2189,7 +2189,7 @@ const App = {
           div.dataset.inv = String(!esDelEquipo);
           div.onclick = function() { App.views.sesion.toggleEstado(this); };
           div.innerHTML = '<div class="jug-dorsal has-avatar">' + App.avatarHtml(item.FotoURL,item.Nombre + ' ' + item.Apellidos,32) + (item.Dorsal ? '<span class="jug-dorsal-num">' + _esc(String(item.Dorsal)) + '</span>' : '') + '</div>' +
-            '<div><div class="jug-nombre">' + item.Apellidos + ', ' + item.Nombre + '</div>' +
+            '<div><div class="jug-nombre">' + _esc(item.Apellidos + ', ' + item.Nombre) + '</div>' +
             '<div class="jug-tipo">' + (esDelEquipo ? 'Equipo' : 'Invitado') + '</div></div>' +
             App.views.sesion._htmlMinutos(null) + '<div class="estado-chip">?</div>';
           document.getElementById('sesion-jugs').appendChild(div);
@@ -2199,7 +2199,7 @@ const App = {
           div2.className = 'ent-row';
           div2.dataset.id = item.ID;
           div2.dataset.inv = String(!esDelEquipo);
-          div2.innerHTML = App.avatarHtml(item.FotoURL,item.Nombre + ' ' + item.Apellidos,28) + '<div><div class="ent-nombre">' + item.Apellidos + ', ' + item.Nombre + '</div>' +
+          div2.innerHTML = App.avatarHtml(item.FotoURL,item.Nombre + ' ' + item.Apellidos,28) + '<div><div class="ent-nombre">' + _esc(item.Apellidos + ', ' + item.Nombre) + '</div>' +
             '<div class="ent-sub">' + (esDelEquipo ? 'Equipo' : 'Invitado') + '</div></div>' +
             '<label class="toggle-sw"><input type="checkbox" onchange="App.state._formIsDirty=true;App.state._sesionEditVersion++"><div class="toggle-sl"></div></label>';
           document.getElementById('sesion-ents').appendChild(div2);
@@ -2293,7 +2293,7 @@ const App = {
           '<div class="sesion-ro-header-wrap">' +
           '<div class="sesion-ro-badge">&#x2713; Sesi\u00f3n registrada</div>' +
           '<h2>' + f.dn + ', ' + f.d + ' de ' + f.ml + '</h2>' +
-          '<div class="vh-sub">' + sesion.HoraInicio + '&ndash;' + sesion.HoraFin + (eq ? ' &middot; ' + eq.Nombre : '') + extra + '</div>' +
+          '<div class="vh-sub">' + sesion.HoraInicio + '&ndash;' + sesion.HoraFin + (eq ? ' &middot; ' + _esc(eq.Nombre) : '') + extra + '</div>' +
           (sesion.Notas ? '<div class="vh-horario">' + _esc(sesion.Notas) + '</div>' : '') +
           '<button class="sesion-ro-edit-btn" onclick="App.views[\'sesion-guardada\'].editar()">&#x270F; Editar</button>' +
           '</div>';
@@ -2326,7 +2326,7 @@ const App = {
               var label = item.estado === 'A' ? 'Ausente' : 'Retraso';
               return '<div class="list-item" style="padding:10px 16px">' +
                 App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,36) +
-                '<div style="flex:1"><div class="li-name" style="font-size:.86rem">' + j.Apellidos + ', ' + j.Nombre + '</div></div>' +
+                '<div style="flex:1"><div class="li-name" style="font-size:.86rem">' + _esc(j.Apellidos + ', ' + j.Nombre) + '</div></div>' +
                 '<span style="font-size:.72rem;font-weight:700;color:' + (item.estado === 'A' ? 'var(--rojo)' : 'var(--naranja)') + '">' + icon + ' ' + label + '</span>' +
                 '</div>';
             }).join('');
@@ -2378,7 +2378,7 @@ const App = {
                 ? App.notifications.chipHtml(j, 'App.views[\'sesion-guardada\'].verJustif(' + _statsArgumento(j.ID) + ')') : '';
               return '<div class="jug-ro-mini ' + estado + '">' +
                 App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,28) +
-                '<div class="jrm-info"><span class="jrm-nombre">' + j.Apellidos + ', ' + j.Nombre + '</span>' +
+                '<div class="jrm-info"><span class="jrm-nombre">' + _esc(j.Apellidos + ', ' + j.Nombre) + '</span>' +
                 tagHtml + justifTag + justifChip + '</div>' +
                 '<span class="ro-chip ' + chipClass + '">' + chipLabel + '</span>' +
                 alertBadge + '</div>';
@@ -2392,7 +2392,7 @@ const App = {
               var chipClass = asistio === null ? 'none' : asistio ? 'P' : 'A';
               var chipLabel = asistio === null ? '–' : asistio ? 'Asistió' : 'No asistió';
               return '<div class="ent-ro-mini">' +
-                App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,28) + '<div style="flex:1"><div class="ent-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
+                App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,28) + '<div style="flex:1"><div class="ent-nombre">' + _esc(e.Apellidos + ', ' + e.Nombre) + '</div>' +
                 (item.esInvitado ? '<div class="ent-sub">Invitado</div>' : '') + '</div>' +
                 '<span class="ro-chip ' + chipClass + '">' + chipLabel + '</span></div>';
             }).join('')
@@ -2498,9 +2498,9 @@ const App = {
           pctHtml += (st.canceladas ? '<span class="alerta-chip">' + st.canceladas + ' canceladas</span>' : '') + (st.pendientes ? '<span class="alerta-chip">' + st.pendientes + ' sin registrar</span>' : '');
           return '<div class="eq-card" onclick="App.views[\'equipo-detalle\'].cargar(\'' + eq.ID + '\')">' +
             '<div class="eq-card-hdr">' +
-            '<div class="li-avatar">' + (eq.Nombre ? eq.Nombre[0] : '?') + '</div>' +
-            '<div style="flex:1"><div class="li-name">' + eq.Nombre + '</div>' +
-            '<div class="li-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div></div>' +
+            '<div class="li-avatar">' + _esc(eq.Nombre ? eq.Nombre[0] : '?') + '</div>' +
+            '<div style="flex:1"><div class="li-name">' + _esc(eq.Nombre) + '</div>' +
+            '<div class="li-sub">' + _esc(eq.Categoria) + ' &middot; ' + _esc(eq.Modalidad) + '</div></div>' +
             chipHtml + '<div class="li-arrow">&#x203A;</div></div>' +
             '<div class="eq-card-body">' +
             '<div class="eq-card-stats">' +
@@ -2619,7 +2619,7 @@ const App = {
         document.getElementById('eq-ents-lista').innerHTML = App.state.formEntrenadores.length
           ? App.state.formEntrenadores.map(function(e) {
               return '<div class="asig-item" data-persona-id="' + _esc(e.ID) + '">' + App.avatarHtml((App.cache.getEntrenadorById(e.ID) || {}).FotoURL,e.Nombre + ' ' + e.Apellidos,36) + '<div class="asig-info">' +
-                '<div class="asig-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div></div>' +
+                '<div class="asig-nombre">' + _esc(e.Apellidos + ', ' + e.Nombre) + '</div></div>' +
                 '<div class="btn-rm" onclick="App.views[\'equipo-form\']._quitarEnt(\'' + e.ID + '\')">&#x2715;</div></div>';
             }).join('')
           : '<div style="color:var(--texto-sec);font-size:.82rem;padding:4px 0">Ninguno asignado</div>';
@@ -2627,8 +2627,8 @@ const App = {
         document.getElementById('eq-jugs-lista').innerHTML = App.state.formJugadores.length
           ? App.state.formJugadores.map(function(j) {
               return '<div class="asig-item" data-persona-id="' + _esc(j.ID) + '">' + App.avatarHtml((App.cache.getJugadorById(j.ID) || {}).FotoURL,j.Nombre + ' ' + j.Apellidos,36) + '<div class="asig-info">' +
-                '<div class="asig-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
-                '<div class="asig-sub">Dorsal ' + (j.Dorsal || '-') + ' &middot; ' + (j.Tipo || 'Principal') + '</div></div>' +
+                '<div class="asig-nombre">' + _esc(j.Apellidos + ', ' + j.Nombre) + '</div>' +
+                '<div class="asig-sub">Dorsal ' + _esc(j.Dorsal || '-') + ' &middot; ' + _esc(j.Tipo || 'Principal') + '</div></div>' +
                 '<div class="btn-rm" onclick="App.views[\'equipo-form\']._quitarJug(\'' + j.ID + '\')">&#x2715;</div></div>';
             }).join('')
           : '<div style="color:var(--texto-sec);font-size:.82rem;padding:4px 0">Ninguno asignado</div>';
@@ -2667,10 +2667,10 @@ const App = {
 
       _htmlItem: function(i, tipo) {
         var sub = tipo === 'jug' ? 'Dorsal ' + (i.Dorsal || '-') : (i.Email || '');
-        return '<div class="sr-item" onclick=\'App.views["equipo-form"]._elegir(' + JSON.stringify(i) + ',"' + tipo + '")\'>' +
+        return '<div class="sr-item" onclick="App.views[\'equipo-form\']._elegir(' + _statsArgumento(i) + ',' + _statsArgumento(tipo) + ')">' +
           App.avatarHtml(i.FotoURL,i.Nombre + ' ' + i.Apellidos,36) +
-          '<div><div class="sr-name">' + i.Apellidos + ', ' + i.Nombre + '</div>' +
-          '<div class="sr-sub">' + sub + '</div></div></div>';
+          '<div><div class="sr-name">' + _esc(i.Apellidos + ', ' + i.Nombre) + '</div>' +
+          '<div class="sr-sub">' + _esc(sub) + '</div></div></div>';
       },
 
       _filtrar: function(q, tipo) {
@@ -2696,7 +2696,7 @@ const App = {
           App.state._tipoJugSelec = 'Principal';
           document.getElementById('modal-body').innerHTML =
             '<div style="padding:20px 16px">' +
-            '<p style="font-weight:600;margin-bottom:12px">Tipo de asignacion para ' + item.Nombre + '</p>' +
+            '<p style="font-weight:600;margin-bottom:12px">Tipo de asignacion para ' + _esc(item.Nombre) + '</p>' +
             '<div class="tipo-selector">' +
             '<div class="tipo-opt sel" id="tipo-principal" onclick="App.views[\'equipo-form\']._selTipo(\'Principal\')">Principal</div>' +
             '<div class="tipo-opt" id="tipo-secundario" onclick="App.views[\'equipo-form\']._selTipo(\'Secundario\')">Secundario</div>' +
@@ -2756,7 +2756,7 @@ const App = {
           });
           if (dup) {
             App.openModal('Equipo duplicado',
-              _htmlWarnModal('Ya existe un equipo llamado <strong>' + nombre + '</strong>.',
+              _htmlWarnModal('Ya existe un equipo llamado <strong>' + _esc(nombre) + '</strong>.',
                 '¿Deseas guardarlo igualmente?', 'Guardar igualmente', "App.closeModal();App.views['equipo-form'].guardar(true)")
             );
             return;
@@ -2888,7 +2888,7 @@ const App = {
         var nombre = eq ? eq.Nombre : 'este equipo';
         App.openModal('Eliminar equipo',
           _htmlConfirmModal('danger',
-            '\u00bfSeguro que quieres eliminar <strong>' + nombre + '</strong>?',
+            '\u00bfSeguro que quieres eliminar <strong>' + _esc(nombre) + '</strong>?',
             'Se eliminar\u00e1n todas sus sesiones, asistencias y horarios. Los jugadores y entrenadores NO se eliminar\u00e1n.',
             "App.views['equipo-form']._confirmarEliminar()"
           )
@@ -3017,8 +3017,8 @@ const App = {
           var statsHtml = '<div class="jug-list-stats"><span class="jls-big ' + colorClass + '">' + _pctTexto(st.asistenciaPct) + '</span><span class="jls-de">' + st.base + ' ses.</span>' + _statsInfoBoton('Asistencia') + '</div>';
           return '<div class="list-item" onclick="App.views[\'jugador-detalle\'].cargar(\'' + j.ID + '\')">' +
             App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,36) +
-            '<div style="flex:1"><div class="li-name">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
-            '<div class="li-sub">Dorsal ' + (j.Dorsal || '-') + '</div>' + ((st.alertas || []).length ? '<div class="jug-list-alertas">' + _htmlAlerta(st.alertas[0]) + '</div>' : '') + '</div>' +
+            '<div style="flex:1"><div class="li-name">' + _esc(j.Apellidos + ', ' + j.Nombre) + '</div>' +
+            '<div class="li-sub">Dorsal ' + _esc(j.Dorsal || '-') + '</div>' + ((st.alertas || []).length ? '<div class="jug-list-alertas">' + _htmlAlerta(st.alertas[0]) + '</div>' : '') + '</div>' +
             statsHtml +
             '<div class="li-arrow">&#x203A;</div></div>';
         }
@@ -3157,7 +3157,7 @@ const App = {
           });
           if (dup) {
             App.openModal('Jugador duplicado',
-              _htmlWarnModal('Ya existe un jugador llamado <strong>' + datos.Nombre + ' ' + datos.Apellidos + '</strong>.',
+              _htmlWarnModal('Ya existe un jugador llamado <strong>' + _esc(datos.Nombre + ' ' + datos.Apellidos) + '</strong>.',
                 '¿Deseas guardarlo igualmente?', 'Guardar igualmente', "App.closeModal();App.views['jugador-form'].guardar(true)")
             );
             return;
@@ -3254,8 +3254,8 @@ const App = {
           var statsHtml = '<div class="ent-mini-stats"><span class="ems-big">' + _pctTexto(st.presenciaPct) + '</span><span class="ems-de">' + st.sesiones + ' ses.</span>' + _statsInfoBoton('Presencia') + '</div>';
           return '<div class="list-item" onclick="App.views[\'entrenador-detalle\'].cargar(\'' + e.ID + '\')">' +
             App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,36) +
-            '<div style="flex:1"><div class="li-name">' + e.Apellidos + ', ' + e.Nombre + adminBadge + isMeBadge + '</div>' +
-            '<div class="li-sub">' + e.Email + '</div></div>' +
+            '<div style="flex:1"><div class="li-name">' + _esc(e.Apellidos + ', ' + e.Nombre) + adminBadge + isMeBadge + '</div>' +
+            '<div class="li-sub">' + _esc(e.Email) + '</div></div>' +
             statsHtml +
             '<div class="li-arrow">&#x203A;</div></div>';
         }).join('');
@@ -3290,7 +3290,7 @@ const App = {
         ['ent-nombre','ent-apellidos','ent-email','ent-tel'].forEach(function(id) {
           document.getElementById(id).value = '';
         });
-        var pinNEl = document.getElementById('ent-pin-nuevo');   if (pinNEl) pinNEl.value = '';
+        var pinNEl = document.getElementById('ent-pin-nuevo');   if (pinNEl) { pinNEl.value = ''; _pinAviso(pinNEl); }
         var esAdminEl = document.getElementById('ent-es-admin'); if (esAdminEl) esAdminEl.checked = false;
       },
       guardar: function(force) {
@@ -3320,7 +3320,7 @@ const App = {
           });
           if (dup) {
             App.openModal('Entrenador duplicado',
-              _htmlWarnModal('Ya existe un entrenador llamado <strong>' + datos.Nombre + ' ' + datos.Apellidos + '</strong>.',
+              _htmlWarnModal('Ya existe un entrenador llamado <strong>' + _esc(datos.Nombre + ' ' + datos.Apellidos) + '</strong>.',
                 '¿Deseas guardarlo igualmente?', 'Guardar igualmente', "App.closeModal();App.views['entrenador-form'].guardar(true)")
             );
             return;
@@ -3415,9 +3415,9 @@ const App = {
 
         var html = '<div class="detalle-perfil">' +
           '<div class="detalle-avatar">' + App.avatarHtml(j.FotoURL,j.Nombre + ' ' + j.Apellidos,72) + '</div>' +
-          '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + j.Apellidos + ', ' + j.Nombre + '</div>' +
+          '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + _esc(j.Apellidos + ', ' + j.Nombre) + '</div>' +
           (j.Dorsal ? '<div class="detalle-sub">Dorsal ' + _esc(String(j.Dorsal)) + '</div>' : '') +
-          (j.FechaNac ? '<div class="detalle-meta">Nac. ' + j.FechaNac + '</div>' : '') +
+          (j.FechaNac ? '<div class="detalle-meta">Nac. ' + _esc(j.FechaNac) + '</div>' : '') +
           '</div>' +
           App.account.accionesDetalleHtml('jugador', id, App.puedeEditarDetalle('jugador-detalle')) +
           '</div>';
@@ -3447,7 +3447,7 @@ const App = {
 
         var html = '<div class="detalle-perfil">' +
           '<div class="detalle-avatar">' + App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,72) + '</div>' +
-          '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + e.Apellidos + ', ' + e.Nombre + '</div>' +
+          '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + _esc(e.Apellidos + ', ' + e.Nombre) + '</div>' +
           (e.Telefono ? '<div class="detalle-meta">' + _esc(e.Telefono) + '</div>' : '') +
           '</div>' +
           App.account.accionesDetalleHtml('entrenador', id, App.puedeEditarDetalle('entrenador-detalle')) +
@@ -3459,7 +3459,7 @@ const App = {
           html += '<div class="stat-grid-2">' + _htmlKpi('Presencia',_pctTexto(d.presenciaPct),d.presentes + ' / ' + d.sesiones + ' sesiones','kpi-hero ' + _nivelClase(d.presenciaPct)) + _htmlKpi('Horas dirigidas',_datoTexto(d.horasDirigidas,' h'),'Horas programadas') + '</div>' +
             '<div class="stat-grid-2">' + _htmlKpi('Sustituciones dadas',d.sustitucionesDadas,'sesiones como invitado') + _htmlKpi('Coberturas recibidas',d.coberturasRecibidas,'sesiones con otro entrenador') + '</div>' +
             _statsBloque('Serie mensual',_statsSerieMensual(d.serieMensual)) +
-            _statsBloque('Por equipo',_statsTabla(['Equipo','Rol','Sesiones','Presencia','Asistencia jugadores','Pendientes','Latencia mediana'],d.porEquipo.map(function(e) { return [_statsEquipoBoton(e.equipoId,e.nombre),_esc(e.tipoRol),e.sesiones,_pctTexto(e.presenciaPct),_pctTexto(e.asistenciaJugadoresPct),e.pendientes,_datoTexto(e.latenciaMedianaHoras,' h')]; })));
+            _statsBloque('Por equipo',_statsTabla(['Equipo','Rol','Sesiones','Presencia','Asistencia jugadores','Pendientes','Latencia mediana'],d.porEquipo.map(function(e) { return [_statsEquipoBoton(e.equipoId,e.nombre,{tipo:'entrenador',id:id}),_esc(e.tipoRol),e.sesiones,_pctTexto(e.presenciaPct),_pctTexto(e.asistenciaJugadoresPct),e.pendientes,_datoTexto(e.latenciaMedianaHoras,' h')]; })));
         } else html += App.stats.resumen ? _htmlEstadoStats(entrada) : _statsResumenEstado();
 
         html += '<div style="padding-bottom:28px"></div>';
@@ -3469,10 +3469,13 @@ const App = {
 
     // -- Detalle equipo ------------------------------------
     'equipo-detalle': {
-      cargar: function(id) {
+      // resaltar = { tipo: 'jugador' | 'entrenador', id } al llegar desde la ficha de esa persona.
+      cargar: function(id, resaltar) {
         App.state.detalleEquipoId = id;
+        this._resaltar = resaltar || null;
         App.navigate('equipo-detalle');
       },
+      _resaltar: null,
       render: function() {
         var id = App.state.detalleEquipoId;
         if (!id) return;
@@ -3484,15 +3487,15 @@ const App = {
 
         var html = '<div class="detalle-perfil">' +
           '<div class="detalle-avatar" style="font-size:1.4rem">&#x1F3C0;</div>' +
-          '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + eq.Nombre + '</div>' +
-          '<div class="detalle-sub">' + eq.Categoria + ' &middot; ' + eq.Modalidad + '</div>' +
+          '<div class="detalle-perfil-copy"><div class="detalle-nombre">' + _esc(eq.Nombre) + '</div>' +
+          '<div class="detalle-sub">' + _esc(eq.Categoria) + ' &middot; ' + _esc(eq.Modalidad) + '</div>' +
           (d ? '<div class="detalle-meta">' + d.plantillaActiva + ' jugadores &middot; ' + d.sesiones.computables + ' entrenamientos con lista</div>' : '') +
           '</div>' +
           (App.puedeEditarDetalle('equipo-detalle') ? '<button class="detalle-settings" type="button" aria-label="Ajustes del equipo" title="Ajustes" onclick="App.editarDetalle()">&#x2699;&#xFE0F;</button>' : '') +
           '</div>';
 
         html += _htmlFiltroStats();
-        var tecnicos = App.cache.getEntrenadoresByEquipo(id).map(function(e) { return '<button class="btn btn-secondary btn-sm person-inline" onclick="App.views[\'entrenador-detalle\'].cargar(' + _statsArgumento(e.ID) + ')">' + App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,36) + '<span>' + _statsTexto(e.Nombre + ' ' + e.Apellidos) + '</span></button>'; }).join('');
+        var tecnicos = App.cache.getEntrenadoresByEquipo(id).map(function(e) { return '<button class="btn btn-secondary btn-sm person-inline" data-resaltar="' + _esc('entrenador:' + e.ID) + '" onclick="App.views[\'entrenador-detalle\'].cargar(' + _statsArgumento(e.ID) + ')">' + App.avatarHtml(e.FotoURL,e.Nombre + ' ' + e.Apellidos,36) + '<span>' + _statsTexto(e.Nombre + ' ' + e.Apellidos) + '</span></button>'; }).join('');
         html += _statsBloque('Equipo técnico',tecnicos ? '<div class="stats-staff-list">' + tecnicos + '</div>' : '<p>Sin entrenadores asignados</p>');
         if (d) {
           var s = d.sesiones;
@@ -3512,7 +3515,17 @@ const App = {
         html += '<div class="p-16 stats-actions"><button class="btn btn-secondary btn-full" onclick="App.state.equipoSesionesId=App.state.detalleEquipoId;App.navigate(\'historial-equipo\')">Historial de sesiones</button>' + (d ? '<button class="btn btn-primary btn-full" onclick="App.views[\'equipo-detalle\'].exportar()">Exportar CSV</button>' : '') + '</div>';
 
         html += '<div style="padding-bottom:28px"></div>';
-        document.getElementById('equipo-detalle-contenido').innerHTML = html;
+        var contenido = document.getElementById('equipo-detalle-contenido');
+        contenido.innerHTML = html;
+        // La persona de origen se resalta cuando su fila ya está pintada (el entrenador al momento; el jugador al llegar las estadísticas).
+        var resaltar = this._resaltar;
+        if (!resaltar || (resaltar.tipo === 'jugador' && !d)) return;
+        this._resaltar = null;
+        var clave = resaltar.tipo + ':' + resaltar.id;
+        var objetivos = Array.prototype.filter.call(contenido.querySelectorAll('[data-resaltar]'), function(el) { return el.dataset.resaltar === clave; });
+        (window.requestAnimationFrame || setTimeout)(function() {
+          if (App.state.currentView === 'equipo-detalle' && App.state.detalleEquipoId === id) _resaltarElementos(objetivos);
+        });
       },
       ordenar: function(campo) { this._orden = campo; this.render(); },
       exportar: function() {
@@ -3659,7 +3672,7 @@ const App = {
 
         document.getElementById('detalle-sesion-jug-hdr').innerHTML =
           '<h2>' + f.dn + ', ' + f.d + ' de ' + f.ml + '</h2>' +
-          '<div class="vh-sub">' + s.HoraInicio + '\u2013' + s.HoraFin + (eq ? ' \u00b7 ' + eq.Nombre : '') + '</div>';
+          '<div class="vh-sub">' + s.HoraInicio + '\u2013' + s.HoraFin + (eq ? ' \u00b7 ' + _esc(eq.Nombre) : '') + '</div>';
         if (s.Cancelada === true || s.Cancelada === 'TRUE') {
           document.getElementById('detalle-sesion-jug-estado').innerHTML = '<div class="sesion-estado-texto">Entrenamiento cancelado: ' + _esc(s.MotivoCancelacion || '') + '</div>';
           document.getElementById('detalle-sesion-jug-actions').innerHTML = '';
@@ -3743,7 +3756,7 @@ const App = {
         if (!persona || !persona.ID) { host.innerHTML = '<div class="account-card"><h2>Tu perfil</h2><p>Tu cuenta de administración no tiene ficha de entrenador.</p></div>'; return; }
         var row = function(label,value) { return '<div class="account-summary-row"><dt>' + _statsTexto(label) + '</dt><dd translate="no">' + _statsTexto(value || '—') + '</dd></div>'; };
         var html = '<div class="account-profile-hero"><div id="perfil-avatar">' + App.avatarHtml(persona.FotoURL,persona.Nombre+' '+persona.Apellidos,88) + '</div><h2 translate="no">' + _statsTexto(persona.Nombre+' '+persona.Apellidos) + '</h2><div class="account-hero-actions"><button class="btn btn-primary" onclick="App.navigate(\'perfil-editar\')">Editar perfil</button>' + (!App.account.isStaff() ? '<button class="btn btn-secondary" onclick="App.views[\'perfil-usuario\'].elegirFoto()">Cambiar foto</button>' : '') + '</div></div><div class="account-card"><h2>Datos personales</h2><dl class="account-summary">' + row('Nombre',persona.Nombre) + row('Apellidos',persona.Apellidos) + (jugador ? row('Fecha de nacimiento',persona.FechaNac) + row('Dorsal',persona.Dorsal) : '') + '</dl></div><div class="account-card"><h2>Contacto</h2><dl class="account-summary">' + row('Teléfono',persona.Telefono) + row('Email',persona.Email) + '</dl></div>';
-        if (jugador) [1,2].forEach(function(n) { html += '<div class="account-card"><h2>' + (n === 1 ? 'Familiar 1' : 'Familiar 2') + '</h2><dl class="account-summary">' + row('Nombre',[persona['NombrePadre'+n],persona['ApellidosPadre'+n]].filter(Boolean).join(' ')) + row('Teléfono',persona['TelefonoPadre'+n]) + row('Email',persona['EmailPadre'+n]) + '</dl><p>' + (persona['NotificarAusenciasPadre'+n] === false || persona['NotificarAusenciasPadre'+n] === 'FALSE' ? 'Avisos por email desactivados' : 'Avisos por email activados') + '</p></div>'; });
+        if (jugador) [1,2].forEach(function(n) { html += '<div class="account-card"><h2>' + (n === 1 ? 'Familiar 1' : 'Familiar 2') + '</h2><dl class="account-summary">' + row('Nombre',[persona['NombrePadre'+n],persona['ApellidosPadre'+n]].filter(Boolean).join(' ')) + row('Teléfono',persona['TelefonoPadre'+n]) + row('Email',persona['EmailPadre'+n]) + '</dl><p>' + App.account.textoAvisos(persona, n) + '</p></div>'; });
         host.innerHTML = html;
         App.state._formIsDirty = false;
       },
@@ -3775,7 +3788,7 @@ const App = {
           [1,2].forEach(function(n) {
             html += '<fieldset class="account-family"><legend>Familiar ' + n + '</legend>';
             [['NombrePadre','Nombre','text'],['ApellidosPadre','Apellidos','text'],['TelefonoPadre','Teléfono','tel'],['EmailPadre','Email','email']].forEach(function(c) { var spec = [c[0]+n,c[1],c[2]]; App.views['perfil-usuario']._campos.push(spec); html += campo(spec); });
-            html += '<label class="account-check"><input type="checkbox" data-perfil="NotificarAusenciasPadre' + n + '" ' + (persona['NotificarAusenciasPadre'+n] !== false && persona['NotificarAusenciasPadre'+n] !== 'FALSE' ? 'checked' : '') + '>Recibir avisos de ausencias por email</label></fieldset>';
+            html += '<p class="account-hint">' + App.account.textoAvisos(persona, n) + '</p></fieldset>';
           });
           html += '<div class="form-group"><label for="perfil-codigo">Código de seguridad</label><input id="perfil-codigo" type="password" maxlength="6" autocomplete="off" placeholder="6 caracteres"><small>El mismo código que utilizas para justificar ausencias. Es necesario para guardar.</small></div>';
         }
@@ -3902,7 +3915,7 @@ const App = {
         App.operation.run('my-credentials','cambiarCredenciales',[datos],function(res) {
           App.state.auth = res.auth; _setStoredAuth(JSON.stringify(res.auth));
           if (App.state.jugador && res.auth.usuario) App.views['perfil-usuario']._actualizar({ Usuario: res.auth.usuario });
-          document.getElementById('seg-credenciales').querySelectorAll('input[type="password"]').forEach(function(el) { el.value = ''; });
+          document.getElementById('seg-credenciales').querySelectorAll('input[type="password"]').forEach(function(el) { el.value = ''; _pinAviso(el); });
           App.state._formIsDirty = false;
         }, null, { success: 'Credenciales actualizadas' }).catch(function() { /* La sesión anterior sigue siendo válida si falla el cambio. */ });
       },
@@ -3929,8 +3942,8 @@ const App = {
           return;
         }
         if (this._opcion === 'codigo' && !jugador) { App.navigate('seguridad',{},false); return; }
-        var field = function(id,label,extra) { return '<div class="form-group"><label for="'+id+'">'+label+'</label><input id="'+id+'" type="password" '+extra+'></div>'; };
-        host.innerHTML = this._opcion === 'codigo' ? '<form id="seg-codigo-form" class="account-card"><h2>Cambiar código de seguridad</h2><p>Este código protege los datos familiares y las justificaciones.</p>' + field('seg-codigo-actual','Código actual','maxlength="6" required autocomplete="off"') + field('seg-codigo-nuevo','Nuevo código (6 letras o números)','maxlength="6" required autocomplete="off"') + '<button type="submit" class="btn btn-primary btn-full">Cambiar código de seguridad</button></form>' : '<form id="seg-credenciales" class="account-card"><h2>' + (jugador ? 'Cambiar PIN y usuario' : 'Cambiar PIN') + '</h2>' + (jugador ? '<div class="form-group"><label for="seg-usuario">Cambiar usuario</label><input id="seg-usuario" autocomplete="username" maxlength="12" value="'+_statsTexto(App.state.auth.usuario||'')+'"><small>Letras, números y puntos. Máximo 12 caracteres.</small></div>' : '') + field('seg-pin-actual','PIN actual','required maxlength="32" autocomplete="current-password"') + field('seg-pin-nuevo','Nuevo PIN','inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" autocomplete="new-password"') + field('seg-pin-repetir','Repetir nuevo PIN','inputmode="numeric" maxlength="6" autocomplete="new-password"') + '<p>' + (jugador ? 'Usa de 4 a 6 dígitos. Deja el nuevo PIN vacío si solo cambias tu usuario.' : 'Usa de 4 a 6 dígitos.') + '</p><button type="submit" class="btn btn-primary btn-full">Guardar credenciales</button></form>';
+        var field = function(id,label,extra,after) { return '<div class="form-group"><label for="'+id+'">'+label+'</label><input id="'+id+'" type="password" '+extra+'>'+(after || '')+'</div>'; };
+        host.innerHTML = this._opcion === 'codigo' ? '<form id="seg-codigo-form" class="account-card"><h2>Cambiar código de seguridad</h2><p>Este código protege los datos familiares y las justificaciones.</p>' + field('seg-codigo-actual','Código actual','maxlength="6" required autocomplete="off"') + field('seg-codigo-nuevo','Nuevo código (6 letras o números)','maxlength="6" required autocomplete="off"') + '<button type="submit" class="btn btn-primary btn-full">Cambiar código de seguridad</button></form>' : '<form id="seg-credenciales" class="account-card"><h2>' + (jugador ? 'Cambiar PIN y usuario' : 'Cambiar PIN') + '</h2>' + (jugador ? '<div class="form-group"><label for="seg-usuario">Cambiar usuario</label><input id="seg-usuario" autocomplete="username" maxlength="12" value="'+_statsTexto(App.state.auth.usuario||'')+'"><small>Letras, números y puntos. Máximo 12 caracteres.</small></div>' : '') + field('seg-pin-actual','PIN actual','required maxlength="32" autocomplete="current-password"') + field('seg-pin-nuevo','Nuevo PIN','inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" autocomplete="new-password" oninput="_pinAviso(this)"',_pinAvisoHtml()) + field('seg-pin-repetir','Repetir nuevo PIN','inputmode="numeric" maxlength="6" autocomplete="new-password"') + '<p>' + (jugador ? 'Usa de 4 a 6 dígitos. Deja el nuevo PIN vacío si solo cambias tu usuario.' : 'Usa de 4 a 6 dígitos.') + '</p><button type="submit" class="btn btn-primary btn-full">Guardar credenciales</button></form>';
         var form = host.querySelector('form');
         form.oninput = function() { App.state._formIsDirty = true; };
         form.onsubmit = function(e) { e.preventDefault(); App.views.seguridad[App.views['seguridad-opcion']._opcion === 'codigo' ? 'codigo' : 'credenciales'](); };
@@ -4043,7 +4056,7 @@ const App = {
       _horarios: [],       // programación: entrenamientos semanales disponibles
       _estadoInicial: null,
       _modo: 'nuevo',      // 'nuevo' | 'edicion' | 'eliminar'
-      _datos: null,        // { dias, tipo, minutos, motivo, detalle }
+      _datos: null,        // { horarios: IDs de entrenamientos elegidos (programación), tipo, minutos, motivo, detalle }
       _paso: 'tipo',
       _otrosMinutos: false,
 
@@ -4058,13 +4071,13 @@ const App = {
         var esEdicion = !!registro && (registro.TieneJustificacion === true || registro.TieneJustificacion === 'TRUE');
         this._modo = soloEliminar ? 'eliminar' : esEdicion ? 'edicion' : 'nuevo';
         if (borrador) {
-          this._datos = { dias: [], tipo: borrador.tipo, minutos: borrador.minutos || null, motivo: borrador.motivo || '', detalle: borrador.detalle || '' };
+          this._datos = { horarios: [], tipo: borrador.tipo, minutos: borrador.minutos || null, motivo: borrador.motivo || '', detalle: borrador.detalle || '' };
         } else if (esEdicion) {
           var retraso = registro.TipoJustificacion === 'Retraso';
-          this._datos = { dias: [], tipo: retraso ? 'Retraso' : 'Ausencia', minutos: retraso && registro.MinutosRetraso ? Number(registro.MinutosRetraso) : null,
+          this._datos = { horarios: [], tipo: retraso ? 'Retraso' : 'Ausencia', minutos: retraso && registro.MinutosRetraso ? Number(registro.MinutosRetraso) : null,
             motivo: registro.MotivoCategoria || '', detalle: registro.MotivoDetalle || '' };
         } else {
-          this._datos = { dias: [], tipo: estado === 'R' ? 'Retraso' : estado === 'A' ? 'Ausencia' : null, minutos: null, motivo: '', detalle: '' };
+          this._datos = { horarios: [], tipo: estado === 'R' ? 'Retraso' : estado === 'A' ? 'Ausencia' : null, minutos: null, motivo: '', detalle: '' };
         }
         this._mostrar(soloEliminar || borrador ? 'codigo' : 'tipo', borrador ? borrador.codigo || '' : '');
       },
@@ -4079,14 +4092,15 @@ const App = {
         this._modo = actual ? 'edicion' : 'nuevo';
         var original = actual && horarios.find(function(h) { return h.ID === actual.ID_Horario; });
         if (borrador) {
-          this._datos = { dias: borrador.dias.slice(), tipo: borrador.tipo, minutos: borrador.minutos || null, motivo: borrador.motivo || '', detalle: borrador.detalle || '' };
+          this._datos = { horarios: borrador.horarios.slice(), tipo: borrador.tipo, minutos: borrador.minutos || null, motivo: borrador.motivo || '', detalle: borrador.detalle || '' };
         } else if (actual) {
           var retraso = actual.TipoIncidencia === 'Retraso';
-          this._datos = { dias: original ? [Number(original.DiaSemana)] : [], tipo: retraso ? 'Retraso' : 'Ausencia',
+          // Solo su entrenamiento: editar no marca el resto del día ni otros equipos.
+          this._datos = { horarios: original ? [original.ID] : [], tipo: retraso ? 'Retraso' : 'Ausencia',
             minutos: retraso && original ? _minutosEntre(original.HoraInicio, actual.HoraIncorporacion) : null,
             motivo: actual.MotivoCategoria || '', detalle: actual.MotivoDetalle || '' };
         } else {
-          this._datos = { dias: [], tipo: null, minutos: null, motivo: '', detalle: '' };
+          this._datos = { horarios: [], tipo: null, minutos: null, motivo: '', detalle: '' };
         }
         this._mostrar(borrador ? 'codigo' : 'dias', borrador ? borrador.codigo || '' : '');
       },
@@ -4099,7 +4113,7 @@ const App = {
         document.getElementById('justif-motivos').innerHTML = motivos.map(function(m) {
           return '<button type="button" class="justif-chip" data-motivo="' + _statsTexto(m) + '" aria-pressed="false" onclick="App.views.justificacion.elegirMotivo(this.dataset.motivo)">' + _statsTexto(m) + '</button>';
         }).join('');
-        document.getElementById('justif-dias').innerHTML = programacion ? this._htmlDias() : '';
+        document.getElementById('justif-dias').innerHTML = programacion ? this._htmlEntrenamientos() : '';
         document.getElementById('justif-detalle').value = this._datos.detalle;
         document.getElementById('justif-minutos').value = this._otrosMinutos ? String(this._datos.minutos) : '';
         document.getElementById('justif-codigo').value = codigo;
@@ -4159,28 +4173,37 @@ const App = {
         document.getElementById('justif-titulo').textContent = titulo;
       },
 
-      // Un chip por día con entrenamiento; cada día agrupa sus horarios (varios equipos o turnos).
-      _htmlDias: function() {
-        var porDia = {}, equipos = {}, self = this;
+      // Un chip por entrenamiento semanal (día + hora). Con varios equipos se agrupan bajo su nombre (principal primero).
+      _htmlEntrenamientos: function() {
+        var self = this, grupos = {}, orden = [], jugador = App.state.jugador;
         this._horarios.forEach(function(h) {
-          var dia = Number(h.DiaSemana);
-          (porDia[dia] = porDia[dia] || []).push(h);
-          equipos[h.ID_Equipo] = true;
+          if (!grupos[h.ID_Equipo]) { grupos[h.ID_Equipo] = []; orden.push(h.ID_Equipo); }
+          grupos[h.ID_Equipo].push(h);
         });
-        var variosEquipos = Object.keys(equipos).length > 1;
-        return Object.keys(porDia).map(Number).sort(function(a, b) { return a - b; }).map(function(dia) {
-          var horas = porDia[dia].map(function(h) {
-            var eq = variosEquipos && App.cache.getEquipoById(h.ID_Equipo);
-            return h.HoraInicio + (eq ? ' \u00b7 ' + eq.Nombre : '');
-          }).join(' / ');
-          return '<button type="button" class="justif-chip justif-dia" data-dia="' + dia + '" aria-pressed="false" onclick="App.views.justificacion.elegirDia(' + dia + ')">' +
-            '<strong>' + _statsTexto(self.DIAS[dia - 1] || 'D\u00eda') + '</strong><small data-no-i18n>' + _statsTexto(horas) + '</small></button>';
+        var chip = function(h, equipoNombre) {
+          var dia = self.DIAS[Number(h.DiaSemana) - 1] || 'D\u00eda', hora = h.HoraInicio + (h.HoraFin ? '\u2013' + h.HoraFin : '');
+          return '<button type="button" class="justif-chip justif-dia" data-horario="' + _esc(h.ID) + '" aria-pressed="false"' +
+            (equipoNombre ? ' aria-label="' + _esc(equipoNombre + ', ' + dia + ' ' + hora) + '"' : '') +
+            ' onclick="App.views.justificacion.elegirHorario(this.dataset.horario)"><strong>' + _esc(dia) + '</strong><small data-no-i18n>' + _esc(hora) + '</small></button>';
+        };
+        if (orden.length < 2) return this._horarios.map(function(h) { return chip(h); }).join('');
+        var tipo = function(equipoId) {
+          var rel = jugador && App.cache.jugadoresEquipos.find(function(r) { return r.ID_Jugador === jugador.ID && r.ID_Equipo === equipoId; });
+          return rel && rel.Tipo === 'Principal' ? 0 : 1;
+        };
+        var nombre = function(equipoId) { var eq = App.cache.getEquipoById(equipoId); return eq ? eq.Nombre : 'Equipo'; };
+        orden.sort(function(a, b) { return tipo(a) - tipo(b) || String(nombre(a)).localeCompare(String(nombre(b)), 'es'); });
+        return orden.map(function(equipoId) {
+          var n = nombre(equipoId);
+          return '<section class="justif-equipo" role="group" aria-label="' + _esc(n) + '"><h5 class="justif-equipo-nombre" data-no-i18n>' + _esc(n) + '</h5>' +
+            '<div class="justif-dias">' + grupos[equipoId].map(function(h) { return chip(h, n); }).join('') + '</div></section>';
         }).join('');
       },
 
+      // Entrenamientos elegidos, en el orden de la lista (día y hora).
       _horariosElegidos: function() {
-        var dias = this._datos.dias;
-        return this._horarios.filter(function(h) { return dias.indexOf(Number(h.DiaSemana)) >= 0; });
+        var elegidos = this._datos.horarios;
+        return this._horarios.filter(function(h) { return elegidos.indexOf(h.ID) >= 0; });
       },
 
       _sinMovimiento: function() {
@@ -4203,8 +4226,8 @@ const App = {
           }
         });
         document.querySelectorAll('#justif-steps [data-tipo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.tipo === datos.tipo)); });
-        document.querySelectorAll('#justif-steps [data-dia]').forEach(function(b) { b.setAttribute('aria-pressed', String(datos.dias.indexOf(Number(b.dataset.dia)) >= 0)); });
-        document.getElementById('justif-dias-next').disabled = !datos.dias.length;
+        document.querySelectorAll('#justif-steps [data-horario]').forEach(function(b) { b.setAttribute('aria-pressed', String(datos.horarios.indexOf(b.dataset.horario) >= 0)); });
+        document.getElementById('justif-dias-next').disabled = !datos.horarios.length;
         document.querySelectorAll('#justif-steps [data-minutos]').forEach(function(b) {
           var marcado = b.dataset.minutos === 'otro' ? self._otrosMinutos : !self._otrosMinutos && Number(b.dataset.minutos) === datos.minutos;
           b.setAttribute('aria-pressed', String(marcado));
@@ -4235,17 +4258,16 @@ const App = {
         if (indice > 0) this._irA(pasos[indice - 1], -1);
       },
 
-      elegirDia: function(dia) {
-        var dias = this._datos.dias, i = dias.indexOf(dia);
-        if (i >= 0) dias.splice(i, 1);
-        else dias.push(dia);
-        dias.sort(function(a, b) { return a - b; });
-        document.querySelectorAll('#justif-steps [data-dia]').forEach(function(b) { b.setAttribute('aria-pressed', String(dias.indexOf(Number(b.dataset.dia)) >= 0)); });
-        document.getElementById('justif-dias-next').disabled = !dias.length;
+      elegirHorario: function(id) {
+        var elegidos = this._datos.horarios, i = elegidos.indexOf(id);
+        if (i >= 0) elegidos.splice(i, 1);
+        else if (this._horarios.some(function(h) { return h.ID === id; })) elegidos.push(id);
+        document.querySelectorAll('#justif-steps [data-horario]').forEach(function(b) { b.setAttribute('aria-pressed', String(elegidos.indexOf(b.dataset.horario) >= 0)); });
+        document.getElementById('justif-dias-next').disabled = !elegidos.length;
       },
 
       continuarDias: function() {
-        if (this._datos.dias.length) this.siguiente();
+        if (this._datos.horarios.length) this.siguiente();
       },
 
       elegirTipo: function(tipo) {
@@ -4306,15 +4328,26 @@ const App = {
           (detalle ? ' Informaci\u00f3n adicional: "' + detalle + '".' : '');
       },
 
-      // Resumen de una programación: el mismo estilo de mensaje, aplicado a cada día elegido.
+      // Resumen de una programación: el mismo estilo de mensaje, aplicado a cada entrenamiento elegido.
+      // Con entrenamientos de varios equipos se nombra cada equipo («de Infantil los lunes… y de Cadete los martes…»).
       mensajeProgramacion: function(jugador, horarios, tipo, motivo, detalle, minutos) {
-        var plurales = ['lunes', 'martes', 'mi\u00e9rcoles', 'jueves', 'viernes', 's\u00e1bados', 'domingos'], porDia = {};
-        horarios.forEach(function(h) { (porDia[h.DiaSemana] = porDia[h.DiaSemana] || []).push(h.HoraInicio); });
-        var dias = Object.keys(porDia).map(Number).sort(function(a, b) { return a - b; }).map(function(dia) {
-          return 'los ' + plurales[dia - 1] + ' a las ' + _listaTexto(porDia[dia]);
+        var plurales = ['lunes', 'martes', 'mi\u00e9rcoles', 'jueves', 'viernes', 's\u00e1bados', 'domingos'], porEquipo = {}, orden = [];
+        horarios.forEach(function(h) {
+          if (!porEquipo[h.ID_Equipo]) { porEquipo[h.ID_Equipo] = []; orden.push(h.ID_Equipo); }
+          porEquipo[h.ID_Equipo].push(h);
         });
+        var dias = function(lista) {
+          var porDia = {};
+          lista.forEach(function(h) { (porDia[h.DiaSemana] = porDia[h.DiaSemana] || []).push(h.HoraInicio); });
+          return _listaTexto(Object.keys(porDia).map(Number).sort(function(a, b) { return a - b; }).map(function(dia) {
+            return 'los ' + plurales[dia - 1] + ' a las ' + _listaTexto(porDia[dia]);
+          }));
+        };
+        var entrenamientos = orden.length > 1
+          ? _listaTexto(orden.map(function(equipoId, i) { var eq = App.cache.getEquipoById(equipoId); return (i ? 'de ' : '') + (eq ? eq.Nombre : 'su equipo') + ' ' + dias(porEquipo[equipoId]); }))
+          : dias(horarios);
         return 'Los padres/tutores de ' + jugador.Nombre + ' ' + jugador.Apellidos + ' avisan de ' +
-          (tipo === 'Ausencia' ? 'una ausencia' : 'una llegada con retraso') + ' en los entrenamientos de ' + _listaTexto(dias) + '. ' +
+          (tipo === 'Ausencia' ? 'una ausencia' : 'una llegada con retraso') + ' en los entrenamientos de ' + entrenamientos + '. ' +
           'Motivo: ' + motivo + '.' +
           (minutos ? ' Llegar\u00e1 con unos ' + minutos + ' minutos de retraso.' : '') +
           (detalle ? ' Informaci\u00f3n adicional: "' + detalle + '".' : '');
@@ -4353,7 +4386,7 @@ const App = {
         if (!horarios.length || !d.tipo || !d.motivo) return;
         if (codigo.length !== 6) { showToast('Introduce el c\u00f3digo de autorizaci\u00f3n de 6 caracteres', 'error'); return; }
         App.views.programaciones.guardar(this._programacionId, horarios, {
-          dias: d.dias.slice(), tipo: d.tipo, minutos: d.tipo === 'Retraso' ? d.minutos : null, motivo: d.motivo, detalle: d.detalle, codigo: codigo,
+          horarios: d.horarios.slice(), tipo: d.tipo, minutos: d.tipo === 'Retraso' ? d.minutos : null, motivo: d.motivo, detalle: d.detalle, codigo: codigo,
         });
       },
 
@@ -4442,7 +4475,7 @@ const App = {
       _pendingAction: null,
       _busy: false,
       _busyId: null,
-      // Abre el asistente de justificación con el paso previo de días; borrador: datos de un intento fallido.
+      // Abre el asistente de justificación con el paso previo de entrenamientos; borrador: datos de un intento fallido.
       abrir: function(id, borrador) {
         if (this._busy) return;
         var j = App.state.jugador;
@@ -4454,8 +4487,11 @@ const App = {
         }).map(function(r) { return r.ID_Equipo; });
         // Cada entrenamiento semanal admite una programación: los ya programados no se ofrecen de nuevo.
         var ocupados = App.cache.programacionesJustificaciones.filter(function(p) { return p.ID !== id; }).map(function(p) { return p.ID_Horario; });
+        // Al editar solo se ofrecen entrenamientos de su mismo equipo: editar nunca crea programaciones en otros equipos.
+        var horarioActual = actual && App.cache.horarios.find(function(h) { return h.ID === actual.ID_Horario; });
+        var equipoEdicion = actual ? actual.ID_Equipo || (horarioActual && horarioActual.ID_Equipo) : null;
         var horarios = App.cache.horarios.filter(function(h) {
-          return equipos.indexOf(h.ID_Equipo) >= 0 && ocupados.indexOf(h.ID) < 0;
+          return equipos.indexOf(h.ID_Equipo) >= 0 && ocupados.indexOf(h.ID) < 0 && (!equipoEdicion || h.ID_Equipo === equipoEdicion);
         }).sort(function(a, b) { return Number(a.DiaSemana) - Number(b.DiaSemana) || String(a.HoraInicio).localeCompare(String(b.HoraInicio)); });
         if (!actual && !horarios.length) { showToast('No quedan entrenamientos semanales por programar', 'info'); return; }
         App.views.justificacion.abrirProgramacion(actual, horarios, borrador);
@@ -4485,7 +4521,7 @@ const App = {
         }).join('') : '<p class="schedule-empty">No tienes programaciones. Pulsa Programar para añadir una.</p>';
       },
       // Guarda lo elegido en el asistente con el contrato existente (una programación por entrenamiento semanal):
-      // al editar, la programación conserva su entrenamiento si sigue elegido y el resto de días se crean.
+      // al editar, la programación conserva su entrenamiento si sigue elegido y el resto de entrenamientos elegidos se crean.
       guardar: function(id, horarios, borrador) {
         var j = App.state.jugador;
         if (this._busy || !j || !horarios.length) return;
@@ -5296,8 +5332,30 @@ function _iconEstado(e) {
   return '?';
 }
 
+// Escapa texto para HTML (contenido y atributos). Para pasar valores a un onclick usa _statsArgumento.
 function _esc(s) {
-  return (s == null ? '' : String(s)).replace(/'/g, "\\'");
+  return _statsTexto(s);
+}
+
+// PIN fácil de adivinar: mismo dígito, secuencia (1234, 9876), bloques repetidos (1212, 123123) o muy común.
+// Solo sirve para un aviso suave: nunca bloquea guardar.
+function _pinDebil(pin) {
+  pin = String(pin == null ? '' : pin).trim();
+  if (!/^\d{4,6}$/.test(pin)) return false;
+  if (/^(\d)\1+$/.test(pin) || /^(\d\d)\1+$/.test(pin) || /^(\d{3})\1$/.test(pin)) return true;
+  if (['1122', '2580', '1004', '2000', '6969', '1987', '1984'].indexOf(pin) >= 0) return true;
+  var paso = pin.charCodeAt(1) - pin.charCodeAt(0);
+  if (paso !== 1 && paso !== -1) return false;
+  for (var i = 2; i < pin.length; i++) if (pin.charCodeAt(i) - pin.charCodeAt(i - 1) !== paso) return false;
+  return true;
+}
+function _pinAvisoHtml() {
+  return '<small class="pin-aviso" role="status" hidden>Este PIN es fácil de adivinar. Puedes usarlo, pero es más seguro uno menos predecible.</small>';
+}
+// oninput de los campos de PIN nuevo: muestra u oculta el aviso hermano sin tocar el foco ni el resto del formulario.
+function _pinAviso(input) {
+  var aviso = input && input.parentNode && input.parentNode.querySelector('.pin-aviso');
+  if (aviso) aviso.hidden = !_pinDebil(input.value);
 }
 
 // Horas HH:MM ↔ minutos de retraso de una programación (se guarda la hora de incorporación prevista).
@@ -5344,6 +5402,12 @@ App.account = {
   isPlayer: function() { return this.target ? this.target.tipo === 'jugador' : App.state.rol === 'jugador'; },
   isStaff: function() { return !!this.target; },
   allowed: function() { return !this.target || (App.state.rol !== 'jugador' && (this.target.tipo === 'jugador' || App.state.esAdmin)); },
+  // Avisos de ausencia por email del familiar n: solo entrenadores y admin los cambian (perfil del jugador en vista staff).
+  textoAvisos: function(persona, n) {
+    var activo = persona['NotificarAusenciasPadre'+n] !== false && persona['NotificarAusenciasPadre'+n] !== 'FALSE';
+    if (this.isStaff()) return activo ? 'Avisos por email activados' : 'Avisos por email desactivados';
+    return activo ? 'Avisos de ausencia por email activados. Solo el entrenador puede cambiarlo.' : 'Avisos de ausencia por email desactivados. Solo el entrenador puede cambiarlo.';
+  },
   // Única regla de perfil de jugador incompleto: la usan el aviso de inicio y el formulario de edición.
   // Pide la fecha de nacimiento y, si ningún familiar está completo, los datos que faltan del más avanzado.
   camposPendientes: function(j) {
@@ -5505,8 +5569,9 @@ function _htmlLogro(code) {
 function _alertasUmbral() { return (App.state.alertasAusencias && App.state.alertasAusencias.umbral) || 3; }
 function _htmlAlerta(code) { return '<span class="alerta-chip">' + _esc(({seguidas:_alertasUmbral() + ' ausencias seguidas',caida:'Caída de asistencia',injustificadas:'Faltas sin justificar'})[code] || code) + '</span>'; }
 function _statsArgumento(valor) { return JSON.stringify(valor == null ? null : valor).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function _statsJugadorBoton(id,nombre) { var persona = App.cache.getJugadorById(id); return '<button class="btn btn-secondary btn-sm person-inline" onclick="App.views[\'jugador-detalle\'].cargar(' + _statsArgumento(id) + ')">' + App.avatarHtml(persona && persona.FotoURL,persona ? persona.Nombre + ' ' + persona.Apellidos : nombre,36) + '<span>' + _esc(nombre) + '</span></button>'; }
-function _statsEquipoBoton(id,nombre) { return '<button class="btn btn-secondary btn-sm" onclick="App.views[\'equipo-detalle\'].cargar(' + _statsArgumento(id) + ')">' + _esc(nombre) + '</button>'; }
+function _statsJugadorBoton(id,nombre) { var persona = App.cache.getJugadorById(id); return '<button class="btn btn-secondary btn-sm person-inline" data-resaltar="' + _esc('jugador:' + id) + '" onclick="App.views[\'jugador-detalle\'].cargar(' + _statsArgumento(id) + ')">' + App.avatarHtml(persona && persona.FotoURL,persona ? persona.Nombre + ' ' + persona.Apellidos : nombre,36) + '<span>' + _esc(nombre) + '</span></button>'; }
+// resaltar (opcional): persona de origen que se resalta en el equipo, p. ej. { tipo: 'jugador', id }.
+function _statsEquipoBoton(id,nombre,resaltar) { return '<button class="btn btn-secondary btn-sm" onclick="App.views[\'equipo-detalle\'].cargar(' + _statsArgumento(id) + (resaltar ? ',' + _statsArgumento(resaltar) : '') + ')">' + _esc(nombre) + '</button>'; }
 function _statsOrdenar(filas,campo) { return filas.slice().sort(function(a,b) { var va = a[campo], vb = b[campo]; if (va == null || vb == null) return va == null ? (vb == null ? 0 : 1) : -1; return vb - va || String(a.apellidos || a.nombre || '').localeCompare(String(b.apellidos || b.nombre || ''),'es'); }); }
 function _statsOrdenSelect(entidad,campo) {
   var opciones = entidad === 'equipo' ? [['asistenciaPct','Asistencia'],['puntualidadPct','Puntualidad'],['injustificadasA','Faltas sin justificar'],['tendenciaPp','Tendencia']] : [['asistenciaPct','Asistencia'],['puntualidadPct','Puntualidad'],['sesiones','Sesiones'],['canceladas','Canceladas'],['conEntrenadorPct','Cobertura técnica'],['tendenciaPp','Tendencia']];
@@ -5555,7 +5620,7 @@ function _statsJugadorHtml(d, personal) {
     _statsBloque('Asistencia mes a mes',_statsMensual(d.serieMensual)) + _statsBloque('Asistencia por día',_statsPorDia(d.porDia)) +
     '<div class="stat-grid-1">' + _htmlKpi('Retraso medio',_datoTexto(d.retrasoMedioMin,' min'),d.retrasosConMinutos + ' retrasos con minutos') + '</div>' +
     _statsBloque('Avisos y motivos',_statsJustificacion((c.A + c.R) ? Math.round((c.justificadasA + c.justificadasR) * 100 / (c.A + c.R)) : null) + '<p>' + avisos.total + ' justificaciones · ' + avisos.previos + ' avisos previos · ' + avisos.programadas + ' programadas</p><p>Antelación mediana: ' + _datoTexto(avisos.antelacionMedianaHoras,' h') + ' ' + _statsInfoBoton('Antelación de avisos') + '</p>' + _statsMotivos(d.motivos)) +
-    _statsBloque('Equipos',_statsTabla(['Equipo','Tipo','Sesiones registradas','Asistencia'],d.equipos.map(function(e) { return [_esc(e.nombre),_esc(e.tipo),e.base,_pctTexto(e.asistenciaPct)]; }))) +
+    _statsBloque('Equipos',_statsTabla(['Equipo','Tipo','Sesiones registradas','Asistencia'],d.equipos.map(function(e) { return [personal && e.equipoId ? _statsEquipoBoton(e.equipoId,e.nombre,{tipo:'jugador',id:App.state.detalleJugadorId}) : _esc(e.nombre),_esc(e.tipo),e.base,_pctTexto(e.asistenciaPct)]; }))) +
     '<div class="stat-grid-2">' + _htmlKpi('Carga semanal',_datoTexto(d.carga.sesionesSemanaMedia),'sesiones por semana') + _htmlKpi('Horas programadas asistidas',_datoTexto(d.carga.horasAsistidas,' h'),'Duración de los entrenamientos a los que vino') + '</div>' +
     _statsBloque('Sesiones extra','<p>' + d.extras.asistidas + ' asistidas / ' + d.extras.base + ' registradas</p>');
 }
@@ -6058,8 +6123,9 @@ function _statsContacto(tipo,id,opciones) {
 Object.assign(App.account, {
   // Botones de cabecera de la ficha: contacto siempre; perfil y seguridad solo si se puede editar. Mismo estilo e iconos que el menú de usuario.
   accionesDetalleHtml: function(tipo, id, editable) {
-    var acciones = [['contacto','Contacto del ' + tipo,'Contacto','_statsContacto(\'' + tipo + '\',\'' + _esc(id) + '\')']];
-    if (editable) acciones.push(['perfil','Perfil','Perfil','App.account.open(\'' + tipo + '\',\'' + _esc(id) + '\',\'perfil-usuario\')'],['seguridad','Seguridad','Seguridad','App.account.open(\'' + tipo + '\',\'' + _esc(id) + '\',\'seguridad\')']);
+    var tipoArg = _statsArgumento(tipo), idArg = _statsArgumento(id);
+    var acciones = [['contacto','Contacto del ' + tipo,'Contacto','_statsContacto(' + tipoArg + ',' + idArg + ')']];
+    if (editable) acciones.push(['perfil','Perfil','Perfil','App.account.open(' + tipoArg + ',' + idArg + ',\'perfil-usuario\')'],['seguridad','Seguridad','Seguridad','App.account.open(' + tipoArg + ',' + idArg + ',\'seguridad\')']);
     return '<div class="detalle-actions">' + acciones.map(function(a) {
       return '<button class="detalle-settings" type="button" aria-label="' + a[1] + '" title="' + a[2] + '" onclick="' + a[3] + '">' + App.account.icon(a[0]) + '</button>';
     }).join('') + '</div>';
@@ -6092,7 +6158,7 @@ Object.assign(App.account, {
       else if (editable) otros.push(equipo);
     });
     if (jugador) propios.sort(function(a,b) { return (a.relacion.Tipo === 'Principal' ? 0 : 1) - (b.relacion.Tipo === 'Principal' ? 0 : 1); });
-    function abrir(equipo) { return 'App.views[\'equipo-form\'].cargar(\'' + _esc(equipo.ID) + '\',{tipo:\'' + (jugador ? 'jug' : 'ent') + '\',id:\'' + _esc(persona.ID) + '\'})'; }
+    function abrir(equipo) { return 'App.views[\'equipo-form\'].cargar(' + _statsArgumento(equipo.ID) + ',' + _statsArgumento({tipo:jugador ? 'jug' : 'ent',id:persona.ID}) + ')'; }
     function nombre(equipo) { var n = _statsTexto(equipo.Nombre || ''); return '<span class="account-team-name" title="' + n + '">' + n + '</span>'; }
     html += '<h3>Equipos</h3><p class="account-hint">Gestiona las asignaciones y su tipo desde el formulario del equipo.</p>';
     html += propios.length ? '<ul class="account-team-list">' + propios.map(function(p) {
@@ -6158,7 +6224,7 @@ Object.assign(App.account, {
       if (!this.isPlayer() || !App.state.esAdmin) return '';
       return '<form class="account-card" onsubmit="event.preventDefault();App.account.guardarStaffCodigo()"><h3>Código familias</h3><p>Compártelo con la familia y cámbialo solo si fue comprometido.</p><label class="form-group">Nuevo código familias<input id="staff-codigo" autocomplete="off" value="' + _statsTexto(persona.CodigoPadres || '') + '"></label><button class="btn btn-primary btn-full" type="submit">Guardar cambios</button></form>';
     }
-    return '<form class="account-card" onsubmit="event.preventDefault();App.account.guardarStaffCredenciales()"><h3>Credenciales de acceso</h3><p>Comunica las nuevas credenciales a la persona. No necesitas su PIN actual.</p>' + (this.isPlayer() ? '<label class="form-group">Usuario<input id="staff-usuario" autocomplete="off" value="' + _statsTexto(persona.Usuario || '') + '"></label>' : '') + '<label class="form-group">Nuevo PIN<input id="staff-pin" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label><label class="form-group">Confirmar PIN<input id="staff-pin-confirm" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label><p>Deja el PIN en blanco para mantener el actual.</p><button class="btn btn-primary btn-full" type="submit">Guardar cambios</button></form>';
+    return '<form class="account-card" onsubmit="event.preventDefault();App.account.guardarStaffCredenciales()"><h3>Credenciales de acceso</h3><p>Comunica las nuevas credenciales a la persona. No necesitas su PIN actual.</p>' + (this.isPlayer() ? '<label class="form-group">Usuario<input id="staff-usuario" autocomplete="off" value="' + _statsTexto(persona.Usuario || '') + '"></label>' : '') + '<label class="form-group">Nuevo PIN<input id="staff-pin" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" oninput="_pinAviso(this)">' + _pinAvisoHtml() + '</label><label class="form-group">Confirmar PIN<input id="staff-pin-confirm" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label><p>Deja el PIN en blanco para mantener el actual.</p><button class="btn btn-primary btn-full" type="submit">Guardar cambios</button></form>';
   },
   guardarStaffCredenciales: function() {
     if (!this.isStaff() || !this.allowed()) return;
@@ -6175,7 +6241,7 @@ Object.assign(App.account, {
     confirmarYGuardar('Modificar credenciales','Se cambiarán las credenciales de acceso de <strong>' + _statsTexto(persona.Nombre + ' ' + persona.Apellidos) + '</strong>. Asegúrate de comunicarle los nuevos datos.',function() {
       App.operation.run('staff-security:' + id,jugador ? 'actualizarCredencialesJugador' : 'actualizarEntrenador',jugador ? [id,usuario,pin || null,null] : [id,{PIN:pin}],function() {
         if (jugador) App.cache.upsert('jugadores',Object.assign({},persona,{Usuario:usuario}));
-        pinField.value = ''; confirmField.value = '';
+        pinField.value = ''; confirmField.value = ''; _pinAviso(pinField);
         App.state._formIsDirty = false;
       }).catch(function() { /* App.operation muestra el error. */ });
     });
@@ -6422,7 +6488,8 @@ App.i18n = {
 "Email Google *":"Google email *",
 ": cuenta de Google requerida para acceder.":": a Google account is required to sign in.",
 "Acceso":"Access",
-"como PIN inicial.":"as the initial PIN.",
+"como PIN inicial; conviene cambiarlo por uno menos predecible.":"as the initial PIN; it is best to change it to something less predictable.",
+"Este PIN es fácil de adivinar. Puedes usarlo, pero es más seguro uno menos predecible.":"This PIN is easy to guess. You can use it, but a less predictable one is safer.",
 "Conceder permisos de administrador":"Grant administrator permissions",
 "Guardar entrenador":"Save coach",
 "Eliminar entrenador":"Delete coach",
@@ -6622,8 +6689,11 @@ App.i18n = {
 "El email identifica tu cuenta y no se puede cambiar aquí.":"Your email identifies your account and cannot be changed here.",
 "Contacto familiar":"Family contact",
 "Estos datos ayudan al club a contactar contigo y con tu familia.":"These details help the club contact you and your family.",
-"Recibir avisos de ausencias por email":"Receive absence notifications by email",
 "El mismo código que utilizas para justificar ausencias. Es necesario para guardar.":"The same code you use to explain absences. It is required to save.",
+"Avisos de ausencia por email activados. Solo el entrenador puede cambiarlo.":"Absence email notifications on. Only the coach can change this.",
+"Avisos de ausencia por email desactivados. Solo el entrenador puede cambiarlo.":"Absence email notifications off. Only the coach can change this.",
+"Avisos por email activados":"Email notifications on",
+"Avisos por email desactivados":"Email notifications off",
 "Elige un avatar del club o sube tu foto.":"Choose a club avatar or upload your photo.",
 "Subir mi foto":"Upload my photo",
 "Se recortará al centro. La foto solo se usa como imagen de perfil.":"The photo will be cropped to the centre and used only as your profile picture.",
@@ -6795,8 +6865,8 @@ App.i18n = {
 "No se pudo enviar la justificación":"The explanation could not be sent",
 "Editar programación":"Edit scheduled notice",
 "Programar justificación":"Schedule explanation",
-"¿Qué días quieres programar?":"Which days do you want to schedule?",
-"Días con entrenamiento de tu equipo. Puedes elegir varios.":"Your team's training days. You can choose several.",
+"¿Qué entrenamientos quieres programar?":"Which training sessions do you want to schedule?",
+"Entrenamientos semanales de tus equipos. Puedes elegir varios.":"Weekly training sessions of your teams. You can choose several.",
 "Aviso que recibirá el entrenador cada semana":"Notice the coach will receive every week",
 "Confirmar y guardar":"Confirm and save",
 "No quedan entrenamientos semanales por programar":"There are no weekly training sessions left to schedule",

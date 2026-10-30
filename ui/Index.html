@@ -420,8 +420,9 @@
         <div class="form-section-title">Acceso</div>
         <div class="form-group">
           <label>PIN de acceso</label>
-          <input type="text" id="ent-pin-nuevo" placeholder="4 d&iacute;gitos" maxlength="4" style="letter-spacing:4px">
-          <small class="form-hint">Si se deja vac&iacute;o, se usar&aacute; <strong>1234</strong> como PIN inicial.</small>
+          <input type="text" id="ent-pin-nuevo" placeholder="4 d&iacute;gitos" maxlength="4" style="letter-spacing:4px" oninput="_pinAviso(this)">
+          <small class="pin-aviso" role="status" hidden>Este PIN es f&aacute;cil de adivinar. Puedes usarlo, pero es m&aacute;s seguro uno menos predecible.</small>
+          <small class="form-hint">Si se deja vac&iacute;o, se usar&aacute; <strong>1234</strong> como PIN inicial; conviene cambiarlo por uno menos predecible.</small>
         </div>
       </div>
 
@@ -545,9 +546,9 @@
       <div id="justif-steps" class="modal-body justif-steps">
 
         <section class="justif-step" data-step="dias" hidden>
-          <h4 class="justif-question" tabindex="-1">&iquest;Qu&eacute; d&iacute;as quieres programar?</h4>
-          <p class="justif-hint">D&iacute;as con entrenamiento de tu equipo. Puedes elegir varios.</p>
-          <div id="justif-dias" class="justif-dias" role="group" aria-label="D&iacute;as de entrenamiento"></div>
+          <h4 class="justif-question" tabindex="-1">&iquest;Qu&eacute; entrenamientos quieres programar?</h4>
+          <p class="justif-hint">Entrenamientos semanales de tus equipos. Puedes elegir varios.</p>
+          <div id="justif-dias" class="justif-dias" role="group" aria-label="Entrenamientos semanales"></div>
           <div class="justif-actions">
             <button type="button" id="justif-dias-next" class="btn btn-primary btn-full" disabled onclick="App.views.justificacion.continuarDias()">Continuar</button>
           </div>

@@ -146,6 +146,24 @@ test('perfil jugador conserva autorización familiar; perfil entrenador solo act
   assert.equal(s.writes.some(w => w.table === 'Administradores'), false);
 });
 
+test('avisos por email: la familia no puede cambiarlos aunque mande el campo; entrenador y admin sí y se guardan como booleano', () => {
+  const s = servidor();
+  s.rows.Jugadores[0].NotificarAusenciasPadre1 = true;
+  for (const call of [
+    () => s.call('actualizarMiPerfil', s.jugador, { Telefono: '600123456', NotificarAusenciasPadre1: false, NotificarAusenciasPadre2: false }, 'ABC123'),
+    () => s.call('actualizarPerfilJugador', s.jugador, 'j1', { NotificarAusenciasPadre1: false }, 'ABC123'),
+  ]) assert.equal(call().success, true);
+  assert.equal(s.writes.some(w => 'NotificarAusenciasPadre1' in w.fields || 'NotificarAusenciasPadre2' in w.fields), false);
+  assert.equal(s.rows.Jugadores[0].NotificarAusenciasPadre1, true);
+  assert.equal(s.call('actualizarJugador', s.jugador, 'j1', { NotificarAusenciasPadre1: false }).success, false, 'el endpoint de staff rechaza a jugadores');
+
+  assert.equal(s.call('actualizarJugador', s.entrenador, 'j1', { NotificarAusenciasPadre1: false, NotificarAusenciasPadre2: 'TRUE' }).success, true);
+  assert.deepEqual(s.writes.at(-1), { table: 'Jugadores', id: 'j1', fields: { NotificarAusenciasPadre1: false, NotificarAusenciasPadre2: true } });
+  assert.equal(s.call('actualizarPerfilJugador', s.admin, 'j1', { NotificarAusenciasPadre1: 'false' }).success, true);
+  assert.deepEqual(s.writes.at(-1).fields, { NotificarAusenciasPadre1: false });
+  assert.equal(s.rows.Jugadores[0].NotificarAusenciasPadre1, false);
+});
+
 test('opciones de recuperación enmascaradas por rol y sinCorreo', () => {
   const s = servidor();
   s.rows.Jugadores[0].NombrePadre1 = 'María';

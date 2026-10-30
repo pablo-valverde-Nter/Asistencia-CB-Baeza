@@ -34,7 +34,7 @@ test('detalle usa tres acciones SVG compartidas (contacto, perfil, seguridad); e
   const html = app.account.accionesDetalleHtml('jugador','j',true);
   assert.equal((html.match(/<button /g) || []).length,3);
   assert.equal((html.match(/<svg class="account-menu-icon"/g) || []).length,3);
-  assert.match(html,/_statsContacto\('jugador','j'\)/); assert.match(html,/perfil-usuario/); assert.match(html,/seguridad/);
+  assert.match(html,/_statsContacto\(&quot;jugador&quot;,&quot;j&quot;\)/); assert.match(html,/perfil-usuario/); assert.match(html,/seguridad/);
   const soloContacto = app.account.accionesDetalleHtml('entrenador','e',false);
   assert.equal((soloContacto.match(/<button /g) || []).length,1);
   assert.doesNotMatch(soloContacto,/perfil-usuario|seguridad/);
@@ -67,9 +67,9 @@ test('perfil staff muestra solo los equipos propios y ofrece el resto tras «Ges
   const [propios, otros = ''] = app.account.perfilStaffHtml(app.account.persona()).split('<details');
   assert.ok(propios.indexOf('Cadete') < propios.indexOf('Junior'), 'Principal primero');
   assert.match(propios,/>Principal</); assert.match(propios,/>Secundario</);
-  assert.doesNotMatch(propios,/Senior|'free'/);
-  assert.match(otros,/Gestionar en otro equipo/); assert.match(otros,/equipo-form'\]\.cargar\('free',\{tipo:'jug',id:'j'\}\)/);
-  assert.doesNotMatch(otros,/'team'|'sec'/);
+  assert.doesNotMatch(propios,/Senior|&quot;free&quot;/);
+  assert.match(otros,/Gestionar en otro equipo/); assert.match(otros,/equipo-form'\]\.cargar\(&quot;free&quot;,\{&quot;tipo&quot;:&quot;jug&quot;,&quot;id&quot;:&quot;j&quot;\}\)/);
+  assert.doesNotMatch(otros,/&quot;team&quot;|&quot;sec&quot;/);
   const coach = client(); coach.app.account.open('jugador','j');
   coach.app.cache.equipos.push({ID:'free',Nombre:'Senior'});
   const html = coach.app.account.perfilStaffHtml(coach.app.account.persona());
@@ -190,7 +190,7 @@ test('una relación Visor antigua se muestra como Entrenador sin selector y el f
   app.cache.entrenadoresEquipos=[{ID:'real',ID_Entrenador:'e',ID_Equipo:'team',TipoRol:'Visor',Activo:true}];
   const html=app.account.perfilStaffHtml(app.account.persona());
   assert.match(html,/account-team-chip is-main">Entrenador</); assert.doesNotMatch(html,/<select|Visor/);
-  assert.match(html,/equipo-form'\]\.cargar\('team',\{tipo:'ent',id:'e'\}\)/);
+  assert.match(html,/equipo-form'\]\.cargar\(&quot;team&quot;,\{&quot;tipo&quot;:&quot;ent&quot;,&quot;id&quot;:&quot;e&quot;\}\)/);
   app.cache._setRelacionesEquipo('team',[],[{ID:'e'}]);
   assert.equal(app.cache.entrenadoresEquipos.length,1); assert.equal(app.cache.entrenadoresEquipos[0].ID,'real');
   assert.equal(app.cache.entrenadoresEquipos[0].TipoRol,'Entrenador');
