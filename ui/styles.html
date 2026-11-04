@@ -1228,6 +1228,16 @@ body:has(.operation-status.pending:not(.hidden)) #toast-container { bottom: calc
 .scheduled-action-icon { display: block; width: 19px; height: 19px; fill: currentColor; }
 .scheduled-action-icon rect { fill: currentColor; }
 .scheduled-action-icon path { fill: currentColor; stroke: currentColor; stroke-width: .5; stroke-linejoin: round; }
+/* Opciones al tocar una programación (Editar / Borrar) y su nombre en la petición del código. Solo tokens: válido en los tres temas. */
+.prog-opciones { padding: 12px 16px 20px; }
+.prog-opciones-resumen { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--borde); border-radius: 12px; background: var(--fondo); }
+.prog-opciones-resumen strong { display: block; font-size: .9rem; color: var(--texto); }
+.prog-opciones-resumen small { display: block; margin-top: 3px; font-size: .75rem; color: var(--texto-sec); }
+.prog-opciones-pregunta { margin: 0 0 12px; font-size: .86rem; font-weight: 600; color: var(--texto); }
+.prog-opciones-acciones { display: flex; flex-direction: column; gap: 8px; }
+.prog-opciones-acciones .btn { min-height: 48px; }
+.prog-opciones-acciones .btn:focus-visible { outline: 2px solid var(--morado); outline-offset: 2px; }
+.prog-codigo-nombre { margin: 0 0 8px; font-size: .88rem; font-weight: 700; color: var(--texto); }
 .weekly-schedule-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--borde); font-size: .82rem; }
 .weekly-schedule-row:last-child { border-bottom: 0; }
 .weekly-schedule-row span { color: var(--texto-sec); }

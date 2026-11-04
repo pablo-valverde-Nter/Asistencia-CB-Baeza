@@ -435,7 +435,7 @@ test('con «Salud» el asistente oculta y desactiva el detalle y no envía texto
   assert.deepEqual(JSON.parse(JSON.stringify(sent[0].args)), ['s1', 'member', 'ABC123', 'Ausencia', 'Salud', '', null]);
 });
 
-test('la programación usa el mismo asistente con un paso previo de entrenamientos y guarda un aviso por entrenamiento', async () => {
+test('la programación usa el mismo asistente con un paso previo de entrenamientos y editar actualiza la existente sin crear otra', async () => {
   const { app, context, element, visible, pressed, entrenamientos, sent } = wizardClient();
   app.cache.jugadoresEquipos = [{ ID_Jugador: 'member', ID_Equipo: 'team', Activo: true }];
   app.cache.horarios = [
@@ -461,7 +461,13 @@ test('la programación usa el mismo asistente con un paso previo de entrenamient
   assert.doesNotMatch(element('justif-dias').innerHTML, /justif-equipo/, 'con un solo equipo no se agrupa');
   assert.deepEqual(pressed(entrenamientos()), ['h-lun']);
   assert.equal(element('justif-progress-text').textContent, 'Paso 1 de 5');
+  assert.equal(element('justif-dias-pregunta').textContent, '¿A qué entrenamiento se aplica?');
+  // En edición se elige un único entrenamiento: tocar otro sustituye al anterior.
   app.views.justificacion.elegirHorario('h-mie');
+  assert.deepEqual(pressed(entrenamientos()), ['h-mie']);
+  app.views.justificacion.elegirHorario('h-mie');
+  assert.deepEqual(pressed(entrenamientos()), ['h-mie'], 'no se puede quedar sin entrenamiento');
+  app.views.justificacion.elegirHorario('h-lun');
   app.views.justificacion.continuarDias();
   assert.equal(visible(), 'tipo');
   app.views.justificacion.elegirTipo('Retraso');
@@ -471,8 +477,7 @@ test('la programación usa el mismo asistente con un paso previo de entrenamient
   app.views.justificacion.continuarMotivo();
   assert.equal(visible(), 'resumen');
   assert.equal(element('justif-preview').textContent,
-    'Los padres/tutores de Ana Baeza avisan de una llegada con retraso en los entrenamientos de los lunes a las 18:00 y los miércoles a las 19:00. Motivo: Consulta. Llegará con unos 15 minutos de retraso.');
-  assert.equal(element('justif-eliminar-prog').classList.contains('hidden'), false);
+    'Los padres/tutores de Ana Baeza avisan de una llegada con retraso en los entrenamientos de los lunes a las 18:00. Motivo: Consulta. Llegará con unos 15 minutos de retraso.');
   app.views.justificacion.siguiente();
   assert.equal(visible(), 'codigo');
   assert.equal(element('justif-enviar').textContent, 'Confirmar y guardar');
@@ -482,9 +487,8 @@ test('la programación usa el mismo asistente con un paso previo de entrenamient
   const datos = { tipoIncidencia: 'Retraso', motivo: 'Consulta', detalle: '' };
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), [
     { fn: 'actualizarProgramacionJustificacion', args: ['p1', 'member', 'ABC123', { idHorario: 'h-lun', ...datos, horaIncorporacion: '18:15' }] },
-    { fn: 'crearProgramacionJustificacion', args: ['member', 'ABC123', { idHorario: 'h-mie', ...datos, horaIncorporacion: '19:15' }] },
   ]);
-  assert.deepEqual(app.cache.programacionesJustificaciones.map(p => p.ID_Horario), ['h-lun', 'h-vie', 'h-mie']);
+  assert.deepEqual(app.cache.programacionesJustificaciones.map(p => [p.ID, p.ID_Horario]), [['p1', 'h-lun'], ['p2', 'h-vie']]);
   // Al reabrir, los minutos se recuperan de la hora de incorporación guardada.
   app.cache.programacionesJustificaciones[0].HoraIncorporacion = '18:15';
   app.cache.programacionesJustificaciones[0].TipoIncidencia = 'Retraso';
@@ -571,6 +575,149 @@ test('editar una programación de un equipo solo marca su entrenamiento y no cre
   assert.deepEqual(sent.map(s => s.fn), ['actualizarProgramacionJustificacion']);
   assert.equal(sent[0].args[0], 'p-inf');
   assert.equal(sent[0].args[3].idHorario, 'inf-lun');
+});
+
+function filasProgramacion() {
+  const rows = sessionRows();
+  rows.horarios = [
+    { ID: 'h-lun', ID_Equipo: 'team', DiaSemana: 1, HoraInicio: '18:00', HoraFin: '19:30' },
+    { ID: 'h-mie', ID_Equipo: 'team', DiaSemana: 3, HoraInicio: '19:00', HoraFin: '20:30' },
+  ];
+  rows.jugadores[0].CodigoPadres = 'ABC123';
+  rows.sesiones = [
+    { ID: 'pasada', ID_Equipo: 'team', ID_Horario: 'h-lun', Fecha: '2026-11-02', HoraInicio: '18:00', HoraFin: '19:30' },
+    { ID: 'hoy-empezada', ID_Equipo: 'team', ID_Horario: 'h-lun', Fecha: '2026-11-04', HoraInicio: '11:30', HoraFin: '13:00' },
+    { ID: 'futura', ID_Equipo: 'team', ID_Horario: 'h-lun', Fecha: '2026-11-09', HoraInicio: '18:00', HoraFin: '19:30' },
+    { ID: 'futura-marcada', ID_Equipo: 'team', ID_Horario: 'h-lun', Fecha: '2026-11-16', HoraInicio: '18:00', HoraFin: '19:30' },
+    { ID: 'futura-antigua', ID_Equipo: 'team', Fecha: '2026-11-23', HoraInicio: '18:00', HoraFin: '19:30' },
+    { ID: 'futura-familia', ID_Equipo: 'team', ID_Horario: 'h-lun', Fecha: '2026-11-30', HoraInicio: '18:00', HoraFin: '19:30' },
+    { ID: 'futura-miercoles', ID_Equipo: 'team', ID_Horario: 'h-mie', Fecha: '2026-11-11', HoraInicio: '19:00', HoraFin: '20:30' },
+  ];
+  const programada = (id, sesion, extra) => ({ ID: id, ID_Sesion: sesion, ID_Jugador: 'member', Estado: null, TieneJustificacion: true,
+    TipoJustificacion: 'Ausencia', MotivoCategoria: 'Estudios', JustificadoPor: 'programacion', EsProgramada: true, NotificadoEntrenador: true, ...extra });
+  rows.asistJugadores = [
+    programada('a-pasada', 'pasada', { Estado: 'A' }),
+    programada('a-hoy', 'hoy-empezada'),
+    programada('a-futura', 'futura'),
+    programada('a-marcada', 'futura-marcada', { Estado: 'R', MinutosRetraso: 10 }),
+    programada('a-antigua', 'futura-antigua', { NotificadoEntrenador: false }),
+    programada('a-familia', 'futura-familia', { JustificadoPor: 'padre', EsProgramada: false }),
+    programada('a-miercoles', 'futura-miercoles'),
+  ];
+  rows.programaciones = [
+    { ID: 'p-lun', ID_Jugador: 'member', ID_Equipo: 'team', ID_Horario: 'h-lun', TipoIncidencia: 'Ausencia', MotivoCategoria: 'Estudios', Activo: false },
+    { ID: 'p-mie', ID_Jugador: 'member', ID_Equipo: 'team', ID_Horario: 'h-mie', TipoIncidencia: 'Ausencia', MotivoCategoria: 'Estudios', Activo: true },
+  ];
+  const servidor = backend(rows);
+  servidor.asistencia._timestamp_ = () => '2026-11-04 12:00';
+  return { rows, ...servidor };
+}
+
+test('borrar una programación con código incorrecto no borra nada', () => {
+  const { asistencia, writes, notifications } = filasProgramacion();
+  for (const codigo of ['', 'XYZ999', null]) {
+    assert.throws(() => asistencia.eliminarProgramacion('p-lun', 'member', codigo), /código de autorización no es correcto/);
+  }
+  assert.throws(() => asistencia.eliminarProgramacion('p-lun', 'otro', 'ABC123'), /código|no encontrada/);
+  assert.deepEqual(writes, []);
+  assert.equal(notifications.length, 0);
+});
+
+test('borrar una programación retira solo sus justificaciones de sesiones futuras y nunca toca las pasadas', () => {
+  const { asistencia, writes, notifications } = filasProgramacion();
+  const resultado = JSON.parse(JSON.stringify(asistencia.eliminarProgramacion('p-lun', 'member', 'ABC123')));
+  assert.deepEqual(writes.find(w => w.table === 'programaciones'), { op: 'delete', table: 'programaciones', id: 'p-lun' });
+  assert.equal(resultado.eliminado, true);
+  // Preavisos sin Estado de sesiones aún no empezadas (también las antiguas sin ID_Horario, por horas): se borran.
+  assert.deepEqual(resultado.asistenciasEliminadas, ['a-futura', 'a-antigua']);
+  // Con Estado del entrenador: solo se quita la justificación; Estado y minutos se conservan.
+  assert.deepEqual(resultado.asistenciasActualizadas.map(r => [r.ID, r.Estado, r.MinutosRetraso, r.TieneJustificacion, r.JustificadoPor, r.EsProgramada]),
+    [['a-marcada', 'R', 10, false, null, false]]);
+  const tocadas = writes.filter(w => w.table === 'asistJugadores').map(w => w.op + ':' + w.id);
+  assert.deepEqual(tocadas, ['delete:a-futura', 'update:a-marcada', 'delete:a-antigua']);
+  // Pasada, en curso, enviada por la familia y la de otro entrenamiento quedan intactas.
+  for (const id of ['a-pasada', 'a-hoy', 'a-familia', 'a-miercoles']) assert.ok(!tocadas.some(t => t.endsWith(':' + id)), id);
+  // Solo se avisa al entrenador de lo que se le había notificado.
+  assert.deepEqual(notifications.map(n => n[1].ID), ['futura', 'futura-marcada']);
+});
+
+test('editar una programación actualiza la misma fila, conserva Activo y no puede duplicar un entrenamiento', () => {
+  const { asistencia, writes } = filasProgramacion();
+  const datos = { idHorario: 'h-lun', tipoIncidencia: 'Retraso', motivo: 'Consulta', detalle: '', horaIncorporacion: '18:15' };
+  const editada = asistencia.actualizarProgramacion('p-lun', 'member', 'ABC123', datos);
+  assert.deepEqual(writes.map(w => [w.op, w.table, w.id]), [['update', 'programaciones', 'p-lun']]);
+  assert.equal(editada.ID, 'p-lun');
+  assert.equal(writes[0].changes.Activo, false, 'editar una programación pausada no la reactiva');
+  assert.equal(writes[0].changes.TipoIncidencia, 'Retraso');
+  assert.equal(asistencia.actualizarProgramacion('p-lun', 'member', 'ABC123', { ...datos, activo: true }).Activo, true, 'pausar/activar sí cambia Activo');
+  writes.length = 0;
+  assert.throws(() => asistencia.actualizarProgramacion('p-lun', 'member', 'ABC123', { ...datos, idHorario: 'h-mie' }), /ya tiene otra programación/);
+  assert.throws(() => asistencia.actualizarProgramacion('p-lun', 'member', 'MAL000', datos), /código de autorización no es correcto/);
+  assert.deepEqual(writes, []);
+});
+
+function clienteOpciones(respuesta) {
+  const cliente = wizardClient();
+  const { app, context, element, sent } = cliente;
+  app.cache.horarios = [{ ID: 'h-lun', ID_Equipo: 'team', DiaSemana: 1, HoraInicio: '18:00', HoraFin: '19:30' }];
+  app.cache.jugadoresEquipos = [{ ID_Jugador: 'member', ID_Equipo: 'team', Activo: true }];
+  app.cache.programacionesJustificaciones = [{ ID: 'p-<1>', ID_Jugador: 'member', ID_Equipo: 'team', ID_Horario: 'h-lun', TipoIncidencia: 'Ausencia', MotivoCategoria: 'Estudios', Activo: true }];
+  app.cache.asistJugadores = [{ ID: 'a-futura', ID_Sesion: 's1', ID_Jugador: 'member' }, { ID: 'a-marcada', ID_Sesion: 's2', ID_Jugador: 'member', Estado: 'R', TieneJustificacion: true }];
+  const modales = [];
+  app.openModal = (title, body) => modales.push({ title, body });
+  app.closeModal = () => {};
+  context.server = (fn, ...args) => { sent.push({ fn, args }); return Promise.resolve(respuesta); };
+  return { ...cliente, modales, codigo: value => { element('programacion-accion-codigo').value = value; } };
+}
+
+test('tocar una programación ofrece Editar o Borrar y Editar abre el asistente con sus datos', () => {
+  const { app, element, visible, pressed, entrenamientos, modales } = clienteOpciones();
+  app.views.programaciones.render();
+  const fila = element('programaciones-lista').innerHTML;
+  assert.match(fila, /role="button" tabindex="0" aria-haspopup="dialog"/);
+  assert.match(fila, /onclick="App\.views\.programaciones\.opciones\(&quot;p-&lt;1&gt;&quot;\)"/, 'el ID viaja escapado');
+  assert.match(fila, /event\.target===this&&\(event\.key===.Enter.\|\|event\.key===. .\)/);
+  app.views.programaciones.opciones('p-<1>');
+  assert.equal(modales[0].title, 'Programación');
+  assert.match(modales[0].body, />Editar<\/button>/);
+  assert.match(modales[0].body, />Borrar<\/button>/);
+  assert.match(modales[0].body, /<strong data-no-i18n>Cadete · Lunes · 18:00<\/strong>/);
+  assert.doesNotMatch(modales[0].body, /p-<1>/, 'sin HTML sin escapar');
+  app.views.programaciones.editar('p-<1>');
+  assert.equal(visible(), 'dias');
+  assert.equal(element('justif-titulo').textContent, 'Editar programación');
+  assert.deepEqual(pressed(entrenamientos()), ['h-lun']);
+  assert.deepEqual(app.views.justificacion._datos.motivo, 'Estudios');
+});
+
+test('Borrar pide el código, lo envía al servidor y actualiza la lista y el calendario', async () => {
+  const { app, modales, codigo, sent } = clienteOpciones({ success: true, eliminado: true, asistenciasEliminadas: ['a-futura'],
+    asistenciasActualizadas: [{ ID: 'a-marcada', ID_Sesion: 's2', ID_Jugador: 'member', Estado: 'R', TieneJustificacion: false }] });
+  app.views.programaciones.eliminar('p-<1>');
+  assert.equal(modales[0].title, 'Borrar programación');
+  assert.match(modales[0].body, /<label for="programacion-accion-codigo">/);
+  assert.match(modales[0].body, /La asistencia de los entrenamientos pasados no cambia/);
+  codigo('abc12');
+  app.views.programaciones.confirmarAccion();
+  assert.equal(sent.length, 0, 'sin 6 caracteres no llama al servidor');
+  codigo(' abc123 ');
+  app.views.programaciones.confirmarAccion();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [{ fn: 'eliminarProgramacionJustificacion', args: ['p-<1>', 'member', 'ABC123'] }]);
+  assert.deepEqual(app.cache.programacionesJustificaciones, []);
+  assert.deepEqual(app.cache.asistJugadores.map(r => [r.ID, r.TieneJustificacion]), [['a-marcada', false]]);
+});
+
+test('Borrar con código incorrecto mantiene la programación y sus avisos', async () => {
+  const { app, codigo, sent } = clienteOpciones({ success: false, error: 'El código de autorización no es correcto.' });
+  app.views.programaciones.eliminar('p-<1>');
+  codigo('MAL000');
+  app.views.programaciones.confirmarAccion();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(sent.length, 1);
+  assert.deepEqual(app.cache.programacionesJustificaciones.map(p => p.ID), ['p-<1>']);
+  assert.equal(app.cache.asistJugadores.length, 2);
+  assert.equal(app.views.programaciones._busy, false);
 });
 
 test('los minutos del aviso se guardan sin sustituir los que registro el entrenador', () => {

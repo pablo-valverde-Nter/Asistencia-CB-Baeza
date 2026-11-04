@@ -48,7 +48,7 @@
 
 <!-- Modal buscador -->
 <div id="modal-overlay" onclick="App.closeModal(event)">
-  <div id="modal-sheet">
+  <div id="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <h3 id="modal-title"></h3>
@@ -502,9 +502,9 @@
       <div id="justif-steps" class="modal-body justif-steps">
 
         <section class="justif-step" data-step="dias" hidden>
-          <h4 class="justif-question" tabindex="-1">&iquest;Qu&eacute; entrenamientos quieres programar?</h4>
-          <p class="justif-hint">Entrenamientos semanales de tus equipos. Puedes elegir varios.</p>
-          <div id="justif-dias" class="justif-dias" role="group" aria-label="Entrenamientos semanales"></div>
+          <h4 id="justif-dias-pregunta" class="justif-question" tabindex="-1">&iquest;Qu&eacute; entrenamientos quieres programar?</h4>
+          <p id="justif-dias-hint" class="justif-hint">Entrenamientos semanales de tus equipos. Puedes elegir varios.</p>
+          <div id="justif-dias" class="justif-dias" role="group" aria-labelledby="justif-dias-pregunta"></div>
           <div class="justif-actions">
             <button type="button" id="justif-dias-next" class="btn btn-primary btn-full" disabled onclick="App.views.justificacion.continuarDias()">Continuar</button>
           </div>
@@ -565,7 +565,6 @@
           </div>
           <div class="justif-actions">
             <button type="button" id="justif-submit" class="btn btn-primary btn-full" onclick="App.views.justificacion.siguiente()">Enviar</button>
-            <button type="button" id="justif-eliminar-prog" class="btn btn-danger btn-full hidden" onclick="App.views.justificacion.eliminarProgramacion()">Eliminar programaci&oacute;n</button>
           </div>
         </section>
 

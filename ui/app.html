@@ -4481,7 +4481,10 @@ const App = {
         document.getElementById('justif-codigo').value = codigo;
         document.getElementById('justif-preview-label').textContent = programacion ? 'Aviso que recibir\u00e1 el entrenador cada semana' : 'Mensaje que recibir\u00e1 el entrenador';
         document.getElementById('justif-submit').textContent = programacion ? 'Guardar' : modo === 'edicion' ? 'Guardar cambios' : 'Enviar';
-        document.getElementById('justif-eliminar-prog').classList.toggle('hidden', !(programacion && modo === 'edicion'));
+        var edicionProgramacion = programacion && modo === 'edicion';
+        // Editar una programación cambia su único entrenamiento; crear admite varios (uno por programación).
+        document.getElementById('justif-dias-pregunta').textContent = edicionProgramacion ? '\u00bfA qu\u00e9 entrenamiento se aplica?' : '\u00bfQu\u00e9 entrenamientos quieres programar?';
+        document.getElementById('justif-dias-hint').textContent = edicionProgramacion ? 'Elige un entrenamiento de este equipo.' : 'Entrenamientos semanales de tus equipos. Puedes elegir varios.';
         var confirmarBtn = document.getElementById('justif-enviar');
         confirmarBtn.textContent = modo === 'eliminar' ? 'Eliminar justificaci\u00f3n' : programacion ? 'Confirmar y guardar'
           : modo === 'edicion' ? 'Confirmar cambios' : 'Confirmar y enviar';
@@ -4623,8 +4626,10 @@ const App = {
 
       elegirHorario: function(id) {
         var elegidos = this._datos.horarios, i = elegidos.indexOf(id);
-        if (i >= 0) elegidos.splice(i, 1);
-        else if (this._horarios.some(function(h) { return h.ID === id; })) elegidos.push(id);
+        var valido = this._horarios.some(function(h) { return h.ID === id; });
+        if (this._modo === 'edicion') { if (valido) elegidos.splice(0, elegidos.length, id); }
+        else if (i >= 0) elegidos.splice(i, 1);
+        else if (valido) elegidos.push(id);
         document.querySelectorAll('#justif-steps [data-horario]').forEach(function(b) { b.setAttribute('aria-pressed', String(elegidos.indexOf(b.dataset.horario) >= 0)); });
         document.getElementById('justif-dias-next').disabled = !elegidos.length;
       },
@@ -4766,13 +4771,6 @@ const App = {
         });
       },
 
-      eliminarProgramacion: function() {
-        var id = this._programacionId;
-        if (!id) return;
-        App.closeModalJustif();
-        App.views.programaciones.eliminar(id);
-      },
-
       enviar: function() {
         var sesionId = this._sesionId, j = App.state.jugador, d = this._datos;
         if (!sesionId || !j || !d || !d.tipo || !d.motivo) return;
@@ -4879,31 +4877,59 @@ const App = {
         var busyId = this._busyId;
         var addButton = document.getElementById('programaciones-add-btn');
         if (addButton) addButton.disabled = busy;
-        var dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-        var reglas = App.cache.programacionesJustificaciones;
+        var reglas = App.cache.programacionesJustificaciones, self = this;
         el.innerHTML = reglas.length ? reglas.map(function(p) {
-          var h = App.cache.horarios.find(function(item) { return item.ID === p.ID_Horario; });
-          var eq = App.cache.getEquipoById(p.ID_Equipo);
-          var texto = (eq ? eq.Nombre + ' · ' : '') + (h ? (dias[Number(h.DiaSemana) - 1] || 'Día') + ' · ' + h.HoraInicio : 'Horario');
+          var texto = self._texto(p), id = _statsArgumento(p.ID);
           var activa = p.Activo === true || p.Activo === 'TRUE';
           var rowBusy = busy && busyId === p.ID;
           var estadoControl = rowBusy ? '<span class="scheduled-loading" aria-label="Actualizando"></span>' : '<span class="scheduled-status ' + (activa ? 'active' : '') + '" aria-label="' + (activa ? 'Activa' : 'Pausada') + '"></span>';
           var icono = activa
             ? '<svg class="scheduled-action-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>'
             : '<svg class="scheduled-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.7v12.6a1 1 0 0 0 1.54.84l9.2-6.3a1 1 0 0 0 0-1.68l-9.2-6.3A1 1 0 0 0 8 5.7Z"></path></svg>';
-          return '<div class="scheduled-justif-item' + (rowBusy ? ' is-loading' : '') + '" role="button" tabindex="0" aria-label="Editar programación de ' + _esc(texto) + '" onclick="App.views.programaciones.abrir(\'' + p.ID + '\')" onkeydown="if(event.key===\'Enter\' || event.key===\' \'){event.preventDefault();App.views.programaciones.abrir(\'' + p.ID + '\')}"><div><strong>' + _esc(texto) + '</strong><small>' + _esc(p.TipoIncidencia) + ' · ' + _esc(p.MotivoCategoria || 'Sin motivo') + '</small></div>' +
+          // Enter/Espacio solo abren las opciones desde la propia fila: en el botón de pausa activan ese botón.
+          return '<div class="scheduled-justif-item' + (rowBusy ? ' is-loading' : '') + '" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Opciones de la programación de ' + _esc(texto) + '" onclick="App.views.programaciones.opciones(' + id + ')" onkeydown="if(event.target===this&&(event.key===\'Enter\'||event.key===\' \')){event.preventDefault();App.views.programaciones.opciones(' + id + ')}"><div><strong>' + _esc(texto) + '</strong><small>' + _esc(p.TipoIncidencia) + ' · ' + _esc(p.MotivoCategoria || 'Sin motivo') + '</small></div>' +
             estadoControl +
-            '<button class="scheduled-action-btn ' + (activa ? 'pause' : 'play') + '" title="' + (activa ? 'Pausar' : 'Activar') + '" aria-label="' + (activa ? 'Pausar programación' : 'Activar programación') + '" ' + (busy ? 'disabled' : '') + ' onclick="event.stopPropagation();App.views.programaciones.toggle(\'' + p.ID + '\')">' + icono + '</button></div>';
+            '<button class="scheduled-action-btn ' + (activa ? 'pause' : 'play') + '" title="' + (activa ? 'Pausar' : 'Activar') + '" aria-label="' + (activa ? 'Pausar programación' : 'Activar programación') + '" ' + (busy ? 'disabled' : '') + ' onclick="event.stopPropagation();App.views.programaciones.toggle(' + id + ')">' + icono + '</button></div>';
         }).join('') : '<p class="schedule-empty">No tienes programaciones. Pulsa Programar para añadir una.</p>';
       },
-      // Guarda lo elegido en el asistente con el contrato existente (una programación por entrenamiento semanal):
-      // al editar, la programación conserva su entrenamiento si sigue elegido y el resto de entrenamientos elegidos se crean.
+      _buscar: function(id) {
+        return App.cache.programacionesJustificaciones.find(function(p) { return p.ID === id; }) || null;
+      },
+      // «Cadete · Lunes · 18:00»: equipo, día y hora del entrenamiento semanal de la programación.
+      _texto: function(p) {
+        var dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+        var h = App.cache.horarios.find(function(item) { return item.ID === p.ID_Horario; });
+        var eq = App.cache.getEquipoById(p.ID_Equipo);
+        return (eq ? eq.Nombre + ' · ' : '') + (h ? (dias[Number(h.DiaSemana) - 1] || 'Día') + ' · ' + h.HoraInicio : 'Horario');
+      },
+      // Al tocar una programación se elige qué hacer: editarla en el mismo asistente con el que se creó o borrarla con el código.
+      opciones: function(id) {
+        if (this._busy) return;
+        var p = this._buscar(id);
+        if (!p) return;
+        var arg = _statsArgumento(id);
+        App.openModal('Programación',
+          '<div class="prog-opciones">' +
+          '<p class="prog-opciones-resumen"><strong data-no-i18n>' + _esc(this._texto(p)) + '</strong>' +
+          '<small><span>' + _esc(p.TipoIncidencia) + '</span> · <span data-no-i18n>' + _esc(p.MotivoCategoria || 'Sin motivo') + '</span></small></p>' +
+          '<p class="prog-opciones-pregunta">¿Qué quieres hacer con esta programación?</p>' +
+          '<div class="prog-opciones-acciones">' +
+          '<button type="button" class="btn btn-primary btn-full" onclick="App.views.programaciones.editar(' + arg + ')">Editar</button>' +
+          '<button type="button" class="btn btn-danger btn-full" onclick="App.views.programaciones.eliminar(' + arg + ')">Borrar</button>' +
+          '<button type="button" class="btn btn-secondary btn-full" onclick="App.closeModal()">Cancelar</button>' +
+          '</div></div>');
+        var primero = document.querySelector('#modal-body .prog-opciones-acciones .btn');
+        if (primero) primero.focus();
+      },
+      editar: function(id) {
+        App.closeModal();
+        this.abrir(id);
+      },
+      // Guarda lo elegido en el asistente (una programación por entrenamiento semanal): al crear, una por entrenamiento
+      // elegido; al editar, solo se actualiza la existente con su único entrenamiento.
       guardar: function(id, horarios, borrador) {
         var j = App.state.jugador;
         if (this._busy || !j || !horarios.length) return;
-        var actual = id ? App.cache.programacionesJustificaciones.find(function(p) { return p.ID === id; }) : null;
-        var principal = actual ? (horarios.find(function(h) { return h.ID === actual.ID_Horario; }) || horarios[0]) : null;
-        var nuevos = horarios.filter(function(h) { return h !== principal; });
         var datos = function(h) {
           return { idHorario: h.ID, tipoIncidencia: borrador.tipo, motivo: borrador.motivo, detalle: borrador.detalle,
             horaIncorporacion: borrador.tipo === 'Retraso' && borrador.minutos ? _sumarMinutos(h.HoraInicio, borrador.minutos) : '' };
@@ -4921,19 +4947,22 @@ const App = {
         this._busyId = id || null;
         this.render();
         App.sync.start();
-        // En serie: la primera llamada valida el código antes de crear el resto.
-        var cadena = principal
-          ? server('actualizarProgramacionJustificacion', id, j.ID, borrador.codigo, datos(principal)).then(function(res) {
+        var cadena;
+        if (id) {
+          cadena = server('actualizarProgramacionJustificacion', id, j.ID, borrador.codigo, datos(horarios[0])).then(function(res) {
             App.cache.upsert('programacionesJustificaciones', comprobar(res));
-          })
-          : Promise.resolve();
-        nuevos.forEach(function(h) {
-          cadena = cadena.then(function() {
-            return server('crearProgramacionJustificacion', j.ID, borrador.codigo, datos(h));
-          }).then(function(res) {
-            App.cache.programacionesJustificaciones.push(comprobar(res));
           });
-        });
+        } else {
+          // En serie: la primera llamada valida el código antes de crear el resto.
+          cadena = Promise.resolve();
+          horarios.forEach(function(h) {
+            cadena = cadena.then(function() {
+              return server('crearProgramacionJustificacion', j.ID, borrador.codigo, datos(h));
+            }).then(function(res) {
+              App.cache.programacionesJustificaciones.push(comprobar(res));
+            });
+          });
+        }
         cadena.then(function() {
           self._busy = false;
           self._busyId = null;
@@ -4960,24 +4989,29 @@ const App = {
       },
       eliminar: function(id) {
         if (this._busy) return;
-        if (!App.cache.programacionesJustificaciones.some(function(item) { return item.ID === id; })) return;
-        this._pedirCodigo('delete', id, 'Eliminar programación',
-          'Se eliminará esta programación y dejará de aplicarse a los próximos entrenamientos.', 'Eliminar');
+        if (!this._buscar(id)) return;
+        this._pedirCodigo('delete', id, 'Borrar programación',
+          'Se borrará esta programación y dejará de aplicarse a los próximos entrenamientos.', 'Borrar',
+          'También se retiran sus avisos de los próximos entrenamientos. La asistencia de los entrenamientos pasados no cambia.');
       },
-      _pedirCodigo: function(action, id, title, message, confirmLabel) {
+      // nota (opcional): texto fijo secundario. Enter en el campo confirma.
+      _pedirCodigo: function(action, id, title, message, confirmLabel, nota) {
         if (this._busy) return;
+        var p = this._buscar(id);
         this._pendingAction = { action: action, id: id };
         App.openModal(title,
-          '<div class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center">' +
-          '<div class="modal-confirm-icon">&#x26A0;</div>' +
-          '<div class="modal-confirm-msg"><strong>' + message + '</strong><br><br>' +
-          '<span style="font-size:.8rem;color:var(--texto-sec)">Introduce el código de autorización para confirmar.</span></div>' +
-          '<div class="form-group" style="text-align:left;margin-top:16px"><label>Código de autorización</label>' +
-          '<input id="programacion-accion-codigo" type="text" maxlength="6" placeholder="6 caracteres" autocomplete="off" style="text-align:center;letter-spacing:4px;text-transform:uppercase;font-size:1.1rem" oninput="this.value=this.value.toUpperCase()"></div>' +
+          '<form class="modal-confirm-warning" style="padding:20px 16px 16px;text-align:center" onsubmit="event.preventDefault();App.views.programaciones.confirmarAccion()">' +
+          '<div class="modal-confirm-icon" aria-hidden="true">&#x26A0;</div>' +
+          (p ? '<p class="prog-codigo-nombre" data-no-i18n>' + _esc(this._texto(p)) + '</p>' : '') +
+          '<div class="modal-confirm-msg"><strong>' + message + '</strong>' +
+          (nota ? '<br><br><span id="programacion-accion-nota" style="font-size:.8rem;color:var(--texto-sec)">' + nota + '</span>' : '') + '<br><br>' +
+          '<span id="programacion-accion-ayuda" style="font-size:.8rem;color:var(--texto-sec)">Introduce el código de autorización para confirmar.</span></div>' +
+          '<div class="form-group" style="text-align:left;margin-top:16px"><label for="programacion-accion-codigo">Código de autorización</label>' +
+          '<input id="programacion-accion-codigo" type="text" maxlength="6" placeholder="6 caracteres" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="programacion-accion-ayuda" style="text-align:center;letter-spacing:4px;text-transform:uppercase;font-size:1.1rem" oninput="this.value=this.value.toUpperCase()"></div>' +
           '<div style="display:flex;gap:8px;margin-top:20px">' +
-          '<button class="btn btn-secondary" style="flex:1" onclick="App.closeModal()">Cancelar</button>' +
-          '<button class="btn ' + (action === 'delete' ? 'btn-destructive' : 'btn-primary') + '" style="flex:1" onclick="App.views.programaciones.confirmarAccion()">' + confirmLabel + '</button>' +
-          '</div></div>'
+          '<button type="button" class="btn btn-secondary" style="flex:1" onclick="App.closeModal()">Cancelar</button>' +
+          '<button type="submit" class="btn ' + (action === 'delete' ? 'btn-destructive' : 'btn-primary') + '" style="flex:1">' + confirmLabel + '</button>' +
+          '</div></form>'
         );
         var input = document.getElementById('programacion-accion-codigo');
         if (input) input.focus();
@@ -4995,7 +5029,7 @@ const App = {
         var self = this;
         var jugadorId = App.state.jugador.ID;
         var programacion = App.cache.programacionesJustificaciones.find(function(item) { return item.ID === pending.id; });
-        var token = App.operation.begin('programacion:' + pending.action + ':' + pending.id, pending.action === 'delete' ? { pending: 'Eliminando\u2026', success: 'Eliminado correctamente' } : null);
+        var token = App.operation.begin('programacion:' + pending.action + ':' + pending.id, pending.action === 'delete' ? { pending: 'Borrando\u2026', success: 'Programación borrada' } : null);
         if (!token) return;
         this._busy = true;
         this._busyId = pending.id;
@@ -5016,12 +5050,18 @@ const App = {
           });
         }
         request.then(function(res) {
-          if (!res || res.success === false) throw new Error(res && res.error || 'No se pudo actualizar la programación');
-          if (pending.action === 'delete') App.cache.remove('programacionesJustificaciones', pending.id);
-          else App.cache.upsert('programacionesJustificaciones', res.programacion);
+          if (!res || res.success === false) throw new Error(res && res.error || (pending.action === 'delete' ? 'No se pudo eliminar la programación' : 'No se pudo actualizar la programación'));
+          if (pending.action === 'delete') {
+            App.cache.remove('programacionesJustificaciones', pending.id);
+            // Avisos retirados de próximos entrenamientos: el calendario deja de mostrarlos.
+            var eliminadas = res.asistenciasEliminadas || [];
+            App.cache.asistJugadores = App.cache.asistJugadores.filter(function(r) { return eliminadas.indexOf(r.ID) < 0; });
+            (res.asistenciasActualizadas || []).forEach(function(r) { App.cache.upsert('asistJugadores', r); });
+          } else App.cache.upsert('programacionesJustificaciones', res.programacion);
           self._busy = false;
           self._busyId = null;
-          self.render();
+          if (pending.action === 'delete' && App.state.currentView === 'mis-entrenamientos') App.views['mis-entrenamientos'].render();
+          else self.render();
           App.sync.done();
           App.operation.succeed(token);
         }).catch(function(error) {
@@ -7400,8 +7440,19 @@ App.i18n = {
 "Programación guardada":"Scheduled notice saved",
 "La programación dejará de aplicarse a los próximos entrenamientos hasta que la vuelvas a activar.":"This notice will stop applying to upcoming training until you reactivate it.",
 "La programación volverá a aplicarse automáticamente a los próximos entrenamientos.":"This notice will automatically apply to upcoming training again.",
-"Eliminar programación":"Delete scheduled notice",
-"Se eliminará esta programación y dejará de aplicarse a los próximos entrenamientos.":"This scheduled notice will be deleted and stop applying to upcoming training.",
+"Programación":"Scheduled notice",
+"¿Qué quieres hacer con esta programación?":"What do you want to do with this scheduled notice?",
+"Borrar programación":"Delete scheduled notice",
+"Se borrará esta programación y dejará de aplicarse a los próximos entrenamientos.":"This scheduled notice will be deleted and stop applying to upcoming training.",
+"También se retiran sus avisos de los próximos entrenamientos. La asistencia de los entrenamientos pasados no cambia.":"Its notices for upcoming training are also withdrawn. Attendance at past training does not change.",
+"Borrando…":"Deleting…",
+"Programación borrada":"Scheduled notice deleted",
+"¿A qué entrenamiento se aplica?":"Which training session does it apply to?",
+"Elige un entrenamiento de este equipo.":"Choose a training session of this team.",
+"El código de autorización no es correcto.":"The authorization code is not correct.",
+"Ese entrenamiento ya tiene otra programación.":"That training session already has another scheduled notice.",
+"Activa":"Active",
+"Pausada":"Paused",
 "No se pudo actualizar la programación":"The scheduled notice could not be updated",
 "Ya hay una operación en curso":"An operation is already in progress",
 "El servidor no confirmó el guardado":"The server did not confirm the save",
@@ -7920,6 +7971,7 @@ App.i18n = {
     [/^Aviso enviado: Ausencia$/, 'Notice sent: Absent'],
     [/^Aviso enviado: Retraso$/, 'Notice sent: Late'],
     [/^(\d+) de (\d+)$/, '$1 of $2'],
+    [/^Opciones de la programación de (.+)$/, 'Options for scheduled notice $1'],
     [/^(.+) \(activa\)$/, '$1 (active)']
   ],
   aplicar: function(root) {
