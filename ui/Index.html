@@ -486,18 +486,19 @@
 
   </main>
 
-  <!-- Asistente paso a paso de justificación de ausencia/retraso (sesión concreta o programación semanal) -->
-  <div id="modal-justificacion" class="modal-justif-overlay hidden" onclick="App.closeModalJustif(event)">
-    <div class="modal-justif-sheet justif-wizard" role="dialog" aria-modal="true" aria-labelledby="justif-titulo">
-      <div class="modal-handle"></div>
+  <!-- Asistente paso a paso de justificación de ausencia/retraso (sesión concreta o programación semanal): tarjeta flotante como el alta de jugador -->
+  <div id="modal-justificacion" class="modal-justif-overlay wizard-cards hidden" onclick="App.closeModalJustif(event)" onkeydown="if(event.key==='Escape'){event.preventDefault();App.closeModalJustif()}">
+    <div class="wizard-fondo" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="wizard-deck">
+    <div class="modal-justif-sheet justif-wizard alta-wizard" role="dialog" aria-modal="true" aria-labelledby="justif-titulo">
       <div class="modal-hdr justif-wizard-hdr">
         <button type="button" id="justif-atras" class="justif-back" onclick="App.views.justificacion.atras()" aria-label="Paso anterior">&#8249; Atr&aacute;s</button>
         <h3 id="justif-titulo">Justificar ausencia</h3>
         <button type="button" class="modal-x" onclick="App.closeModalJustif()" aria-label="Cerrar">&#x2715;</button>
       </div>
       <div id="justif-progress" class="justif-progress">
-        <div class="justif-progress-track" aria-hidden="true"><span id="justif-progress-fill"></span></div>
-        <span id="justif-progress-text" aria-live="polite">Paso 1 de 4</span>
+        <div class="justif-progress-track" aria-hidden="true"><span id="justif-progress-fill" class="justif-progress-fill"></span></div>
+        <span id="justif-progress-text" class="justif-progress-text" aria-live="polite">Paso 1 de 4</span>
       </div>
       <div id="justif-steps" class="modal-body justif-steps">
 
@@ -582,6 +583,7 @@
         </section>
 
       </div>
+    </div>
     </div>
   </div>
 

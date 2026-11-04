@@ -3252,15 +3252,7 @@ const App = {
         var indice = this.PASOS.indexOf(paso), final = paso === 'credenciales';
         if (paso === 'completar') this._pintarResumen();
         App.account.cerrarAvisosInfo();
-        document.querySelectorAll('#alta-steps .justif-step').forEach(function(step) {
-          var activo = step.dataset.step === paso;
-          step.hidden = !activo;
-          step.classList.remove('enter-forward', 'enter-back');
-          if (activo && direccion) {
-            void step.offsetWidth;
-            step.classList.add(direccion > 0 ? 'enter-forward' : 'enter-back');
-          }
-        });
+        document.querySelectorAll('#alta-steps .justif-step').forEach(function(step) { step.hidden = step.dataset.step !== paso; });
         this._pintarFamiliares();
         this._actualizarBotones();
         document.getElementById('alta-progress').classList.toggle('hidden', final);
@@ -3516,15 +3508,7 @@ const App = {
         var indice = this.PASOS.indexOf(paso), total = this.PASOS.length - 1;
         if (paso === 'resumen') this._pintarResumen();
         App.account.cerrarAvisosInfo();
-        document.querySelectorAll('#bienvenida-steps .justif-step').forEach(function(step) {
-          var activo = step.dataset.step === paso;
-          step.hidden = !activo;
-          step.classList.remove('enter-forward', 'enter-back');
-          if (activo && direccion) {
-            void step.offsetWidth;
-            step.classList.add(direccion > 0 ? 'enter-forward' : 'enter-back');
-          }
-        });
+        document.querySelectorAll('#bienvenida-steps .justif-step').forEach(function(step) { step.hidden = step.dataset.step !== paso; });
         this._actualizarBotones();
         document.getElementById('bienvenida-progress').classList.toggle('hidden', indice === 0);
         document.getElementById('bienvenida-progress-text').textContent = 'Paso ' + indice + ' de ' + total;
@@ -4493,32 +4477,10 @@ const App = {
         this._actualizarTitulo();
         this._irA(pasoInicial, 0);
         document.getElementById('modal-justificacion').classList.remove('hidden');
-        this._ajustarAltura();
-      },
-
-      // Fija la altura del panel a la del paso más alto (con tope en CSS) para que no salte al avanzar.
-      _ajustarAltura: function() {
-        var hoja = document.querySelector('#modal-justificacion .justif-wizard');
+        // Foco dentro del diálogo: lectores de pantalla y Escape (onkeydown del overlay) funcionan desde el inicio.
         var cuerpo = document.getElementById('justif-steps');
-        if (!hoja || !cuerpo || !cuerpo.querySelectorAll) return;
-        var pasos = this._modo === 'eliminar' ? ['codigo']
-          : (this._contexto === 'programacion' ? ['dias'] : []).concat(['tipo', 'minutos', 'motivo', 'resumen', 'codigo']);
-        var otros = document.getElementById('justif-otros'), otrosOculto = otros.classList.contains('hidden');
-        var preview = document.getElementById('justif-preview'), previewTexto = preview.textContent;
-        var steps = Array.prototype.slice.call(cuerpo.querySelectorAll('.justif-step'));
-        var ocultos = steps.map(function(s) { return s.hidden; });
-        hoja.style.setProperty('--justif-h', '0px');
-        otros.classList.remove('hidden');
-        if (!previewTexto) this.actualizarPreview();
-        var fijo = hoja.offsetHeight - cuerpo.clientHeight, maximo = 0;
-        pasos.forEach(function(paso) {
-          steps.forEach(function(s) { s.hidden = s.dataset.step !== paso; });
-          maximo = Math.max(maximo, cuerpo.scrollHeight);
-        });
-        steps.forEach(function(s, i) { s.hidden = ocultos[i]; });
-        otros.classList.toggle('hidden', otrosOculto);
-        preview.textContent = previewTexto;
-        hoja.style.setProperty('--justif-h', Math.ceil(fijo + maximo) + 'px');
+        var foco = cuerpo.querySelector('.justif-step[data-step="' + pasoInicial + '"] ' + (pasoInicial === 'codigo' ? '#justif-codigo' : '.justif-question'));
+        if (foco) foco.focus({ preventScroll: true });
       },
 
       _pasos: function() {
@@ -4577,19 +4539,12 @@ const App = {
 
       // Muestra el paso indicado. direccion: 1 avanza, -1 retrocede, 0 sin animación.
       _irA: function(paso, direccion) {
+        App.wizardCards.salida('modal-justificacion', direccion);
         this._paso = paso;
         var datos = this._datos, pasos = this._pasos(), indice = pasos.indexOf(paso), self = this;
         if (paso === 'resumen') this.actualizarPreview();
         if (paso === 'codigo') this.actualizarCodigo();
-        document.querySelectorAll('#justif-steps .justif-step').forEach(function(step) {
-          var activo = step.dataset.step === paso;
-          step.hidden = !activo;
-          step.classList.remove('enter-forward', 'enter-back');
-          if (activo && direccion) {
-            void step.offsetWidth;
-            step.classList.add(direccion > 0 ? 'enter-forward' : 'enter-back');
-          }
-        });
+        document.querySelectorAll('#justif-steps .justif-step').forEach(function(step) { step.hidden = step.dataset.step !== paso; });
         document.querySelectorAll('#justif-steps [data-tipo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.tipo === datos.tipo)); });
         document.querySelectorAll('#justif-steps [data-horario]').forEach(function(b) { b.setAttribute('aria-pressed', String(datos.horarios.indexOf(b.dataset.horario) >= 0)); });
         document.getElementById('justif-dias-next').disabled = !datos.horarios.length;
@@ -4606,6 +4561,7 @@ const App = {
         document.getElementById('justif-progress-text').textContent = 'Paso ' + (indice + 1) + ' de ' + pasos.length;
         document.getElementById('justif-progress-fill').style.width = Math.round((indice + 1) * 100 / pasos.length) + '%';
         document.getElementById('justif-atras').style.visibility = indice > 0 ? 'visible' : 'hidden';
+        App.wizardCards.entrada('modal-justificacion', direccion, pasos.length - 1 - indice);
         var contenedor = document.getElementById('justif-steps');
         contenedor.scrollTop = 0;
         if (!direccion) return;
@@ -5218,7 +5174,7 @@ App.escritura = {
 };
 document.addEventListener('focusout', function() { setTimeout(function() { App.escritura._reanudar(); }, 0); });
 
-// Asistentes en tarjetas flotantes (alta de jugador y bienvenida): solo presentación; los pasos y su lógica viven en
+// Asistentes en tarjetas flotantes (justificación/programaciones, alta de jugador y bienvenida): solo presentación; los pasos y su lógica viven en
 // cada asistente. Al cambiar de paso, una copia inerte de la tarjeta sale (avanzar: vuela de lado; retroceder: vuelve
 // a la pila) y la tarjeta real entra desde la pila o desde el lado. El overlay sigue al viewport visible (teclado).
 App.wizardCards = {
