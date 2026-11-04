@@ -12,6 +12,8 @@ function servidor() {
     Entrenadores: [{ ID: 'e1', Nombre: 'Luis', Email: 'coach@example.com', PIN: '2345' },
       { ID: 'e2', Nombre: 'Admin', Email: 'admin@example.com', PIN: '1111', EsAdmin: true }],
     Administradores: [{ ID: 'a1', Email: 'admin@example.com', PIN: '3456', Activo: true }],
+    Programaciones_Justificaciones: [{ ID: 'p1', ID_Jugador: 'j1', ID_Equipo: 't1', ID_Horario: 'h1', TipoIncidencia: 'Ausencia', Activo: true }],
+    Asist_Jugadores: [],
   };
   const writes = [], mails = [], cache = new Map(), logs = [];
   let ahora = Date.now();
@@ -43,8 +45,15 @@ function servidor() {
       Object.assign(row, fields);
       return true;
     },
+    deleteRow(table, id) {
+      writes.push({ table, id, borrado: true });
+      const lista = rows[table] || [], i = lista.findIndex(row => row.ID === id);
+      if (i < 0) return false;
+      lista.splice(i, 1);
+      return true;
+    },
   });
-  for (const file of ['Config.gs', 'Auth.gs', 'Equipos.gs', 'Notificaciones.gs', 'Code.gs']) {
+  for (const file of ['Config.gs', 'Auth.gs', 'Equipos.gs', 'Notificaciones.gs', 'Asistencia.gs', 'Code.gs']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
   }
   const jugador = { tipo: 'jugador', usuario: 'ana', pin: '1234' };
@@ -293,4 +302,21 @@ test('marcarBienvenidaVista: solo la cuenta de jugador marca su propia ficha con
   assert.equal(s.call('marcarBienvenidaVista', s.entrenador).success, false);
   assert.equal(s.call('marcarBienvenidaVista', s.admin).success, false);
   assert.equal(s.writes.length, escrituras);
+});
+
+test('eliminarProgramacionJustificacion valida en servidor el código familiar normalizado y la cuenta dueña', () => {
+  const s = servidor();
+  const otro = { tipo: 'jugador', usuario: 'otro', pin: '4567' };
+  for (const [auth, codigo] of [[s.jugador, 'ABC124'], [s.jugador, ''], [s.jugador, 'ABC12'], [otro, 'ABC123'], [s.entrenador, 'ABC123']]) {
+    const res = s.call('eliminarProgramacionJustificacion', auth, 'p1', 'j1', codigo);
+    assert.equal(res.success, false, JSON.stringify([auth.usuario || auth.email, codigo]));
+  }
+  assert.match(s.call('eliminarProgramacionJustificacion', s.jugador, 'p1', 'j1', 'XYZ999').error, /código de autorización no es correcto/);
+  assert.equal(s.rows.Programaciones_Justificaciones.length, 1);
+  assert.ok(s.writes.every(w => !w.borrado));
+  const res = s.call('eliminarProgramacionJustificacion', s.jugador, 'p1', 'j1', '  abc123 ');
+  assert.equal(res.success, true);
+  assert.equal(res.eliminado, true);
+  assert.deepEqual(s.rows.Programaciones_Justificaciones, []);
+  assert.equal(s.call('eliminarProgramacionJustificacion', s.jugador, 'p1', 'j1', 'ABC123').success, false, 'ya no existe');
 });

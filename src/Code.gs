@@ -827,7 +827,7 @@ function eliminarProgramacionJustificacion(auth, programacionId, jugadorId, codi
   try {
     const v = Auth.validate(auth);
     if (!v.success || !Auth.isJugador(auth) || Auth.getJugadorActual(auth).ID !== jugadorId) throw new Error('Acceso no autorizado.');
-    return { success: true, eliminado: Asistencia.eliminarProgramacion(programacionId, jugadorId, codigoPadres) };
+    return { success: true, ...Asistencia.eliminarProgramacion(programacionId, jugadorId, codigoPadres) };
   } catch (e) { return { success: false, error: e.message }; }
 }
 

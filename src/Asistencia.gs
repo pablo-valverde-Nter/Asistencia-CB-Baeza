@@ -324,16 +324,7 @@ const Asistencia = {
       return { success: true, eliminado: true };
     }
 
-    const cambios = {
-      TieneJustificacion: false,
-      TipoJustificacion: null,
-      MotivoCategoria: null,
-      MotivoDetalle: null,
-      FechaJustificacion: null,
-      JustificadoPor: null,
-      MensajeGenerado: null,
-      NotificadoEntrenador: false,
-    };
+    const cambios = Asistencia._sinJustificacion_();
     updateRow(CONFIG.SHEETS.ASIST_JUGADORES, registro.ID, cambios);
     Asistencia._notificarCancelacion_(sesionId, jugadorId);
     return { success: true, registro: { ...registro, ...cambios } };
@@ -388,6 +379,11 @@ const Asistencia = {
     if (!horario || !Asistencia._jugadorPerteneceAEquipo_(jugadorId, horario.ID_Equipo)) {
       throw new Error('El entrenamiento semanal no es válido para este jugador.');
     }
+    // Editar nunca deja dos programaciones del jugador en el mismo entrenamiento semanal.
+    if (findWhere(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, 'ID_Jugador', jugadorId)
+      .some(p => p.ID !== programacionId && p.ID_Horario === horario.ID)) {
+      throw new Error('Ese entrenamiento ya tiene otra programación.');
+    }
     Asistencia._validarProgramacion_(datos);
     const cambios = {
       ID_Equipo: horario.ID_Equipo,
@@ -396,27 +392,72 @@ const Asistencia = {
       MotivoCategoria: motivoJustificacion_(datos.motivo),
       MotivoDetalle: detalleJustificacion_(datos.motivo, datos.detalle),
       HoraIncorporacion: datos.horaIncorporacion || '',
-      Activo: datos.activo !== false,
+      // Solo pausar/activar envía `activo`; editar conserva el estado actual.
+      Activo: typeof datos.activo === 'boolean' ? datos.activo : actual.Activo === true || actual.Activo === 'TRUE',
       FechaActualizacion: Asistencia._timestamp_(),
     };
     updateRow(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, programacionId, cambios);
     return { ...actual, ...cambios };
   },
 
+  // Borra la regla y retira lo que ella generó en sesiones que aún no han empezado: el preaviso sin Estado se borra
+  // y, si el entrenador ya marcó Estado, solo se quita la justificación. Sesiones pasadas o en curso no se tocan.
   eliminarProgramacion(programacionId, jugadorId, codigoPadres) {
     if (!Auth.verificarCodigoPadres(jugadorId, codigoPadres)) {
       throw new Error('El código de autorización no es correcto.');
     }
     const actual = findById(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, programacionId);
     if (!actual || actual.ID_Jugador !== jugadorId) throw new Error('Programación no encontrada.');
-    return deleteRow(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, programacionId);
+    if (!deleteRow(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, programacionId)) throw new Error('Programación no encontrada.');
+    const ahora = Asistencia._timestamp_();
+    const asistenciasEliminadas = [];
+    const asistenciasActualizadas = [];
+    findWhere(CONFIG.SHEETS.ASIST_JUGADORES, 'ID_Jugador', jugadorId).forEach(registro => {
+      if (registro.JustificadoPor !== 'programacion') return;
+      const sesion = findById(CONFIG.SHEETS.SESIONES, registro.ID_Sesion);
+      if (!sesion || `${sesion.Fecha} ${sesion.HoraInicio || '00:00'}` <= ahora) return;
+      const horario = Asistencia._horarioDeSesion_(sesion);
+      if (!horario || horario.ID !== actual.ID_Horario) return;
+      if (registro.Estado) {
+        const cambios = Asistencia._sinJustificacion_();
+        updateRow(CONFIG.SHEETS.ASIST_JUGADORES, registro.ID, cambios);
+        asistenciasActualizadas.push({ ...registro, ...cambios });
+      } else {
+        deleteRow(CONFIG.SHEETS.ASIST_JUGADORES, registro.ID);
+        asistenciasEliminadas.push(registro.ID);
+      }
+      const cancelada = sesion.Cancelada === true || sesion.Cancelada === 'TRUE';
+      if (!cancelada && (registro.NotificadoEntrenador === true || registro.NotificadoEntrenador === 'TRUE')) {
+        Asistencia._notificarCancelacion_(sesion.ID, jugadorId);
+      }
+    });
+    return { eliminado: true, asistenciasEliminadas, asistenciasActualizadas };
+  },
+
+  // Campos que quitan una justificación sin tocar Estado ni MinutosRetraso, que son del entrenador.
+  _sinJustificacion_() {
+    return {
+      TieneJustificacion: false,
+      TipoJustificacion: null,
+      MotivoCategoria: null,
+      MotivoDetalle: null,
+      FechaJustificacion: null,
+      JustificadoPor: null,
+      MensajeGenerado: null,
+      NotificadoEntrenador: false,
+      EsProgramada: false,
+    };
+  },
+
+  // Entrenamiento semanal del que procede una sesión: por ID_Horario o, en sesiones antiguas sin él, por horas.
+  _horarioDeSesion_(sesion) {
+    return findWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', sesion.ID_Equipo).find(h => (sesion.ID_Horario && h.ID === sesion.ID_Horario) ||
+      (!sesion.ID_Horario && h.HoraInicio === sesion.HoraInicio && h.HoraFin === sesion.HoraFin)) || null;
   },
 
   aplicarProgramacionesSesion(sesion) {
     if (!sesion || sesion.Cancelada === true || sesion.Cancelada === 'TRUE' || sesion.EsExtra === true || sesion.EsExtra === 'TRUE') return 0;
-    const horarios = findWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', sesion.ID_Equipo);
-    const horario = horarios.find(h => (sesion.ID_Horario && h.ID === sesion.ID_Horario) ||
-      (!sesion.ID_Horario && h.HoraInicio === sesion.HoraInicio && h.HoraFin === sesion.HoraFin));
+    const horario = Asistencia._horarioDeSesion_(sesion);
     if (!horario) return 0;
     const reglas = findWhere(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, 'ID_Horario', horario.ID)
       .filter(r => r.Activo === true || r.Activo === 'TRUE');
