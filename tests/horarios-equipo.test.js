@@ -173,8 +173,7 @@ test('con forzar elimina las programaciones, sus justificaciones no empezadas (n
   assert.equal(aviso.Tipo, 'programacion-quitada');
   assert.equal(aviso.Leido, false);
   assert.match(aviso.FechaCreacion, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
-  assert.equal(aviso.Mensaje, 'Se ha cambiado el horario de entrenamiento de Infantil Mixto y se ha quitado tu ausencia programada ' +
-    'de los jueves de 19:00 a 20:00. Si sigue siendo necesaria, vuelve a programarla.');
+  assert.equal(aviso.Mensaje, 'Infantil Mixto · Jueves 19:00–20:00');
   assert.doesNotMatch(aviso.Mensaje, /Marta|Blanco/, 'sin datos de otros jugadores');
 });
 
@@ -188,7 +187,7 @@ test('con forzar, cambiar la hora elimina la programación y actualiza el horari
     ['append', 'avisos', 'jd'],
     ['update', 'horarios', 'h-mar'],
   ]);
-  assert.match(plano(writes)[2].fields.Mensaje, /de los martes de 19:00 a 20:00\./);
+  assert.equal(plano(writes)[2].fields.Mensaje, 'Infantil Mixto · Martes 19:00–20:00');
 });
 
 test('una sesión antigua sin ID_Horario solo se empareja con el horario de su día de la semana', () => {

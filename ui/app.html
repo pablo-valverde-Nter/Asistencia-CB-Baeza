@@ -884,6 +884,7 @@ const App = {
           App.navigate(App.state.currentView);
         }
         App.views.bienvenida.comprobar();
+        App.views.avisoClub.comprobar();
       })
       .catch(function(err) { 
         if (reqSeq !== App.state._authReqSeq) {
@@ -993,6 +994,7 @@ const App = {
           _clientLog('login_navigate_home', { rol: App.state.rol });
           App.navigate(App.state.rol === 'jugador' ? 'perfil-jugador' : 'equipos');
           App.views.bienvenida.comprobar();
+          App.views.avisoClub.comprobar();
         } else {
           _clientLog('login_fail', { stage: res && res.stage ? res.stage : null, traceId: res && res.traceId ? res.traceId : null, error: res && res.error ? res.error : null });
           // Credenciales rechazadas: mensaje limpio. Fallo técnico: se añade el diagnóstico para soporte.
@@ -1088,6 +1090,7 @@ const App = {
     App.state.jugador = null;
     App.state.motivosJustificacion = [];
     App.state.avisosJugador = [];
+    App.views.avisoClub.ocultar();
     document.getElementById('user-badge-avatar').textContent = '?';
     document.getElementById('user-badge-name').textContent = '...';
     document.getElementById('user-badge-role').textContent = '';
@@ -3504,11 +3507,12 @@ const App = {
         document.getElementById('modal-bienvenida').classList.remove('hidden');
       },
 
-      // La X descarta el asistente: cuenta como vista.
+      // La X descarta el asistente: cuenta como vista. Después salen los avisos del club pendientes.
       cerrar: function() {
         this._marcarVista();
         App.account.cerrarAvisosInfo();
         document.getElementById('modal-bienvenida').classList.add('hidden');
+        App.views.avisoClub.comprobar();
       },
 
       // Silencioso: si falla, la bienvenida vuelve a salir en la próxima entrada.
@@ -3639,6 +3643,80 @@ const App = {
         this.cerrar();
         var vista = App.state.currentView;
         if ((vista === 'perfil-jugador' || vista === 'perfil-usuario') && App.views[vista] && App.views[vista].render) App.views[vista].render();
+      },
+    },
+
+    // Avisos del club guardados en Avisos_Jugador (p. ej. una ausencia programada quitada al cambiar el horario):
+    // tarjeta flotante al entrar, sea cual sea la vista, de uno en uno. Mensaje es la línea destacada; el título y la
+    // frase de acción dependen del Tipo. «Entendido» los cierra con marcarAvisoLeido; si el servidor lo rechaza, el
+    // aviso sigue a la vista. Espera a que se cierre la bienvenida para no apilar dos asistentes.
+    avisoClub: {
+      TIPOS: {
+        'programacion-quitada': {
+          titulo: 'Se ha quitado tu ausencia programada',
+          accion: 'Ha cambiado el horario. Si la sigues necesitando, vuelve a programarla.',
+          programar: true,
+        },
+      },
+      _id: null,    // aviso a la vista
+      _total: 0,    // avisos pendientes al abrir la tarjeta (contador «1/2»)
+
+      // Tras iniciar sesión o recargar, al cerrar la bienvenida y tras cada «Entendido»: muestra el primer aviso
+      // pendiente o cierra la tarjeta si no queda ninguno.
+      comprobar: function() {
+        var modal = document.getElementById('modal-aviso-club');
+        if (!modal) return false;
+        var avisos = App.state.rol === 'jugador' ? App.state.avisosJugador || [] : [];
+        var bienvenida = document.getElementById('modal-bienvenida');
+        if (!avisos.length || (bienvenida && !bienvenida.classList.contains('hidden'))) { this.ocultar(); return false; }
+        var aviso = avisos[0], tipo = this.TIPOS[aviso.Tipo] || {}, abierto = !modal.classList.contains('hidden');
+        var direccion = abierto && this._id !== aviso.ID ? 1 : 0;
+        App.wizardCards.salida('modal-aviso-club', direccion);
+        this._id = aviso.ID;
+        this._total = abierto ? Math.max(this._total, avisos.length) : avisos.length;
+        document.getElementById('aviso-club-contador').textContent =
+          this._total > 1 ? '\u00b7 ' + (this._total - avisos.length + 1) + '/' + this._total : '';
+        document.getElementById('aviso-club-cuerpo').innerHTML =
+          '<h4 id="aviso-club-titulo" class="justif-question" tabindex="-1">' + _esc(tipo.titulo || 'Tienes un aviso') + '</h4>' +
+          '<p class="aviso-club-linea" data-no-i18n>' + _esc(aviso.Mensaje) + '</p>' +
+          (tipo.accion ? '<p class="aviso-club-accion">' + _esc(tipo.accion) + '</p>' : '');
+        document.getElementById('aviso-club-programar').hidden = !tipo.programar;
+        modal.classList.remove('hidden');
+        App.wizardCards.entrada('modal-aviso-club', direccion, avisos.length - 1);
+        var titulo = document.getElementById('aviso-club-titulo');
+        if (titulo && titulo.focus) titulo.focus({ preventScroll: true });
+        return true;
+      },
+
+      ocultar: function() {
+        this._id = null;
+        var modal = document.getElementById('modal-aviso-club');
+        if (modal) modal.classList.add('hidden');
+      },
+
+      // Marca como leído el aviso a la vista; true si el servidor lo confirma (y ya no está en App.state.avisosJugador).
+      _marcar: function() {
+        var id = this._id;
+        if (!id) return Promise.resolve(false);
+        return App.operation.run('aviso:' + id, 'marcarAvisoLeido', [id], function() {
+          App.state.avisosJugador = (App.state.avisosJugador || []).filter(function(a) { return a.ID !== id; });
+        }).then(function() { return true; }, function() { return false; /* App.operation ya muestra el error */ });
+      },
+
+      entendido: function() {
+        var self = this;
+        return this._marcar().then(function(ok) { if (ok) self.comprobar(); return ok; });
+      },
+
+      // Como «Entendido» y lleva a Entrenos; si no quedan avisos, abre ya el asistente de programaciones.
+      programar: function() {
+        var self = this;
+        return this._marcar().then(function(ok) {
+          if (!ok) return false;
+          App.navigate('mis-entrenamientos');
+          if (!self.comprobar()) App.views.programaciones.abrir();
+          return true;
+        });
       },
     },
 
@@ -4005,8 +4083,6 @@ const App = {
             estado: App.cache.getEstadoAsistencia(registro)
           };
         }).sort(function(a, b) { return a.sesion.Fecha < b.sesion.Fecha ? -1 : 1; });
-        var avisosEl = document.getElementById('perfil-avisos');
-        if (avisosEl) avisosEl.innerHTML = App.views['perfil-jugador']._avisosHtml();
         var incidenciasEl = document.getElementById('perfil-incidencias');
         if (incidenciasEl) {
           if (incidenciasPendientes.length) {
@@ -4054,26 +4130,6 @@ const App = {
       // Aviso «Completa la información de tu perfil»: abre «Editar perfil» con los datos pendientes resaltados.
       completarPerfil: function() {
         App.navigate('perfil-editar', { pendientes: true });
-      },
-      // Avisos del club guardados en Avisos_Jugador (p. ej. una ausencia programada quitada al cambiar el horario):
-      // siguen en el inicio hasta que la familia los cierra.
-      _avisosHtml: function() {
-        return (App.state.avisosJugador || []).map(function(a) {
-          return '<div class="player-notice" role="note">' +
-            '<span class="player-notice-icon" aria-hidden="true">i</span>' +
-            '<div class="player-notice-body"><strong>Aviso del club</strong>' +
-            '<p data-no-i18n>' + _esc(a.Mensaje) + '</p></div>' +
-            '<button type="button" class="player-notice-close" aria-label="Cerrar aviso" title="Cerrar aviso"' +
-            ' onclick="App.views[\'perfil-jugador\'].cerrarAviso(' + _statsArgumento(a.ID) + ')">&times;</button>' +
-            '</div>';
-        }).join('');
-      },
-      cerrarAviso: function(avisoId) {
-        return App.operation.run('aviso:' + avisoId, 'marcarAvisoLeido', [avisoId], function() {
-          App.state.avisosJugador = (App.state.avisosJugador || []).filter(function(a) { return a.ID !== avisoId; });
-          var avisosEl = document.getElementById('perfil-avisos');
-          if (avisosEl) avisosEl.innerHTML = App.views['perfil-jugador']._avisosHtml();
-        }).catch(function() { /* App.operation ya muestra el error */ });
       },
     },
 
@@ -7526,7 +7582,10 @@ App.i18n = {
 "se quita el día":"day removed",
 "No se pudo comprobar el horario":"The schedule could not be checked",
 "Aviso del club":"Club notice",
-"Cerrar aviso":"Close notice",
+"Se ha quitado tu ausencia programada":"Your scheduled absence has been removed",
+"Ha cambiado el horario. Si la sigues necesitando, vuelve a programarla.":"The schedule has changed. If you still need it, schedule it again.",
+"Programar ausencia":"Schedule absence",
+"Tienes un aviso":"You have a notice",
 "Aviso no encontrado.":"Notice not found.",
 "No se pudo actualizar la programación":"The scheduled notice could not be updated",
 "Ya hay una operación en curso":"An operation is already in progress",

@@ -438,7 +438,6 @@
           </button>
         </div>
       </div>
-      <div id="perfil-avisos"></div>
       <div id="perfil-incidencias"></div>
       <div id="perfil-configuracion-aviso"></div>
       <div id="perfil-stats"></div>
@@ -769,6 +768,28 @@
           <div id="bienvenida-codigo-grupo" class="form-group bienvenida-codigo"><label for="bienvenida-codigo">C&oacute;digo de seguridad</label><input id="bienvenida-codigo" type="password" maxlength="6" autocomplete="off" placeholder="6 caracteres"><small class="form-hint">El C&oacute;digo familias que te dio el club, el mismo que usas para justificar ausencias.</small></div>
           <div class="justif-actions">
             <button type="button" id="bienvenida-guardar" class="btn btn-primary btn-full" onclick="App.views.bienvenida.guardar()">Guardar</button>
+          </div>
+        </section>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- Aviso del club (Avisos_Jugador): tarjeta flotante al entrar, de uno en uno hasta pulsar «Entendido» -->
+  <div id="modal-aviso-club" class="modal-justif-overlay wizard-cards hidden">
+    <div class="wizard-fondo" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="wizard-deck">
+    <div class="modal-justif-sheet justif-wizard alta-wizard aviso-club-wizard" role="alertdialog" aria-modal="true" aria-labelledby="aviso-club-titulo" aria-describedby="aviso-club-cuerpo">
+      <div class="modal-hdr justif-wizard-hdr">
+        <h3>Aviso del club <span id="aviso-club-contador" data-no-i18n></span></h3>
+      </div>
+      <div class="modal-body justif-steps">
+        <section class="justif-step aviso-club">
+          <span class="aviso-club-icono" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4m8-4v4m-6 6.5 4 4m0-4-4 4"/></svg></span>
+          <div id="aviso-club-cuerpo"></div>
+          <div class="justif-actions">
+            <button type="button" id="aviso-club-entendido" class="btn btn-primary btn-full" onclick="App.views.avisoClub.entendido()">Entendido</button>
+            <button type="button" id="aviso-club-programar" class="btn btn-secondary btn-full" onclick="App.views.avisoClub.programar()" hidden>Programar ausencia</button>
           </div>
         </section>
       </div>

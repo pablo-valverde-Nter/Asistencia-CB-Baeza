@@ -204,13 +204,13 @@ Mensajes persistentes del club para una cuenta de jugador/familia. Hoy los crea 
 | `ID` | String (UUID) | Identificador único |
 | `ID_Jugador` | String (UUID) | FK → `Jugadores.ID` (`ON DELETE CASCADE`) |
 | `Tipo` | String | Origen del aviso (`programacion-quitada`) |
-| `Mensaje` | String | Texto en español para la familia; solo nombra su equipo y su entrenamiento, nunca a otros jugadores |
+| `Mensaje` | String | Línea destacada del aviso; en `programacion-quitada`, `Equipo · Día HoraInicio–HoraFin` (p. ej. `Infantil Mixto · Jueves 19:00–20:00`, día en plural y con mayúscula). Solo nombra su equipo y su entrenamiento, nunca a otros jugadores |
 | `FechaCreacion` | String (YYYY-MM-DD HH:MM) | Hora del servidor al crearlo |
 | `Leido` | Boolean | `false` hasta que la familia lo cierra |
 | `FechaLectura` | String (YYYY-MM-DD HH:MM) | Hora del servidor al cerrarlo |
 
-- `cargarDatos` entrega en `avisosJugador` solo los no leídos del jugador autenticado (al personal, ninguno); si la tabla no se puede leer, el arranque sigue sin avisos. La SPA los guarda en `App.state.avisosJugador` y los pinta en Inicio como tarjeta «Aviso del club» (`App.views['perfil-jugador']._avisosHtml`) hasta cerrarla.
-- Cerrar llama a `marcarAvisoLeido(auth, avisoId)` con `App.operation`: solo cuentas de jugador y solo sus propios avisos; pone `Leido = true` y `FechaLectura`. Si falla, la tarjeta sigue visible.
+- `cargarDatos` entrega en `avisosJugador` solo los no leídos del jugador autenticado (al personal, ninguno); si la tabla no se puede leer, el arranque sigue sin avisos. La SPA los guarda en `App.state.avisosJugador` y, al iniciar sesión o recargar (tras la bienvenida si está abierta), los muestra de uno en uno en la tarjeta flotante `#modal-aviso-club` (`App.views.avisoClub`), sea cual sea la vista. El título y la frase de acción dependen del `Tipo` (en `programacion-quitada`: «Se ha quitado tu ausencia programada» / «Ha cambiado el horario. Si la sigues necesitando, vuelve a programarla.»); `Mensaje` va como línea destacada.
+- «Entendido» llama a `marcarAvisoLeido(auth, avisoId)` con `App.operation`: solo cuentas de jugador y solo sus propios avisos; pone `Leido = true` y `FechaLectura`, lo quita de `App.state.avisosJugador` y pasa al siguiente o cierra la tarjeta. «Programar ausencia» hace lo mismo, lleva a Entrenos y, si no quedan avisos, abre el asistente de programaciones. Si el servidor rechaza el cierre, el aviso sigue a la vista.
 
 ---
 

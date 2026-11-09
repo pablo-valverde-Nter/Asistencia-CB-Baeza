@@ -743,23 +743,6 @@ input, select, textarea { font-family: inherit; }
   font-size: .88rem; font-weight: 800;
 }
 .player-profile-incomplete-cta span { font-size: 1.15rem; line-height: 1; }
-/* Aviso del club (Avisos_Jugador): informativo, persiste hasta cerrarlo; tokens de tema para los tres temas. */
-.player-notice {
-  display: flex; align-items: flex-start; gap: 10px; margin: 0 16px 14px; padding: 12px 6px 12px 12px;
-  border: 1px solid var(--borde); border-left: 4px solid var(--morado); border-radius: 12px;
-  background: var(--blanco); color: var(--texto); box-shadow: var(--sombra);
-}
-.player-notice-icon {
-  display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px;
-  border-radius: 50%; background: var(--morado); color: var(--blanco); font-size: .78rem; font-weight: 900;
-}
-.player-notice-body { flex: 1; min-width: 0; font-size: .84rem; }
-.player-notice-body p { margin: 4px 0 0; color: var(--texto-sec); font-size: .78rem; line-height: 1.45; }
-.player-notice-close {
-  flex: 0 0 44px; width: 44px; height: 44px; margin: -10px 0 -10px; border: none; border-radius: 50%;
-  background: transparent; color: var(--texto-sec); font-size: 1.4rem; line-height: 1; cursor: pointer;
-}
-.player-notice-close:hover, .player-notice-close:focus-visible { background: var(--fondo); color: var(--texto); outline: none; }
 /* Confirmación de Editar equipo: programaciones que quita el nuevo horario. */
 .horario-afectadas {
   list-style: none; margin: 14px 0 0; padding: 0; max-height: 40vh; overflow-y: auto;
@@ -1887,6 +1870,14 @@ body:has(.operation-status.pending:not(.hidden)):has(#toast-container > .toast) 
 .bienvenida-inicio .justif-hint { margin: 0; }
 .bienvenida-codigo { margin-top: 14px; }
 .bienvenida-codigo[hidden] { display: none; }
+/* ── Aviso del club (Avisos_Jugador): tarjeta flotante al entrar con título, línea destacada y frase de acción. ── */
+.aviso-club-wizard .justif-wizard-hdr h3 { flex: 1; }
+.aviso-club { text-align: center; }
+.aviso-club-icono { display: inline-flex; width: 56px; height: 56px; margin: 4px auto 12px; padding: 13px; border-radius: 50%; background: var(--morado-s); }
+.aviso-club-icono svg { width: 100%; height: 100%; fill: none; stroke: var(--morado); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.aviso-club .justif-question { margin: 0 0 12px; font-size: 1.2rem; text-wrap: balance; }
+.aviso-club-linea { margin: 0 0 12px; padding: 10px 14px; border-radius: var(--r); background: var(--morado-xs); color: var(--texto); font-size: 1rem; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
+.aviso-club-accion { margin: 0; color: var(--texto-sec); font-size: .92rem; line-height: 1.45; }
 .justif-detalle { margin: 12px 0 0; }
 .justif-detalle label { margin-bottom: 4px; }
 .justif-detalle textarea { min-height: 60px; font-size: .88rem; }

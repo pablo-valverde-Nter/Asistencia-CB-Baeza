@@ -180,15 +180,15 @@ const Equipos = {
     return programacion.Activo === true || programacion.Activo === 'TRUE';
   },
 
-  // Aviso persistente para la familia; solo nombra su equipo y su entrenamiento.
+  // Aviso persistente para la familia; solo nombra su equipo y su entrenamiento. Mensaje = la línea destacada de la
+  // tarjeta («Infantil Mixto · Jueves 19:00–20:00»); el título y la frase de acción los pone la SPA según el Tipo.
   _avisarProgramacionQuitada_(programacion, horario, equipo) {
     const dia = Equipos._DIAS_SEMANA_PLURAL_[Number(horario.DiaSemana)] || 'día ' + horario.DiaSemana;
     appendRow(CONFIG.SHEETS.AVISOS_JUGADOR, {
       ID_Jugador: programacion.ID_Jugador,
       Tipo: 'programacion-quitada',
-      Mensaje: `Se ha cambiado el horario de entrenamiento de ${(equipo && equipo.Nombre) || 'tu equipo'} y se ha quitado ` +
-        `tu ausencia programada de los ${dia} de ${horario.HoraInicio} a ${horario.HoraFin}. ` +
-        'Si sigue siendo necesaria, vuelve a programarla.',
+      Mensaje: `${(equipo && equipo.Nombre) || 'Tu equipo'} · ${dia.charAt(0).toUpperCase()}${dia.slice(1)} ` +
+        `${horario.HoraInicio}–${horario.HoraFin}`,
       FechaCreacion: Asistencia._timestamp_(),
       Leido: false,
     });
