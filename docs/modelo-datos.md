@@ -45,6 +45,10 @@ Un equipo puede tener varios registros (uno por día de entrenamiento semanal).
 
 **Ejemplo:** Un equipo que entrena lunes y miércoles tendrá 2 filas en esta tabla.
 
+**Guardar el horario** (`Equipos.setHorariosEquipo`): compara con las filas actuales y conserva sus `ID` (los usan `Sesiones.ID_Horario` y `Programaciones_Justificaciones.ID_Horario`, esta con `ON DELETE CASCADE`). Mismo día y horas → no se escribe; mismo día con otras horas (uno a uno) → `updateRow` con el mismo `ID`; solo se insertan los días nuevos y se borran los quitados. Quitar un día con programaciones activas falla sin escribir nada («No se puede quitar el horario del jueves 19:00-20:00…») salvo `opciones.forzar`. «Editar equipo» solo llama a `setHorariosEquipo` si el horario cambió, y lo hace antes que el resto del guardado.
+
+Una sesión sin `ID_Horario` se asocia a su entrenamiento semanal por `DiaSemana` de su `Fecha` y por horas (`Asistencia._horarioDeSesion_`).
+
 ---
 
 ### `Jugadores`

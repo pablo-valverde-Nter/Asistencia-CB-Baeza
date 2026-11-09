@@ -74,21 +74,62 @@ const Equipos = {
   // ══════════════════════════════════════════════════════════════════════════════
 
   /**
-   * Reemplaza el horario semanal completo de un equipo.
-   * Elimina las filas anteriores e inserta las nuevas.
+   * Sincroniza el horario semanal de un equipo sin recrear lo que no cambia: los ID de Horarios
+   * los referencian Programaciones_Justificaciones (ON DELETE CASCADE) y Sesiones.
+   * - Mismo día y horas → se conserva sin escribir.
+   * - Mismo día con otras horas (un único horario ese día antes y después) → updateRow con el mismo ID.
+   * - Lo demás se inserta o se borra.
+   * Valida antes de escribir: quitar un horario con programaciones de ausencia activas falla
+   * salvo `opciones.forzar`. Las programaciones del horario quitado (pausadas, o todas si se fuerza)
+   * se borran explícitamente, igual que haría la cascada.
    * @param {string} equipoId
    * @param {{ DiaSemana: number, HoraInicio: string, HoraFin: string }[]} horarios
-   * @returns {Object[]} Nuevos registros creados.
+   * @param {{ forzar?: boolean }} [opciones]
+   * @returns {Object[]} Horarios finales del equipo (con ID), en el orden de `horarios`.
    */
-  setHorariosEquipo(equipoId, horarios) {
-    deleteWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', equipoId);
-    return horarios.map(h => appendRow(CONFIG.SHEETS.HORARIOS, {
-      ID_Equipo:  equipoId,
-      DiaSemana:  Number(h.DiaSemana),
-      HoraInicio: h.HoraInicio,
-      HoraFin:    h.HoraFin,
-    }));
+  setHorariosEquipo(equipoId, horarios, opciones) {
+    const deseados = (horarios || []).map(h => ({ DiaSemana: Number(h.DiaSemana), HoraInicio: h.HoraInicio, HoraFin: h.HoraFin }));
+    const libres = findWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', equipoId).slice();
+    const delDia = (lista, dia) => lista.filter(h => Number(h.DiaSemana) === dia);
+
+    const finales = deseados.map(h => {
+      const i = libres.findIndex(e => Number(e.DiaSemana) === h.DiaSemana && e.HoraInicio === h.HoraInicio && e.HoraFin === h.HoraFin);
+      return i < 0 ? null : libres.splice(i, 1)[0];
+    });
+    const pendientes = deseados.filter((h, i) => !finales[i]);
+    const actualizar = [];
+    deseados.forEach((h, i) => {
+      if (finales[i]) return;
+      const candidatos = delDia(libres, h.DiaSemana);
+      if (candidatos.length === 1 && delDia(pendientes, h.DiaSemana).length === 1) actualizar.push({ i, existente: candidatos[0] });
+    });
+    actualizar.forEach(({ existente }) => libres.splice(libres.indexOf(existente), 1));
+
+    const quitar = libres.map(h => ({ horario: h, programaciones: findWhere(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, 'ID_Horario', h.ID) }));
+    if (!(opciones && opciones.forzar)) {
+      const bloqueos = quitar.map(({ horario, programaciones }) => {
+        const n = programaciones.filter(p => p.Activo === true || p.Activo === 'TRUE').length;
+        if (!n) return '';
+        return `No se puede quitar el horario del ${Equipos._DIAS_SEMANA_[Number(horario.DiaSemana)] || 'día ' + horario.DiaSemana} ` +
+          `${horario.HoraInicio}-${horario.HoraFin}: tiene ${n} ${n === 1 ? 'programación de ausencia activa' : 'programaciones de ausencia activas'}.`;
+      }).filter(Boolean);
+      if (bloqueos.length) throw new Error(`${bloqueos.join(' ')} Bórralas o edítalas antes.`);
+    }
+
+    // Las programaciones se borran explícitamente para no depender de la acción de la FK.
+    quitar.forEach(({ horario, programaciones }) => {
+      programaciones.forEach(p => deleteRow(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, p.ID));
+      deleteRow(CONFIG.SHEETS.HORARIOS, horario.ID);
+    });
+    actualizar.forEach(({ i, existente }) => {
+      const cambios = { HoraInicio: deseados[i].HoraInicio, HoraFin: deseados[i].HoraFin };
+      updateRow(CONFIG.SHEETS.HORARIOS, existente.ID, cambios);
+      finales[i] = { ...existente, ...cambios };
+    });
+    return deseados.map((h, i) => finales[i] || appendRow(CONFIG.SHEETS.HORARIOS, { ID_Equipo: equipoId, ...h }));
   },
+
+  _DIAS_SEMANA_: { 1: 'lunes', 2: 'martes', 3: 'miércoles', 4: 'jueves', 5: 'viernes', 6: 'sábado', 7: 'domingo' },
 
   // ══════════════════════════════════════════════════════════════════════════════
   // JUGADORES

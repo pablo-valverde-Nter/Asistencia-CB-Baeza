@@ -2772,6 +2772,9 @@ const App = {
           // Capturar backup para posible rollback
           var eqAntes = Object.assign({}, App.cache.equipos.find(function(e) { return e.ID === equipoId; }));
           var horAntes = App.cache.horarios.filter(function(h) { return h.ID_Equipo === equipoId; }).map(function(h) { return Object.assign({}, h); });
+          // Solo se reescribe el horario si cambia: así sus ID (y las programaciones que los usan) se conservan.
+          var horarioCambia = !App.views['equipo-form']._horariosIguales(horAntes, horarios);
+          var horariosGuardados = false;
           var jugRelAntes = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo === equipoId; }).map(function(r) { return Object.assign({}, r); });
           var entRelAntes = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo === equipoId; }).map(function(r) { return Object.assign({}, r); });
 
@@ -2783,10 +2786,7 @@ const App = {
               break;
             }
           }
-          App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== equipoId; });
-          horarios.forEach(function(h) {
-            App.cache.horarios.push({ ID: 'h_' + equipoId + '_' + h.DiaSemana, ID_Equipo: equipoId, DiaSemana: h.DiaSemana, HoraInicio: h.HoraInicio, HoraFin: h.HoraFin });
-          });
+          if (horarioCambia) App.views['equipo-form']._cacheHorarios(equipoId, horarios);
           App.cache._setRelacionesEquipo(equipoId, App.state.formJugadores, App.state.formEntrenadores);
 
           App.state._formIsDirty = false;
@@ -2794,19 +2794,22 @@ const App = {
           App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'equipo-form' && v !== 'equipo-detalle'; });
           App.navigate('equipos-admin', null, false);
 
-          // Sincronizar en segundo plano con rollback si falla
+          // Sincronizar en segundo plano con rollback si falla. El horario va primero: si el servidor
+          // rechaza quitar un día con programaciones activas, no se guarda nada más.
           App.sync.start();
-          server('actualizarEquipo', equipoId, { Nombre: nombre, Categoria: categoria, Modalidad: modalidad })
-            .then(function(res) {
-              if (!res.success) throw new Error(res.error);
-              return Promise.all([
-                server('setHorariosEquipo', equipoId, horarios),
-                App.views['equipo-form']._sincronizarPersonas(equipoId),
-              ]);
-            }).then(function(resultados) {
-              if (!resultados[0] || resultados[0].success === false) {
-                throw new Error(resultados[0] && resultados[0].error || 'No se pudieron guardar los horarios');
+          (horarioCambia ? server('setHorariosEquipo', equipoId, horarios) : Promise.resolve(null))
+            .then(function(resHorarios) {
+              if (resHorarios && resHorarios.success === false) throw new Error(resHorarios.error || 'No se pudieron guardar los horarios');
+              if (resHorarios) {
+                horariosGuardados = true;
+                App.views['equipo-form']._cacheHorarios(equipoId, resHorarios.actualizado || []);
               }
+              return server('actualizarEquipo', equipoId, { Nombre: nombre, Categoria: categoria, Modalidad: modalidad });
+            })
+            .then(function(res) {
+              if (!res || !res.success) throw new Error(res && res.error || 'Error al guardar el equipo');
+              return App.views['equipo-form']._sincronizarPersonas(equipoId);
+            }).then(function() {
               App.sync.done();
               App.operation.succeed(operationToken);
               if (App.state.currentView === 'equipos-admin') App.views['equipos-admin'].render();
@@ -2815,8 +2818,7 @@ const App = {
               App.sync.done();
               // Rollback
               if (eqAntes && eqAntes.ID) App.cache.upsert('equipos', eqAntes);
-              App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== equipoId; });
-              horAntes.forEach(function(h) { App.cache.horarios.push(h); });
+              if (!horariosGuardados) App.views['equipo-form']._cacheHorarios(equipoId, horAntes);
               App.cache.jugadoresEquipos   = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
               App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
               jugRelAntes.forEach(function(r) { App.cache.jugadoresEquipos.push(r); });
@@ -2854,11 +2856,8 @@ const App = {
               if (!resultados || !resultados[0] || resultados[0].success === false) {
                 throw new Error(resultados && resultados[0] && resultados[0].error || 'No se pudieron guardar los horarios');
               }
+              App.views['equipo-form']._cacheHorarios(nuevoEquipoId, resultados[0].actualizado || []);
               var nuevoId = nuevoEquipoId;
-              App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== nuevoId; });
-              horarios.forEach(function(h) {
-                App.cache.horarios.push({ ID: 'h_' + nuevoId + '_' + h.DiaSemana, ID_Equipo: nuevoId, DiaSemana: h.DiaSemana, HoraInicio: h.HoraInicio, HoraFin: h.HoraFin });
-              });
               App.cache._setRelacionesEquipo(nuevoId, App.state.formJugadores, App.state.formEntrenadores);
               App.state._formIsDirty = false;
               App.state.formEquipoId = null;
@@ -2938,6 +2937,22 @@ const App = {
           App.state.viewHistory = historyBefore;
           App.navigate('equipo-form', {}, false);
         });
+      },
+
+      // Horarios iguales por día y horas, sin importar el orden.
+      _horariosIguales: function(a, b) {
+        var clave = function(lista) {
+          return lista.map(function(h) { return Number(h.DiaSemana) + '|' + h.HoraInicio + '|' + h.HoraFin; }).sort().join(',');
+        };
+        return clave(a) === clave(b);
+      },
+
+      // Sustituye los horarios del equipo en caché; los que aún no tienen ID (guardado optimista)
+      // llevan uno temporal 'h_…' hasta que el servidor devuelve los reales.
+      _cacheHorarios: function(equipoId, lista) {
+        App.cache.horarios = App.cache.horarios.filter(function(h) { return h.ID_Equipo !== equipoId; }).concat(lista.map(function(h) {
+          return { ID: h.ID || 'h_' + equipoId + '_' + h.DiaSemana, ID_Equipo: equipoId, DiaSemana: Number(h.DiaSemana), HoraInicio: h.HoraInicio, HoraFin: h.HoraFin };
+        }));
       },
 
       _sincronizarPersonas: function(equipoId) {

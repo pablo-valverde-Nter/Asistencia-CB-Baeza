@@ -831,10 +831,10 @@ function eliminarProgramacionJustificacion(auth, programacionId, jugadorId, codi
   } catch (e) { return { success: false, error: e.message }; }
 }
 
-function setHorariosEquipo(auth, equipoId, horarios) {
+function setHorariosEquipo(auth, equipoId, horarios, opciones) {
   try {
     Auth.requireAccesoGestionEquipo(equipoId, auth);
-    return { success: true, actualizado: Equipos.setHorariosEquipo(equipoId, horarios) };
+    return { success: true, actualizado: Equipos.setHorariosEquipo(equipoId, horarios, opciones) };
   } catch (e) {
     return { success: false, error: e.message };
   }

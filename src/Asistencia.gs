@@ -449,10 +449,21 @@ const Asistencia = {
     };
   },
 
-  // Entrenamiento semanal del que procede una sesión: por ID_Horario o, en sesiones antiguas sin él, por horas.
+  // Entrenamiento semanal del que procede una sesión: por ID_Horario o, en sesiones antiguas sin él,
+  // por día de la semana de la fecha y horas (varios días pueden compartir horas).
   _horarioDeSesion_(sesion) {
-    return findWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', sesion.ID_Equipo).find(h => (sesion.ID_Horario && h.ID === sesion.ID_Horario) ||
-      (!sesion.ID_Horario && h.HoraInicio === sesion.HoraInicio && h.HoraFin === sesion.HoraFin)) || null;
+    const horarios = findWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', sesion.ID_Equipo);
+    if (sesion.ID_Horario) return horarios.find(h => h.ID === sesion.ID_Horario) || null;
+    const dia = Asistencia._diaSemana_(sesion.Fecha);
+    return horarios.find(h => Number(h.DiaSemana) === dia &&
+      h.HoraInicio === sesion.HoraInicio && h.HoraFin === sesion.HoraFin) || null;
+  },
+
+  // 'YYYY-MM-DD' → DiaSemana de Horarios (1=lunes … 7=domingo), leída como fecha local; null si no es válida.
+  _diaSemana_(fecha) {
+    const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(fecha || ''));
+    if (!partes) return null;
+    return new Date(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3])).getDay() || 7;
   },
 
   aplicarProgramacionesSesion(sesion) {
