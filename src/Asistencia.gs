@@ -400,15 +400,25 @@ const Asistencia = {
     return { ...actual, ...cambios };
   },
 
-  // Borra la regla y retira lo que ella generó en sesiones que aún no han empezado: el preaviso sin Estado se borra
-  // y, si el entrenador ya marcó Estado, solo se quita la justificación. Sesiones pasadas o en curso no se tocan.
+  // Borra la regla tras validar el código familiar; lo demás lo hace _retirarProgramacion_.
   eliminarProgramacion(programacionId, jugadorId, codigoPadres) {
     if (!Auth.verificarCodigoPadres(jugadorId, codigoPadres)) {
       throw new Error('El código de autorización no es correcto.');
     }
     const actual = findById(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, programacionId);
     if (!actual || actual.ID_Jugador !== jugadorId) throw new Error('Programación no encontrada.');
-    if (!deleteRow(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, programacionId)) throw new Error('Programación no encontrada.');
+    const resultado = Asistencia._retirarProgramacion_(actual);
+    if (!resultado) throw new Error('Programación no encontrada.');
+    return resultado;
+  },
+
+  // Borra la regla y retira lo que ella generó en sesiones que aún no han empezado: el preaviso sin Estado se borra
+  // y, si el entrenador ya marcó Estado, solo se quita la justificación. Sesiones pasadas o en curso no se tocan.
+  // Sin comprobar permisos (lo hace quien llama). Debe llamarse antes de cambiar o borrar su horario: las sesiones
+  // antiguas sin ID_Horario se emparejan por día y horas. Devuelve null si la regla ya no existía.
+  _retirarProgramacion_(actual) {
+    if (!deleteRow(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, actual.ID)) return null;
+    const jugadorId = actual.ID_Jugador;
     const ahora = Asistencia._timestamp_();
     const asistenciasEliminadas = [];
     const asistenciasActualizadas = [];

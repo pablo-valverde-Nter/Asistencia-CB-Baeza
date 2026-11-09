@@ -45,7 +45,11 @@ Un equipo puede tener varios registros (uno por día de entrenamiento semanal).
 
 **Ejemplo:** Un equipo que entrena lunes y miércoles tendrá 2 filas en esta tabla.
 
-**Guardar el horario** (`Equipos.setHorariosEquipo`): compara con las filas actuales y conserva sus `ID` (los usan `Sesiones.ID_Horario` y `Programaciones_Justificaciones.ID_Horario`, esta con `ON DELETE CASCADE`). Mismo día y horas → no se escribe; mismo día con otras horas (uno a uno) → `updateRow` con el mismo `ID`; solo se insertan los días nuevos y se borran los quitados. Quitar un día con programaciones activas falla sin escribir nada («No se puede quitar el horario del jueves 19:00-20:00…») salvo `opciones.forzar`. «Editar equipo» solo llama a `setHorariosEquipo` si el horario cambió, y lo hace antes que el resto del guardado.
+**Guardar el horario** (`Equipos.setHorariosEquipo`): compara con las filas actuales y conserva sus `ID` (los usan `Sesiones.ID_Horario` y `Programaciones_Justificaciones.ID_Horario`, esta con `ON DELETE CASCADE`). El emparejamiento es una función pura, `Equipos._planHorarios_`: mismo día y horas → no se escribe; mismo día con otras horas (uno a uno) → `updateRow` con el mismo `ID`; solo se insertan los días nuevos y se borran los quitados.
+
+**Programaciones afectadas** (`Equipos._programacionesAfectadas_`): las del horario que se quita **y las del horario cuya hora cambia** (aunque conserve su `ID`, la regla se programó para esa hora y la familia debe revisarla), activas y pausadas. Al guardar se eliminan como `Asistencia.eliminarProgramacion` (vía `Asistencia._retirarProgramacion_`, sin código familiar: retira sus justificaciones de sesiones no empezadas y nunca toca las pasadas) antes de tocar `Horarios`, y cada una deja un aviso en `Avisos_Jugador` para su jugador. Si alguna afectada está activa y no llega `opciones.forzar`, falla sin escribir nada («No se puede quitar el horario del jueves 19:00-20:00…» / «No se puede cambiar la hora del…»); las pausadas se eliminan sin confirmación.
+
+**«Editar equipo»** solo llama a `setHorariosEquipo` si el horario cambió, y lo hace antes que el resto del guardado. Antes pide `previsualizarCambioHorarios` (solo lectura, mismo plan): sin afectadas activas guarda directamente; con alguna, retira el «Guardando…» (`App.operation.cancelar`) y abre «Quitar ausencias programadas» con jugador, día, horas y si se quita el día o cambia la hora (las pausadas, marcadas). «Cancelar» no guarda nada y deja el formulario igual; «Quitar y guardar» repite el guardado con `{ forzar: true }` y quita esas programaciones de la caché.
 
 Una sesión sin `ID_Horario` se asocia a su entrenamiento semanal por `DiaSemana` de su `Fecha` y por horas (`Asistencia._horarioDeSesion_`).
 
@@ -174,6 +178,7 @@ Registro de asistencia de jugadores por sesión.
 - `Estado` solo lo escribe el entrenador. Un aviso o justificación de la familia no rellena `Estado`: una A justificada sigue contando como ausencia.
 - Motivo **Salud** (`MotivoCategoria`, `CONFIG.MOTIVO_SALUD`): sin texto libre. Apps Script descarta `MotivoDetalle` al guardar justificaciones y programaciones y nunca lo incluye en mensajes ni correos. Los motivos retirados `Lesión` y `Enfermedad` (`CONFIG.MOTIVOS_SALUD_ANTIGUOS`) no se migran: `cargarDatos` los entrega como «Salud» sin `MotivoDetalle` ni `MensajeGenerado`, y las estadísticas los agrupan con «Salud».
 - **Programaciones** (`Programaciones_Justificaciones`): `aplicarProgramacionesSesion` crea en cada sesión generada del entrenamiento semanal (`ID_Horario`) una justificación con `JustificadoPor = 'programacion'` y `EsProgramada = true`. Editar una programación solo cambia la regla (las justificaciones ya creadas no se reescriben) y conserva `Activo`; no puede dejar dos programaciones del jugador en el mismo entrenamiento. Borrarla (con el código familiar, validado en Apps Script) elimina la regla y, solo en sesiones que aún no han empezado (`Fecha HoraInicio` posterior a ahora) y procedentes de ese mismo entrenamiento: borra la fila si no tiene `Estado` o, si el entrenador ya lo marcó, quita solo la justificación (conserva `Estado` y `MinutosRetraso`); avisa de la cancelación al entrenador si se le había notificado. Las sesiones pasadas o en curso y las justificaciones enviadas a mano por la familia no se tocan.
+- Quitar o cambiar de hora un entrenamiento desde «Editar equipo» elimina sus programaciones de la misma forma (sin código familiar, tras confirmarlo el entrenador) y deja un aviso en `Avisos_Jugador`; ver «Programaciones afectadas» en `Horarios`.
 
 ---
 
@@ -188,6 +193,24 @@ Registro de asistencia de entrenadores por sesión.
 | `Asistio` | Boolean | `true` = asistió, `false` = no asistió |
 | `EsInvitado` | Boolean | `true` si el entrenador no está asignado al equipo de la sesión |
 | `FechaRegistro` | String (YYYY-MM-DD HH:MM) | Timestamp del registro |
+
+---
+
+### `Avisos_Jugador`
+Mensajes persistentes del club para una cuenta de jugador/familia. Hoy los crea `Equipos.setHorariosEquipo` (`Tipo = 'programacion-quitada'`) por cada programación eliminada al quitar o cambiar de hora un entrenamiento. Solo Apps Script la lee y escribe (RLS sin políticas, como el resto); migración: `supabase/migrations/2026-11-09-avisos-jugador.sql`.
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `ID` | String (UUID) | Identificador único |
+| `ID_Jugador` | String (UUID) | FK → `Jugadores.ID` (`ON DELETE CASCADE`) |
+| `Tipo` | String | Origen del aviso (`programacion-quitada`) |
+| `Mensaje` | String | Texto en español para la familia; solo nombra su equipo y su entrenamiento, nunca a otros jugadores |
+| `FechaCreacion` | String (YYYY-MM-DD HH:MM) | Hora del servidor al crearlo |
+| `Leido` | Boolean | `false` hasta que la familia lo cierra |
+| `FechaLectura` | String (YYYY-MM-DD HH:MM) | Hora del servidor al cerrarlo |
+
+- `cargarDatos` entrega en `avisosJugador` solo los no leídos del jugador autenticado (al personal, ninguno); si la tabla no se puede leer, el arranque sigue sin avisos. La SPA los guarda en `App.state.avisosJugador` y los pinta en Inicio como tarjeta «Aviso del club» (`App.views['perfil-jugador']._avisosHtml`) hasta cerrarla.
+- Cerrar llama a `marcarAvisoLeido(auth, avisoId)` con `App.operation`: solo cuentas de jugador y solo sus propios avisos; pone `Leido = true` y `FechaLectura`. Si falla, la tarjeta sigue visible.
 
 ---
 

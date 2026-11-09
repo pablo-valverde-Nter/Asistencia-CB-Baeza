@@ -79,17 +79,78 @@ const Equipos = {
    * - Mismo día y horas → se conserva sin escribir.
    * - Mismo día con otras horas (un único horario ese día antes y después) → updateRow con el mismo ID.
    * - Lo demás se inserta o se borra.
-   * Valida antes de escribir: quitar un horario con programaciones de ausencia activas falla
-   * salvo `opciones.forzar`. Las programaciones del horario quitado (pausadas, o todas si se fuerza)
-   * se borran explícitamente, igual que haría la cascada.
+   * Las programaciones de ausencia de un horario que se quita o cambia de hora se eliminan
+   * (`_programacionesAfectadas_`): la regla era para esa hora. Con alguna activa falla sin escribir nada
+   * salvo `opciones.forzar` (el entrenador lo confirmó tras `previsualizarCambioHorarios`); las pausadas se
+   * eliminan siempre. Cada programación eliminada retira sus justificaciones de sesiones no empezadas
+   * (`Asistencia._retirarProgramacion_`) y deja un aviso al jugador en Avisos_Jugador.
    * @param {string} equipoId
    * @param {{ DiaSemana: number, HoraInicio: string, HoraFin: string }[]} horarios
    * @param {{ forzar?: boolean }} [opciones]
    * @returns {Object[]} Horarios finales del equipo (con ID), en el orden de `horarios`.
    */
   setHorariosEquipo(equipoId, horarios, opciones) {
+    const plan = Equipos._planHorarios_(findWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', equipoId), horarios);
+    const afectadas = Equipos._programacionesAfectadas_(plan);
+    if (!(opciones && opciones.forzar)) {
+      const bloqueos = plan.quitar.map(h => ({ horario: h, cambio: 'quitado' }))
+        .concat(plan.actualizar.map(({ existente }) => ({ horario: existente, cambio: 'hora' })))
+        .map(({ horario, cambio }) => {
+          const n = afectadas.filter(a => a.horario === horario && Equipos._programacionActiva_(a.programacion)).length;
+          if (!n) return '';
+          return `No se puede ${cambio === 'hora' ? 'cambiar la hora' : 'quitar el horario'} del ` +
+            `${Equipos._DIAS_SEMANA_[Number(horario.DiaSemana)] || 'día ' + horario.DiaSemana} ` +
+            `${horario.HoraInicio}-${horario.HoraFin}: tiene ${n} ${n === 1 ? 'programación de ausencia activa' : 'programaciones de ausencia activas'}.`;
+        }).filter(Boolean);
+      if (bloqueos.length) throw new Error(`${bloqueos.join(' ')} Bórralas o edítalas antes.`);
+    }
+
+    // Antes de tocar Horarios: _retirarProgramacion_ empareja las sesiones antiguas por día y horas.
+    const equipo = afectadas.length ? findById(CONFIG.SHEETS.EQUIPOS, equipoId) : null;
+    afectadas.forEach(({ programacion, horario }) => {
+      if (Asistencia._retirarProgramacion_(programacion)) Equipos._avisarProgramacionQuitada_(programacion, horario, equipo);
+    });
+    plan.quitar.forEach(h => deleteRow(CONFIG.SHEETS.HORARIOS, h.ID));
+    const finales = plan.finales.slice();
+    plan.actualizar.forEach(({ i, existente }) => {
+      const cambios = { HoraInicio: plan.deseados[i].HoraInicio, HoraFin: plan.deseados[i].HoraFin };
+      updateRow(CONFIG.SHEETS.HORARIOS, existente.ID, cambios);
+      finales[i] = { ...existente, ...cambios };
+    });
+    return plan.deseados.map((h, i) => finales[i] || appendRow(CONFIG.SHEETS.HORARIOS, { ID_Equipo: equipoId, ...h }));
+  },
+
+  /**
+   * Solo lectura: programaciones que eliminaría `setHorariosEquipo(equipoId, horarios)`, para que el entrenador
+   * las confirme. Ordenadas por día, hora y jugador.
+   * @returns {{ ID: string, ID_Jugador: string, Jugador: string, ID_Horario: string, DiaSemana: number,
+   *   HoraInicio: string, HoraFin: string, Cambio: 'quitado'|'hora', Activo: boolean }[]}
+   */
+  previsualizarCambioHorarios(equipoId, horarios) {
+    const plan = Equipos._planHorarios_(findWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', equipoId), horarios);
+    return Equipos._programacionesAfectadas_(plan).map(({ programacion, horario, cambio }) => {
+      const jugador = findById(CONFIG.SHEETS.JUGADORES, programacion.ID_Jugador);
+      return {
+        ID: programacion.ID, ID_Jugador: programacion.ID_Jugador,
+        Jugador: jugador ? `${jugador.Nombre || ''} ${jugador.Apellidos || ''}`.trim() : '',
+        ID_Horario: horario.ID, DiaSemana: Number(horario.DiaSemana), HoraInicio: horario.HoraInicio, HoraFin: horario.HoraFin,
+        Cambio: cambio, Activo: Equipos._programacionActiva_(programacion),
+      };
+    }).sort((a, b) => a.DiaSemana - b.DiaSemana || String(a.HoraInicio).localeCompare(String(b.HoraInicio)) ||
+      a.Jugador.localeCompare(b.Jugador, 'es'));
+  },
+
+  /**
+   * Plan puro del guardado del horario (sin lecturas ni escrituras); lo comparten setHorariosEquipo y la vista previa.
+   * @param {Object[]} existentes Filas actuales de Horarios del equipo.
+   * @param {{ DiaSemana: number, HoraInicio: string, HoraFin: string }[]} horarios Horario deseado.
+   * @returns {{ deseados: Object[], finales: (Object|null)[], actualizar: { i: number, existente: Object }[], quitar: Object[] }}
+   *   `finales[i]`: fila existente idéntica a `deseados[i]` (o null); `actualizar`: mismo día con otras horas;
+   *   `quitar`: filas que desaparecen.
+   */
+  _planHorarios_(existentes, horarios) {
     const deseados = (horarios || []).map(h => ({ DiaSemana: Number(h.DiaSemana), HoraInicio: h.HoraInicio, HoraFin: h.HoraFin }));
-    const libres = findWhere(CONFIG.SHEETS.HORARIOS, 'ID_Equipo', equipoId).slice();
+    const libres = (existentes || []).slice();
     const delDia = (lista, dia) => lista.filter(h => Number(h.DiaSemana) === dia);
 
     const finales = deseados.map(h => {
@@ -104,32 +165,37 @@ const Equipos = {
       if (candidatos.length === 1 && delDia(pendientes, h.DiaSemana).length === 1) actualizar.push({ i, existente: candidatos[0] });
     });
     actualizar.forEach(({ existente }) => libres.splice(libres.indexOf(existente), 1));
+    return { deseados, finales, actualizar, quitar: libres };
+  },
 
-    const quitar = libres.map(h => ({ horario: h, programaciones: findWhere(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, 'ID_Horario', h.ID) }));
-    if (!(opciones && opciones.forzar)) {
-      const bloqueos = quitar.map(({ horario, programaciones }) => {
-        const n = programaciones.filter(p => p.Activo === true || p.Activo === 'TRUE').length;
-        if (!n) return '';
-        return `No se puede quitar el horario del ${Equipos._DIAS_SEMANA_[Number(horario.DiaSemana)] || 'día ' + horario.DiaSemana} ` +
-          `${horario.HoraInicio}-${horario.HoraFin}: tiene ${n} ${n === 1 ? 'programación de ausencia activa' : 'programaciones de ausencia activas'}.`;
-      }).filter(Boolean);
-      if (bloqueos.length) throw new Error(`${bloqueos.join(' ')} Bórralas o edítalas antes.`);
-    }
+  // Programaciones (activas y pausadas) de los horarios que el plan quita o cambia de hora.
+  _programacionesAfectadas_(plan) {
+    return plan.quitar.map(h => ({ horario: h, cambio: 'quitado' }))
+      .concat(plan.actualizar.map(({ existente }) => ({ horario: existente, cambio: 'hora' })))
+      .flatMap(({ horario, cambio }) => findWhere(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, 'ID_Horario', horario.ID)
+        .map(programacion => ({ programacion, horario, cambio })));
+  },
 
-    // Las programaciones se borran explícitamente para no depender de la acción de la FK.
-    quitar.forEach(({ horario, programaciones }) => {
-      programaciones.forEach(p => deleteRow(CONFIG.SHEETS.PROGRAMACIONES_JUSTIFICACIONES, p.ID));
-      deleteRow(CONFIG.SHEETS.HORARIOS, horario.ID);
+  _programacionActiva_(programacion) {
+    return programacion.Activo === true || programacion.Activo === 'TRUE';
+  },
+
+  // Aviso persistente para la familia; solo nombra su equipo y su entrenamiento.
+  _avisarProgramacionQuitada_(programacion, horario, equipo) {
+    const dia = Equipos._DIAS_SEMANA_PLURAL_[Number(horario.DiaSemana)] || 'día ' + horario.DiaSemana;
+    appendRow(CONFIG.SHEETS.AVISOS_JUGADOR, {
+      ID_Jugador: programacion.ID_Jugador,
+      Tipo: 'programacion-quitada',
+      Mensaje: `Se ha cambiado el horario de entrenamiento de ${(equipo && equipo.Nombre) || 'tu equipo'} y se ha quitado ` +
+        `tu ausencia programada de los ${dia} de ${horario.HoraInicio} a ${horario.HoraFin}. ` +
+        'Si sigue siendo necesaria, vuelve a programarla.',
+      FechaCreacion: Asistencia._timestamp_(),
+      Leido: false,
     });
-    actualizar.forEach(({ i, existente }) => {
-      const cambios = { HoraInicio: deseados[i].HoraInicio, HoraFin: deseados[i].HoraFin };
-      updateRow(CONFIG.SHEETS.HORARIOS, existente.ID, cambios);
-      finales[i] = { ...existente, ...cambios };
-    });
-    return deseados.map((h, i) => finales[i] || appendRow(CONFIG.SHEETS.HORARIOS, { ID_Equipo: equipoId, ...h }));
   },
 
   _DIAS_SEMANA_: { 1: 'lunes', 2: 'martes', 3: 'miércoles', 4: 'jueves', 5: 'viernes', 6: 'sábado', 7: 'domingo' },
+  _DIAS_SEMANA_PLURAL_: { 1: 'lunes', 2: 'martes', 3: 'miércoles', 4: 'jueves', 5: 'viernes', 6: 'sábados', 7: 'domingos' },
 
   // ══════════════════════════════════════════════════════════════════════════════
   // JUGADORES

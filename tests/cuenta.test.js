@@ -14,6 +14,8 @@ function servidor() {
     Administradores: [{ ID: 'a1', Email: 'admin@example.com', PIN: '3456', Activo: true }],
     Programaciones_Justificaciones: [{ ID: 'p1', ID_Jugador: 'j1', ID_Equipo: 't1', ID_Horario: 'h1', TipoIncidencia: 'Ausencia', Activo: true }],
     Asist_Jugadores: [],
+    Avisos_Jugador: [{ ID: 'av1', ID_Jugador: 'j1', Tipo: 'programacion-quitada', Mensaje: 'Aviso de Ana', Leido: false },
+      { ID: 'av2', ID_Jugador: 'j2', Tipo: 'programacion-quitada', Mensaje: 'Aviso de otro', Leido: false }],
   };
   const writes = [], mails = [], cache = new Map(), logs = [];
   let ahora = Date.now();
@@ -319,4 +321,21 @@ test('eliminarProgramacionJustificacion valida en servidor el código familiar n
   assert.equal(res.eliminado, true);
   assert.deepEqual(s.rows.Programaciones_Justificaciones, []);
   assert.equal(s.call('eliminarProgramacionJustificacion', s.jugador, 'p1', 'j1', 'ABC123').success, false, 'ya no existe');
+});
+
+test('marcarAvisoLeido: la cuenta de jugador cierra solo sus avisos, con la hora del servidor', () => {
+  const s = servidor();
+  for (const [auth, id] of [[s.jugador, 'av2'], [s.jugador, 'no-existe'], [s.entrenador, 'av1'], [s.admin, 'av1'],
+    [{ tipo: 'jugador', usuario: 'ana', pin: '9999' }, 'av1']]) {
+    assert.equal(s.call('marcarAvisoLeido', auth, id).success, false, JSON.stringify([auth.usuario || auth.email, id]));
+  }
+  assert.match(s.call('marcarAvisoLeido', s.jugador, 'av2').error, /Aviso no encontrado/);
+  assert.deepEqual(s.writes.filter(w => w.table === 'Avisos_Jugador'), []);
+  const res = s.call('marcarAvisoLeido', s.jugador, 'av1');
+  assert.equal(res.success, true);
+  assert.deepEqual(s.writes.at(-1).id, 'av1');
+  assert.deepEqual(Object.keys(s.writes.at(-1).fields).sort(), ['FechaLectura', 'Leido']);
+  assert.equal(s.rows.Avisos_Jugador[0].Leido, true);
+  assert.match(s.rows.Avisos_Jugador[0].FechaLectura, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  assert.equal(s.rows.Avisos_Jugador[1].Leido, false, 'el aviso de otro jugador no cambia');
 });

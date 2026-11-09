@@ -743,6 +743,36 @@ input, select, textarea { font-family: inherit; }
   font-size: .88rem; font-weight: 800;
 }
 .player-profile-incomplete-cta span { font-size: 1.15rem; line-height: 1; }
+/* Aviso del club (Avisos_Jugador): informativo, persiste hasta cerrarlo; tokens de tema para los tres temas. */
+.player-notice {
+  display: flex; align-items: flex-start; gap: 10px; margin: 0 16px 14px; padding: 12px 6px 12px 12px;
+  border: 1px solid var(--borde); border-left: 4px solid var(--morado); border-radius: 12px;
+  background: var(--blanco); color: var(--texto); box-shadow: var(--sombra);
+}
+.player-notice-icon {
+  display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--morado); color: var(--blanco); font-size: .78rem; font-weight: 900;
+}
+.player-notice-body { flex: 1; min-width: 0; font-size: .84rem; }
+.player-notice-body p { margin: 4px 0 0; color: var(--texto-sec); font-size: .78rem; line-height: 1.45; }
+.player-notice-close {
+  flex: 0 0 44px; width: 44px; height: 44px; margin: -10px 0 -10px; border: none; border-radius: 50%;
+  background: transparent; color: var(--texto-sec); font-size: 1.4rem; line-height: 1; cursor: pointer;
+}
+.player-notice-close:hover, .player-notice-close:focus-visible { background: var(--fondo); color: var(--texto); outline: none; }
+/* Confirmación de Editar equipo: programaciones que quita el nuevo horario. */
+.horario-afectadas {
+  list-style: none; margin: 14px 0 0; padding: 0; max-height: 40vh; overflow-y: auto;
+  border: 1px solid var(--borde); border-radius: 10px; background: var(--fondo); text-align: left;
+}
+.horario-afectada { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 9px 12px; border-bottom: 1px solid var(--borde); }
+.horario-afectada:last-child { border-bottom: none; }
+.horario-afectada strong { color: var(--texto); font-size: .86rem; }
+.horario-afectada > span { color: var(--texto-sec); font-size: .76rem; }
+.horario-afectada .horario-afectada-pausada {
+  padding: 1px 8px; border-radius: 99px; background: var(--ambar-s); color: var(--ambar); font-size: .68rem; font-weight: 700;
+}
+.horario-afectadas-nota { margin-top: 12px; font-size: .78rem; }
 .parent-email-notify {
   display: flex !important; align-items: center; gap: 8px; margin-top: 8px;
   color: var(--texto-sec) !important; font-size: .76rem !important; font-weight: 600 !important;

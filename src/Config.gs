@@ -18,6 +18,7 @@ const CONFIG = {
     ASIST_ENTRENADORES:   'Asist_Entrenadores',
     PROGRAMACIONES_JUSTIFICACIONES: 'Programaciones_Justificaciones',
     ADMINISTRADORES:      'Administradores',
+    AVISOS_JUGADOR:       'Avisos_Jugador',
   },
 
   // ── Roles de usuario ──────────────────────────────────────────────────────────

@@ -51,6 +51,7 @@ const App = {
     rol:                  null,
     jugador:              null,
     motivosJustificacion: [],
+    avisosJugador:        [],
     _loginTipo:           'entrenador',
     sesionJugadorId:      null,
     calendar:             {},
@@ -1086,6 +1087,7 @@ const App = {
     App.state.rol = null;
     App.state.jugador = null;
     App.state.motivosJustificacion = [];
+    App.state.avisosJugador = [];
     document.getElementById('user-badge-avatar').textContent = '?';
     document.getElementById('user-badge-name').textContent = '...';
     document.getElementById('user-badge-role').textContent = '';
@@ -1127,6 +1129,7 @@ const App = {
     App.state.esAdmin      = !!ctx.esAdmin;
     App.state.equipos      = ctx.equipos      || [];
     App.state.motivosJustificacion = res.motivosJustificacion || [];
+    App.state.avisosJugador = res.avisosJugador || [];
 
     if (ctx.rol === 'jugador') {
       App.state.jugador  = ctx.jugador || null;
@@ -2765,70 +2768,29 @@ const App = {
         }
 
         if (equipoId) {
+          var vista = App.views['equipo-form'];
+          var datos = { Nombre: nombre, Categoria: categoria, Modalidad: modalidad };
           var operationToken = App.operation.begin('team:' + equipoId);
           if (!operationToken) return;
-          var formHistory = App.state.viewHistory.slice();
-          // ── EDICIÓN OPTIMISTA ─────────────────────────────────────────────
-          // Capturar backup para posible rollback
-          var eqAntes = Object.assign({}, App.cache.equipos.find(function(e) { return e.ID === equipoId; }));
-          var horAntes = App.cache.horarios.filter(function(h) { return h.ID_Equipo === equipoId; }).map(function(h) { return Object.assign({}, h); });
           // Solo se reescribe el horario si cambia: así sus ID (y las programaciones que los usan) se conservan.
-          var horarioCambia = !App.views['equipo-form']._horariosIguales(horAntes, horarios);
-          var horariosGuardados = false;
-          var jugRelAntes = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo === equipoId; }).map(function(r) { return Object.assign({}, r); });
-          var entRelAntes = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo === equipoId; }).map(function(r) { return Object.assign({}, r); });
-
-          // Actualizar cache inmediatamente
-          App.cache.upsert('equipos', { ID: equipoId, Nombre: nombre, Categoria: categoria, Modalidad: modalidad });
-          for (var i = 0; i < App.state.equipos.length; i++) {
-            if (App.state.equipos[i].ID === equipoId) {
-              App.state.equipos[i] = Object.assign({}, App.state.equipos[i], { Nombre: nombre, Categoria: categoria, Modalidad: modalidad });
-              break;
-            }
+          var horActuales = App.cache.horarios.filter(function(h) { return h.ID_Equipo === equipoId; });
+          if (vista._horariosIguales(horActuales, horarios)) {
+            vista._guardarEdicion(operationToken, equipoId, datos, null, false, []);
+            return;
           }
-          if (horarioCambia) App.views['equipo-form']._cacheHorarios(equipoId, horarios);
-          App.cache._setRelacionesEquipo(equipoId, App.state.formJugadores, App.state.formEntrenadores);
-
-          App.state._formIsDirty = false;
-          var _hIdx = App.state.viewHistory.lastIndexOf('equipos-admin');
-          App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'equipo-form' && v !== 'equipo-detalle'; });
-          App.navigate('equipos-admin', null, false);
-
-          // Sincronizar en segundo plano con rollback si falla. El horario va primero: si el servidor
-          // rechaza quitar un día con programaciones activas, no se guarda nada más.
-          App.sync.start();
-          (horarioCambia ? server('setHorariosEquipo', equipoId, horarios) : Promise.resolve(null))
-            .then(function(resHorarios) {
-              if (resHorarios && resHorarios.success === false) throw new Error(resHorarios.error || 'No se pudieron guardar los horarios');
-              if (resHorarios) {
-                horariosGuardados = true;
-                App.views['equipo-form']._cacheHorarios(equipoId, resHorarios.actualizado || []);
-              }
-              return server('actualizarEquipo', equipoId, { Nombre: nombre, Categoria: categoria, Modalidad: modalidad });
-            })
-            .then(function(res) {
-              if (!res || !res.success) throw new Error(res && res.error || 'Error al guardar el equipo');
-              return App.views['equipo-form']._sincronizarPersonas(equipoId);
-            }).then(function() {
-              App.sync.done();
-              App.operation.succeed(operationToken);
-              if (App.state.currentView === 'equipos-admin') App.views['equipos-admin'].render();
-            })
-            .catch(function(e) {
-              App.sync.done();
-              // Rollback
-              if (eqAntes && eqAntes.ID) App.cache.upsert('equipos', eqAntes);
-              if (!horariosGuardados) App.views['equipo-form']._cacheHorarios(equipoId, horAntes);
-              App.cache.jugadoresEquipos   = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
-              App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
-              jugRelAntes.forEach(function(r) { App.cache.jugadoresEquipos.push(r); });
-              entRelAntes.forEach(function(r) { App.cache.entrenadoresEquipos.push(r); });
-              App.state.equipos = App.state.equipos.map(function(e) { return e.ID === equipoId && eqAntes ? eqAntes : e; });
-              App.state.formEquipoId = equipoId;
-              App.state.viewHistory = formHistory;
-              App.navigate('equipo-form', {}, false);
-              App.operation.fail(operationToken, (e && e.message) || 'Error al guardar el equipo');
-            });
+          // Si el cambio quita o cambia de hora un entrenamiento con programaciones activas, se confirma antes de guardar.
+          server('previsualizarCambioHorarios', equipoId, horarios).then(function(res) {
+            if (!res || res.success === false) throw new Error(res && res.error || 'No se pudo comprobar el horario');
+            var afectadas = res.afectadas || [];
+            if (!afectadas.some(function(p) { return p.Activo; })) {
+              vista._guardarEdicion(operationToken, equipoId, datos, horarios, false, afectadas);
+              return;
+            }
+            App.operation.cancelar(operationToken);
+            vista._confirmarQuitarProgramaciones(equipoId, datos, horarios, afectadas);
+          }).catch(function(e) {
+            App.operation.fail(operationToken, (e && e.message) || 'Error al guardar el equipo');
+          });
 
         } else {
           var operationToken = App.operation.begin('team-create');
@@ -2879,6 +2841,106 @@ const App = {
               App.operation.fail(operationToken, (e && e.message) || 'Error al crear el equipo');
             });
         }
+      },
+
+      // Guarda la edición de un equipo (optimista, con rollback). horarios: null si el horario no cambia.
+      // forzar: el entrenador confirmó quitar las programaciones activas; afectadas: las que el servidor quitará.
+      _guardarEdicion: function(operationToken, equipoId, datos, horarios, forzar, afectadas) {
+        var formHistory = App.state.viewHistory.slice();
+        // Capturar backup para posible rollback
+        var eqAntes = Object.assign({}, App.cache.equipos.find(function(e) { return e.ID === equipoId; }));
+        var horAntes = App.cache.horarios.filter(function(h) { return h.ID_Equipo === equipoId; }).map(function(h) { return Object.assign({}, h); });
+        var horariosGuardados = false;
+        var jugRelAntes = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo === equipoId; }).map(function(r) { return Object.assign({}, r); });
+        var entRelAntes = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo === equipoId; }).map(function(r) { return Object.assign({}, r); });
+
+        // Actualizar cache inmediatamente
+        App.cache.upsert('equipos', { ID: equipoId, Nombre: datos.Nombre, Categoria: datos.Categoria, Modalidad: datos.Modalidad });
+        for (var i = 0; i < App.state.equipos.length; i++) {
+          if (App.state.equipos[i].ID === equipoId) {
+            App.state.equipos[i] = Object.assign({}, App.state.equipos[i], { Nombre: datos.Nombre, Categoria: datos.Categoria, Modalidad: datos.Modalidad });
+            break;
+          }
+        }
+        if (horarios) App.views['equipo-form']._cacheHorarios(equipoId, horarios);
+        App.cache._setRelacionesEquipo(equipoId, App.state.formJugadores, App.state.formEntrenadores);
+
+        App.state._formIsDirty = false;
+        var _hIdx = App.state.viewHistory.lastIndexOf('equipos-admin');
+        App.state.viewHistory = _hIdx >= 0 ? App.state.viewHistory.slice(0, _hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'equipo-form' && v !== 'equipo-detalle'; });
+        App.navigate('equipos-admin', null, false);
+
+        // Sincronizar en segundo plano con rollback si falla. El horario va primero: si el servidor
+        // rechaza quitar un día con programaciones activas, no se guarda nada más.
+        App.sync.start();
+        (horarios ? server('setHorariosEquipo', equipoId, horarios, { forzar: !!forzar }) : Promise.resolve(null))
+          .then(function(resHorarios) {
+            if (resHorarios && resHorarios.success === false) throw new Error(resHorarios.error || 'No se pudieron guardar los horarios');
+            if (resHorarios) {
+              horariosGuardados = true;
+              App.views['equipo-form']._cacheHorarios(equipoId, resHorarios.actualizado || []);
+              var quitadas = (afectadas || []).map(function(p) { return p.ID; });
+              App.cache.programacionesJustificaciones = App.cache.programacionesJustificaciones.filter(function(p) { return quitadas.indexOf(p.ID) < 0; });
+            }
+            return server('actualizarEquipo', equipoId, datos);
+          })
+          .then(function(res) {
+            if (!res || !res.success) throw new Error(res && res.error || 'Error al guardar el equipo');
+            return App.views['equipo-form']._sincronizarPersonas(equipoId);
+          }).then(function() {
+            App.sync.done();
+            App.operation.succeed(operationToken);
+            if (App.state.currentView === 'equipos-admin') App.views['equipos-admin'].render();
+          })
+          .catch(function(e) {
+            App.sync.done();
+            // Rollback
+            if (eqAntes && eqAntes.ID) App.cache.upsert('equipos', eqAntes);
+            if (!horariosGuardados) App.views['equipo-form']._cacheHorarios(equipoId, horAntes);
+            App.cache.jugadoresEquipos   = App.cache.jugadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
+            App.cache.entrenadoresEquipos = App.cache.entrenadoresEquipos.filter(function(r) { return r.ID_Equipo !== equipoId; });
+            jugRelAntes.forEach(function(r) { App.cache.jugadoresEquipos.push(r); });
+            entRelAntes.forEach(function(r) { App.cache.entrenadoresEquipos.push(r); });
+            App.state.equipos = App.state.equipos.map(function(e) { return e.ID === equipoId && eqAntes ? eqAntes : e; });
+            App.state.formEquipoId = equipoId;
+            App.state.viewHistory = formHistory;
+            App.navigate('equipo-form', {}, false);
+            App.operation.fail(operationToken, (e && e.message) || 'Error al guardar el equipo');
+          });
+      },
+
+      // Confirmación antes de quitar programaciones de ausencia: jugador y entrenamiento de cada una (también las
+      // pausadas, marcadas). Cancelar solo cierra el modal: no se guarda nada y el formulario sigue igual.
+      _confirmarQuitarProgramaciones: function(equipoId, datos, horarios, afectadas) {
+        var dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+        this._cambioPendiente = { equipoId: equipoId, datos: datos, horarios: horarios, afectadas: afectadas };
+        var filas = afectadas.map(function(p) {
+          return '<li class="horario-afectada">' +
+            '<strong data-no-i18n>' + _esc(p.Jugador || 'Jugador') + '</strong>' +
+            '<span><span data-no-i18n>' + _esc((dias[Number(p.DiaSemana) - 1] || 'Día') + ' · ' + p.HoraInicio + '–' + p.HoraFin) + '</span> · ' +
+            (p.Cambio === 'hora' ? 'cambia de hora' : 'se quita el día') + '</span>' +
+            (p.Activo ? '' : '<span class="horario-afectada-pausada">Pausada</span>') +
+            '</li>';
+        }).join('');
+        App.openModal('Quitar ausencias programadas',
+          '<div class="modal-confirm-warning" style="padding:20px 16px 16px">' +
+          '<div class="modal-confirm-icon">&#x26A0;</div>' +
+          '<div class="modal-confirm-msg">Al guardar este horario se quitarán estas ausencias programadas:</div>' +
+          '<ul class="horario-afectadas">' + filas + '</ul>' +
+          '<div class="modal-confirm-msg horario-afectadas-nota">Cada familia verá un aviso para volver a programarla si sigue siendo necesaria.</div>' +
+          '<div style="display:flex;gap:8px;margin-top:20px">' +
+          '<button class="btn btn-secondary" style="flex:1" onclick="App.closeModal()">Cancelar</button>' +
+          '<button class="btn btn-destructive" style="flex:1" onclick="App.closeModal();App.views[\'equipo-form\'].confirmarCambioHorarios()">Quitar y guardar</button>' +
+          '</div></div>');
+      },
+
+      confirmarCambioHorarios: function() {
+        var pendiente = this._cambioPendiente;
+        this._cambioPendiente = null;
+        if (!pendiente) return;
+        var operationToken = App.operation.begin('team:' + pendiente.equipoId);
+        if (!operationToken) return;
+        this._guardarEdicion(operationToken, pendiente.equipoId, pendiente.datos, pendiente.horarios, true, pendiente.afectadas);
       },
 
       eliminar: function() {
@@ -3943,6 +4005,8 @@ const App = {
             estado: App.cache.getEstadoAsistencia(registro)
           };
         }).sort(function(a, b) { return a.sesion.Fecha < b.sesion.Fecha ? -1 : 1; });
+        var avisosEl = document.getElementById('perfil-avisos');
+        if (avisosEl) avisosEl.innerHTML = App.views['perfil-jugador']._avisosHtml();
         var incidenciasEl = document.getElementById('perfil-incidencias');
         if (incidenciasEl) {
           if (incidenciasPendientes.length) {
@@ -3990,6 +4054,26 @@ const App = {
       // Aviso «Completa la información de tu perfil»: abre «Editar perfil» con los datos pendientes resaltados.
       completarPerfil: function() {
         App.navigate('perfil-editar', { pendientes: true });
+      },
+      // Avisos del club guardados en Avisos_Jugador (p. ej. una ausencia programada quitada al cambiar el horario):
+      // siguen en el inicio hasta que la familia los cierra.
+      _avisosHtml: function() {
+        return (App.state.avisosJugador || []).map(function(a) {
+          return '<div class="player-notice" role="note">' +
+            '<span class="player-notice-icon" aria-hidden="true">i</span>' +
+            '<div class="player-notice-body"><strong>Aviso del club</strong>' +
+            '<p data-no-i18n>' + _esc(a.Mensaje) + '</p></div>' +
+            '<button type="button" class="player-notice-close" aria-label="Cerrar aviso" title="Cerrar aviso"' +
+            ' onclick="App.views[\'perfil-jugador\'].cerrarAviso(' + _statsArgumento(a.ID) + ')">&times;</button>' +
+            '</div>';
+        }).join('');
+      },
+      cerrarAviso: function(avisoId) {
+        return App.operation.run('aviso:' + avisoId, 'marcarAvisoLeido', [avisoId], function() {
+          App.state.avisosJugador = (App.state.avisosJugador || []).filter(function(a) { return a.ID !== avisoId; });
+          var avisosEl = document.getElementById('perfil-avisos');
+          if (avisosEl) avisosEl.innerHTML = App.views['perfil-jugador']._avisosHtml();
+        }).catch(function() { /* App.operation ya muestra el error */ });
       },
     },
 
@@ -5133,6 +5217,16 @@ App.operation = {
 
   succeed: function(token) { this._finish(token, 'success'); },
   fail: function(token, message) { this._finish(token, 'error', message); },
+
+  // Retira una operación sin resultado (el guardado espera una confirmación que el usuario aún no ha dado).
+  cancelar: function(token) {
+    if (!token || this._active[token.id] !== token) return;
+    delete this._active[token.id];
+    if (this._locks[token.key] === token.id) delete this._locks[token.key];
+    if (Object.keys(this._active).length) return;
+    var status = document.getElementById('operation-status');
+    if (status) status.classList.add('hidden');
+  },
 
   // Resuelve cuando el indicador ya se ha pintado: permite empezar trabajo pesado sin congelar la pantalla.
   afterPaint: function() {
@@ -7424,6 +7518,16 @@ App.i18n = {
 "Ese entrenamiento ya tiene otra programación.":"That training session already has another scheduled notice.",
 "Activa":"Active",
 "Pausada":"Paused",
+"Quitar ausencias programadas":"Remove scheduled absences",
+"Al guardar este horario se quitarán estas ausencias programadas:":"Saving this schedule will remove these scheduled absences:",
+"Cada familia verá un aviso para volver a programarla si sigue siendo necesaria.":"Each family will see a notice to schedule it again if it is still needed.",
+"Quitar y guardar":"Remove and save",
+"cambia de hora":"time changes",
+"se quita el día":"day removed",
+"No se pudo comprobar el horario":"The schedule could not be checked",
+"Aviso del club":"Club notice",
+"Cerrar aviso":"Close notice",
+"Aviso no encontrado.":"Notice not found.",
 "No se pudo actualizar la programación":"The scheduled notice could not be updated",
 "Ya hay una operación en curso":"An operation is already in progress",
 "El servidor no confirmó el guardado":"The server did not confirm the save",

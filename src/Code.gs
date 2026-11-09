@@ -161,6 +161,18 @@ function cargarDatos(auth) {
       }
     }
 
+    // ── Avisos pendientes de la cuenta de jugador (un fallo no rompe el arranque) ──
+    let avisosJugador = [];
+    if (rol === CONFIG.ROLES.JUGADOR && contexto.jugador) {
+      try {
+        avisosJugador = getSheetData(CONFIG.SHEETS.AVISOS_JUGADOR)
+          .filter(a => a.ID_Jugador === contexto.jugador.ID && a.Leido !== true && a.Leido !== 'TRUE')
+          .sort((a, b) => String(a.FechaCreacion || '').localeCompare(String(b.FechaCreacion || '')));
+      } catch (e) {
+        Logger.log(`[cargarDatos:${traceId}] fallo avisos: ${e.message}`);
+      }
+    }
+
     // ── Filtrado de datos sensibles según rol ──────────────────────────────────
     let jugadoresFinal    = jugadoresR.data;
     let asistJugFinal     = asistJugadoresR.data;
@@ -229,6 +241,7 @@ function cargarDatos(auth) {
       estadisticasError:   estadisticasError,
       alertasAusencias:    alertasAusencias,
       alertasAusenciasError: alertasAusenciasError,
+      avisosJugador:       avisosJugador,
     };
   } catch (e) {
     Logger.log(`[cargarDatos:${traceId}] excepcion inesperada: ${e.message}`);
@@ -831,6 +844,17 @@ function eliminarProgramacionJustificacion(auth, programacionId, jugadorId, codi
   } catch (e) { return { success: false, error: e.message }; }
 }
 
+// Solo lectura: programaciones de ausencia que quitaría guardar ese horario (para confirmarlo antes).
+function previsualizarCambioHorarios(auth, equipoId, horarios) {
+  try {
+    Auth.requireAccesoGestionEquipo(equipoId, auth);
+    return { success: true, afectadas: Equipos.previsualizarCambioHorarios(equipoId, horarios) };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+// opciones.forzar: el entrenador confirmó quitar las programaciones activas afectadas.
 function setHorariosEquipo(auth, equipoId, horarios, opciones) {
   try {
     Auth.requireAccesoGestionEquipo(equipoId, auth);
@@ -838,6 +862,19 @@ function setHorariosEquipo(auth, equipoId, horarios, opciones) {
   } catch (e) {
     return { success: false, error: e.message };
   }
+}
+
+// La cuenta de jugador/familia cierra uno de sus avisos; la hora la pone el servidor.
+function marcarAvisoLeido(auth, avisoId) {
+  try {
+    const cuenta = Auth.getCuentaActual_(auth);
+    if (!cuenta.jugador) throw new Error('Acceso no autorizado.');
+    const aviso = findById(CONFIG.SHEETS.AVISOS_JUGADOR, avisoId);
+    if (!aviso || aviso.ID_Jugador !== cuenta.jugador.ID) throw new Error('Aviso no encontrado.');
+    const cambios = { Leido: true, FechaLectura: Asistencia._timestamp_() };
+    if (!updateRow(CONFIG.SHEETS.AVISOS_JUGADOR, aviso.ID, cambios)) throw new Error('No se pudo guardar.');
+    return { success: true, aviso: { ...aviso, ...cambios } };
+  } catch (e) { return { success: false, error: e.message }; }
 }
 
 // ── Trigger semanal de generación automática de sesiones ──────────────────────

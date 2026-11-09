@@ -149,6 +149,16 @@ CREATE TABLE IF NOT EXISTS public."Asist_Entrenadores" (
   "FechaRegistro" text
 );
 
+CREATE TABLE IF NOT EXISTS public."Avisos_Jugador" (
+  "ID" text PRIMARY KEY,
+  "ID_Jugador" text NOT NULL REFERENCES public."Jugadores" ("ID") ON DELETE CASCADE,
+  "Tipo" text NOT NULL,
+  "Mensaje" text NOT NULL,
+  "FechaCreacion" text,
+  "Leido" boolean NOT NULL DEFAULT false,
+  "FechaLectura" text
+);
+
 CREATE INDEX IF NOT EXISTS "idx_equipos_temporada" ON public."Equipos" ("ID_Temporada");
 CREATE INDEX IF NOT EXISTS "idx_horarios_equipo" ON public."Horarios" ("ID_Equipo");
 CREATE INDEX IF NOT EXISTS "idx_jugadores_equipos_jugador" ON public."Jugadores_Equipos" ("ID_Jugador");
@@ -161,6 +171,7 @@ CREATE INDEX IF NOT EXISTS "idx_asist_jugadores_jugador" ON public."Asist_Jugado
 CREATE INDEX IF NOT EXISTS "idx_asist_entrenadores_sesion" ON public."Asist_Entrenadores" ("ID_Sesion");
 CREATE INDEX IF NOT EXISTS "idx_programaciones_justif_jugador" ON public."Programaciones_Justificaciones" ("ID_Jugador");
 CREATE INDEX IF NOT EXISTS "idx_programaciones_justif_horario" ON public."Programaciones_Justificaciones" ("ID_Horario");
+CREATE INDEX IF NOT EXISTS "idx_avisos_jugador_jugador" ON public."Avisos_Jugador" ("ID_Jugador");
 
 ALTER TABLE public."Temporadas" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Equipos" ENABLE ROW LEVEL SECURITY;
@@ -174,6 +185,7 @@ ALTER TABLE public."Sesiones" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Asist_Jugadores" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Asist_Entrenadores" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Programaciones_Justificaciones" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."Avisos_Jugador" ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 GRANT USAGE ON SCHEMA public TO service_role;

@@ -103,3 +103,21 @@ test('cargarDatos entrega las justificaciones de salud antiguas como «Salud» y
   assert.deepEqual(res.programacionesJustificaciones.map(p => [p.MotivoCategoria, p.MotivoDetalle]), [['Salud', ''], ['Otro', 'Boda familiar']]);
   assert.equal(asistencias.find(a => a.MotivoCategoria === 'Lesión').MotivoDetalle, 'Esguince tobillo');
 });
+
+test('cargarDatos entrega a la cuenta de jugador solo sus avisos no leídos; al personal ninguno; sin tabla no rompe', () => {
+  const jugador = datos.jugadores[0];
+  const avisos = [
+    { ID: 'av-2', ID_Jugador: jugador.ID, Mensaje: 'Segundo', Leido: false, FechaCreacion: '2026-11-09 10:00' },
+    { ID: 'av-1', ID_Jugador: jugador.ID, Mensaje: 'Primero', Leido: false, FechaCreacion: '2026-11-08 10:00' },
+    { ID: 'av-leido', ID_Jugador: jugador.ID, Mensaje: 'Leído', Leido: true, FechaCreacion: '2026-11-07 10:00' },
+    { ID: 'av-otro', ID_Jugador: 'otro', Mensaje: 'De otro jugador', Leido: false, FechaCreacion: '2026-11-07 10:00' },
+  ];
+  const propio = cargar({ success: true, rol: 'jugador', jugador: { ID: jugador.ID } }, { Avisos_Jugador: avisos }).cargarDatos({});
+  assert.deepEqual(Array.from(propio.avisosJugador, a => a.ID), ['av-1', 'av-2']);
+  const staff = cargar({ success: true, rol: 'admin', jugador: null }, { Avisos_Jugador: avisos }).cargarDatos({});
+  assert.equal(staff.avisosJugador.length, 0);
+  // Migración aún sin aplicar: la lectura falla y el arranque sigue.
+  const sinTabla = cargar({ success: true, rol: 'jugador', jugador: { ID: jugador.ID } }).cargarDatos({});
+  assert.equal(sinTabla.success, true);
+  assert.equal(sinTabla.avisosJugador.length, 0);
+});

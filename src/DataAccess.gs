@@ -8,7 +8,7 @@ const SUPABASE_BATCH_SIZE = 500;
 const SUPABASE_BOOLEAN_FIELDS = new Set([
   'Activa', 'Activo', 'EsAdmin', 'EsExtra', 'AsistenciaGuardada', 'Cancelada',
   'EsInvitado', 'Excluido', 'TieneJustificacion', 'NotificadoEntrenador', 'EsProgramada', 'Asistio',
-  'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2',
+  'NotificarAusenciasPadre1', 'NotificarAusenciasPadre2', 'Leido',
 ]);
 const SUPABASE_INTEGER_FIELDS = new Set(['DiaSemana', 'MinutosRetraso']);
 // Columnas timestamptz: PostgREST rechaza '' («invalid input syntax for type timestamp»).

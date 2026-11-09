@@ -46,4 +46,7 @@ const SCHEMA = {
     'ID', 'ID_Jugador', 'ID_Equipo', 'ID_Horario', 'TipoIncidencia', 'MotivoCategoria',
     'MotivoDetalle', 'HoraIncorporacion', 'Activo', 'FechaCreacion', 'FechaActualizacion'
   ],
+  Avisos_Jugador: [
+    'ID', 'ID_Jugador', 'Tipo', 'Mensaje', 'FechaCreacion', 'Leido', 'FechaLectura'
+  ],
 };
