@@ -695,8 +695,7 @@
     </div>
   </div>
 
-  <!-- Asistente «Cancelar entrenamiento» (entrenador/admin): tarjeta flotante como la justificación; motivo, detalle opcional,
-       forma de avisar a las familias de los convocados y resumen. Solo al confirmar se llama a cancelarSesion. -->
+  <!-- Asistente «Cancelar entrenamiento»: motivo y detalle, se cancela, y después se elige cómo avisar. -->
   <div id="modal-cancelar-sesion" class="modal-justif-overlay wizard-cards hidden" onclick="App.views.cancelarSesion.cerrar(event)" onkeydown="if(event.key==='Escape'){event.preventDefault();App.views.cancelarSesion.cerrar()}">
     <div class="wizard-fondo" aria-hidden="true"><span></span><span></span><span></span></div>
     <div class="wizard-deck">
@@ -708,9 +707,9 @@
       </div>
       <div id="cancelar-progress" class="justif-progress">
         <div class="justif-progress-track" aria-hidden="true"><span id="cancelar-progress-fill" class="justif-progress-fill"></span></div>
-        <span id="cancelar-progress-text" class="justif-progress-text" aria-live="polite">Paso 1 de 4</span>
+        <span id="cancelar-progress-text" class="justif-progress-text" aria-live="polite">Paso 1 de 2</span>
       </div>
-      <div id="cancelar-steps" class="modal-body justif-steps" oninput="App.views.cancelarSesion._actualizarBotones()">
+      <div id="cancelar-steps" class="modal-body justif-steps">
 
         <section class="justif-step" data-step="motivo">
           <h4 class="justif-question" tabindex="-1">&iquest;Por qu&eacute; se cancela?</h4>
@@ -723,30 +722,32 @@
 
         <section class="justif-step" data-step="detalle" hidden>
           <h4 class="justif-question" tabindex="-1">&iquest;Quieres a&ntilde;adir un detalle?</h4>
-          <p class="justif-hint">Opcional. Lo leer&aacute;n las familias si eliges avisarlas.</p>
+          <p class="justif-hint">Opcional. Lo leer&aacute;n las familias si luego las avisas.</p>
           <div class="form-group justif-detalle">
             <label for="cancelar-detalle">Detalles <span class="justif-optional">(opcional)</span></label>
             <textarea id="cancelar-detalle" rows="3" maxlength="300" placeholder="Por ejemplo: recuperamos el entrenamiento el jueves."></textarea>
           </div>
           <div class="justif-actions">
-            <button type="button" id="cancelar-continuar-detalle" class="btn btn-primary btn-full" onclick="App.views.cancelarSesion.continuarDetalle()">Continuar</button>
-            <button type="button" class="btn btn-secondary btn-full" onclick="App.views.cancelarSesion.omitirDetalle()">Omitir</button>
+            <button type="button" id="cancelar-confirmar" class="btn btn-aviso-lleno btn-full" onclick="App.views.cancelarSesion.confirmar()">Cancelar entrenamiento</button>
           </div>
         </section>
 
         <section class="justif-step" data-step="aviso" hidden>
-          <h4 id="cancelar-aviso-pregunta" class="justif-question" tabindex="-1">&iquest;C&oacute;mo avisamos a las familias?</h4>
-          <p id="cancelar-aviso-hint" class="justif-hint"></p>
+          <div class="aviso-club cancelar-hecho">
+            <span class="aviso-club-icono" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4m8-4v4M9.5 13.5l5 4m0-4-5 4"/></svg></span>
+            <h4 id="cancelar-aviso-pregunta" class="justif-question" tabindex="-1">Avisar a las familias</h4>
+          </div>
+          <p id="cancelar-aviso-hint" class="justif-hint">El entrenamiento ya est&aacute; cancelado. Elige c&oacute;mo avisarlo.</p>
           <div class="justif-choice-grid cancelar-canales" role="group" aria-labelledby="cancelar-aviso-pregunta">
-            <button type="button" class="justif-choice" data-canal="whatsapp" aria-pressed="false" onclick="App.views.cancelarSesion.elegirCanal('whatsapp')">
+            <a class="justif-choice" id="cancelar-canal-whatsapp" data-canal="whatsapp" href="https://wa.me/" target="_blank" rel="noopener noreferrer" onclick="App.views.cancelarSesion.elegirCanal('whatsapp')">
               <span class="justif-choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4.5 19.5l1.2-3.6A8 8 0 1 1 8.6 18.6z"/><path d="M9 9.5c.4 2.2 2.3 4.2 4.6 4.8l1.1-1.1 1.8.8"/></svg></span>
               <strong>WhatsApp</strong>
-              <small id="cancelar-canal-whatsapp-info"></small>
-            </button>
+              <small>Copia el mensaje y abre WhatsApp</small>
+            </a>
             <button type="button" class="justif-choice" data-canal="correo" aria-pressed="false" onclick="App.views.cancelarSesion.elegirCanal('correo')">
               <span class="justif-choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7.5l7.5 6 7.5-6"/></svg></span>
               <strong>Correo</strong>
-              <small id="cancelar-canal-correo-info"></small>
+              <small id="cancelar-canal-correo-info">A las familias con correo</small>
             </button>
             <button type="button" class="justif-choice" data-canal="copiar" aria-pressed="false" onclick="App.views.cancelarSesion.elegirCanal('copiar')">
               <span class="justif-choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="12" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"/></svg></span>
@@ -755,21 +756,9 @@
             </button>
             <button type="button" class="justif-choice" data-canal="ninguno" aria-pressed="false" onclick="App.views.cancelarSesion.elegirCanal('ninguno')">
               <span class="justif-choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9.5 19a2.5 2.5 0 0 0 5 0M6 16.5h12l-1.5-2.5v-4a4.5 4.5 0 0 0-9 0v4z"/><path d="M4 4l16 16"/></svg></span>
-              <strong>No notificar</strong>
-              <small>Solo se cancela</small>
+              <strong>No avisar</strong>
+              <small>No se env&iacute;a nada</small>
             </button>
-          </div>
-        </section>
-
-        <section class="justif-step" data-step="resumen" hidden>
-          <h4 class="justif-question" tabindex="-1">Revisa y confirma</h4>
-          <div id="cancelar-resumen" class="alta-resumen"></div>
-          <div id="cancelar-preview-wrap" class="justif-preview-wrap cancelar-preview">
-            <div class="justif-preview-label">Mensaje para las familias</div>
-            <div id="cancelar-preview" class="justif-preview" data-no-i18n></div>
-          </div>
-          <div class="justif-actions">
-            <button type="button" id="cancelar-confirmar" class="btn btn-aviso-lleno btn-full" onclick="App.views.cancelarSesion.confirmar()">Cancelar entrenamiento</button>
           </div>
         </section>
 

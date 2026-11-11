@@ -33,7 +33,7 @@ src/
   Sesiones.gs        → Generación automática de sesiones + sesiones extra
   Asistencia.gs      → Registro y consulta de asistencia de jugadores y entrenadores
   Estadisticas.gs    → Motor puro de métricas (única fuente de P/A/R agregados; la UI lee App.stats, nunca recalcula)
-  Notificaciones.gs  → Correos (MailApp) y textos de avisos; WhatsApp.gs → Cloud API o enlaces wa.me
+  Notificaciones.gs  → Correos (MailApp) y textos de avisos de cancelación
   Code.gs            → doGet(), endpoints públicos (funciones llamadas por google.script.run)
 ui/
   Index.html         → Shell SPA: navegación + contenedor de vistas
@@ -88,7 +88,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - Al inicio de cada semana (o bajo demanda) se **auto-generan** las sesiones correspondientes al patrón.
 - Se pueden añadir **sesiones extra** con fecha y hora personalizadas.
 - Las sesiones existentes se pueden **modificar** (fecha, hora) o **eliminar** (borra asistencias en cascada).
-- **Cancelar entrenamiento** (solo sin asistencia guardada): asistente `App.views.cancelarSesion` con motivo, detalle opcional y canal. `cancelarSesion` guarda el nombre autenticado y canal; un fallo de avisos no deshace la cancelación. El WhatsApp personal ofrece difusión asistida o enlaces `wa.me` secuenciales; la Cloud API permanece interna y dormida. El cliente replica el mensaje y los contactos del servidor. Detalle en `docs/modelo-datos.md`.
+- **Cancelar entrenamiento** (solo sin asistencia guardada): asistente `App.views.cancelarSesion` con motivo y detalle opcional; se cancela primero (`cancelarSesion`) y después el entrenador elige cómo avisar (`avisarCancelacion`, guarda `CanalAvisoCancelacion`). WhatsApp solo copia el mensaje y abre `https://wa.me/?text=`. Un fallo de avisos no deshace la cancelación. El cliente replica el mensaje y el recuento de correos del servidor. Detalle en `docs/modelo-datos.md`.
 
 ### Asistencia de jugadores
 - Estados: `P` (Presente → verde), `A` (Ausente → rojo), `R` (Retraso → amarillo).

@@ -175,22 +175,20 @@ CB Baeza — Gestión de Asistencia`;
   },
 
   /**
-   * Contactos de la familia de un jugador para un canal: los de los tutores y, si no hay ninguno registrado,
-   * los del propio jugador (adultos). En correo se respeta «Avisos por correo desactivados» de cada tutor.
-   * El cliente replica esta regla en App.views.cancelarSesion._contactos para el recuento previo.
+   * Correos de la familia de un jugador: los de los tutores con avisos activados y, si no hay ninguno,
+   * el del propio jugador (adultos). El cliente replica esta regla para el recuento previo del correo.
    * @returns {{ valor: string, nombre: string }[]}
    */
-  contactosFamilia(jugador, canal) {
+  contactosFamilia(jugador) {
     const tutores = [1, 2].map(n => ({
       nombre: [jugador['NombrePadre' + n], jugador['ApellidosPadre' + n]].filter(Boolean).join(' '),
-      telefono: jugador['TelefonoPadre' + n],
       email: jugador['EmailPadre' + n],
       activo: jugador['NotificarAusenciasPadre' + n] !== false && jugador['NotificarAusenciasPadre' + n] !== 'FALSE',
     }));
-    const propio = { nombre: [jugador.Nombre, jugador.Apellidos].filter(Boolean).join(' '), telefono: jugador.Telefono, email: jugador.Email, activo: true };
-    const valor = canal === 'whatsapp' ? c => WhatsApp.numero(c.telefono) : c => Notificaciones._email_(c.email);
-    const deTutores = tutores.filter(c => valor(c));
-    const elegidos = deTutores.length ? deTutores.filter(c => canal === 'whatsapp' || c.activo) : [propio].filter(c => valor(c));
+    const propio = { nombre: [jugador.Nombre, jugador.Apellidos].filter(Boolean).join(' '), email: jugador.Email };
+    const valor = c => Notificaciones._email_(c.email);
+    const conEmail = tutores.filter(c => valor(c));
+    const elegidos = conEmail.length ? conEmail.filter(c => c.activo) : [propio].filter(c => valor(c));
     const vistos = new Set();
     return elegidos.map(c => ({ valor: valor(c), nombre: c.nombre }))
       .filter(c => !vistos.has(c.valor) && vistos.add(c.valor));
@@ -202,42 +200,29 @@ CB Baeza — Gestión de Asistencia`;
   },
 
   /**
-   * Avisa a las familias de los convocados de una sesión ya cancelada por el canal elegido.
-   * Quien no tiene teléfono (WhatsApp) o correo (Correo) se omite sin afectar al resto. 'copiar' no envía nada:
-   * devuelve el mensaje para que el entrenador lo pegue donde quiera.
+   * Avisa a las familias de una sesión ya cancelada. 'correo' envía un MailApp por familia;
+   * 'whatsapp' y 'copiar' solo devuelven el mensaje (el entrenador lo copia y, en WhatsApp, abre wa.me/?text=).
    * @param {Object} sesion - Sesión cancelada (con MotivoCancelacion y DetalleCancelacion)
    * @param {string} canal  - Uno de CONFIG.CANALES_AVISO_CANCELACION
    * @returns {{ canal: string, mensaje?: string, convocados?: number, avisados?: number, omitidos?: number,
-   *   omitidas?: Object[], fallidos?: number, modo?: string, enlaces?: Object[] }}
+   *   omitidas?: Object[], fallidos?: number }}
    */
   avisarCancelacionAFamilias(sesion, canal) {
     if (canal === 'ninguno') return { canal: canal };
     const equipo = findById(CONFIG.SHEETS.EQUIPOS, sesion.ID_Equipo);
     const mensaje = Notificaciones.mensajeCancelacion(sesion, equipo, sesion.MotivoCancelacion, sesion.DetalleCancelacion);
-    const jugadores = Sesiones.convocados(sesion);
-    const resultado = { canal: canal, mensaje: mensaje, convocados: jugadores.length, avisados: 0, omitidos: 0, fallidos: 0 };
-    if (canal === 'copiar') return resultado;
+    const resultado = { canal: canal, mensaje: mensaje };
+    if (canal !== 'correo') return resultado;
 
+    const jugadores = Sesiones.convocados(sesion);
     const familias = jugadores.map(j => ({
       jugador: [j.Nombre, j.Apellidos].filter(Boolean).join(' '),
-      contactos: Notificaciones.contactosFamilia(j, canal),
+      contactos: Notificaciones.contactosFamilia(j),
     }));
+    resultado.convocados = jugadores.length;
     resultado.omitidas = familias.filter(f => !f.contactos.length).map(f => ({ jugador: f.jugador }));
     resultado.omitidos = resultado.omitidas.length;
-    const conContacto = familias.filter(f => f.contactos.length);
-    if (canal === 'correo') return Object.assign(resultado, Notificaciones._avisarCancelacionPorCorreo_(conContacto, sesion, equipo, mensaje));
-
-    // Un enlace por número; los hermanos con el mismo número comparten aviso.
-    const destinos = [], porNumero = {};
-    conContacto.forEach(f => f.contactos.forEach(c => {
-      if (!porNumero[c.valor]) destinos.push(porNumero[c.valor] = { telefono: c.valor, nombre: c.nombre, jugadores: [] });
-      porNumero[c.valor].jugadores.push(f.jugador);
-    }));
-    return Object.assign(resultado, {
-      modo: 'enlaces',
-      avisados: conContacto.length,
-      enlaces: destinos.map(d => Object.assign(d, { url: WhatsApp.enlace(d.telefono, mensaje) })),
-    });
+    return Object.assign(resultado, Notificaciones._avisarCancelacionPorCorreo_(familias.filter(f => f.contactos.length), sesion, equipo, mensaje));
   },
 
   // Un correo por familia (sus direcciones en «Para»): ninguna familia ve las direcciones de las demás.

@@ -142,7 +142,8 @@ test('cancelar y reactivar devuelven la sesión actualizada y los endpoints exig
   assert.equal(result.sesion.FechaCancelacion, AHORA);
   assert.equal(result.sesion.MotivoCancelacion, s.context.motivo);
   assert.equal(result.sesion.DetalleCancelacion, 'Pista mojada');
-  assert.equal(result.notificacion.canal, 'ninguno');
+  assert.equal(result.sesion.CanalAvisoCancelacion, null);
+  assert.equal(result.notificacion, undefined);
   const reactivada = vm.runInContext("reactivarSesion({}, 's1')", s.context);
   assert.equal(reactivada.success, true);
   assert.equal(reactivada.sesion.Cancelada, false);

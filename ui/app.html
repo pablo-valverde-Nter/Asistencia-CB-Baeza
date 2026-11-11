@@ -354,7 +354,7 @@ const App = {
       var fechaTexto = fecha && !isNaN(fecha.getTime())
         ? fecha.toLocaleDateString(App.preferences.locale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : (s.Fecha || '');
       var hora = [s.HoraInicio, s.HoraFin].filter(Boolean).join(' – ');
-      var canales = { whatsapp: 'WhatsApp', correo: 'Correo', copiar: 'Copiar mensaje', ninguno: 'No notificar' };
+      var canales = { whatsapp: 'WhatsApp', correo: 'Correo', copiar: 'Copiar mensaje', ninguno: 'No avisar' };
       var fechaCancelacion = s.FechaCancelacion || '';
       var partes = /^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?/.exec(fechaCancelacion);
       if (partes) {
@@ -3473,27 +3473,24 @@ const App = {
 
     // -- Cancelar entrenamiento (entrenador/admin): asistente paso a paso -------
     // Motivo, detalle, canal y resumen; después de cancelar, WhatsApp se envía desde la cuenta personal.
+    // Motivo y detalle, se cancela, y después se elige cómo avisar a las familias.
     cancelarSesion: {
-      PASOS: ['motivo', 'detalle', 'aviso', 'resumen'],
-      CANALES: { whatsapp: 'WhatsApp', correo: 'Correo', copiar: 'Copiar mensaje', ninguno: 'No notificar' },
+      PASOS: ['motivo', 'detalle'],
+      CANALES: { whatsapp: 'WhatsApp', correo: 'Correo', copiar: 'Copiar mensaje', ninguno: 'No avisar' },
       _paso: 'motivo',
       _sesionId: null,
-      _datos: null,      // { motivo, detalle, canal }
-      _mensaje: '',      // mensaje enviado o copiado (paso final)
+      _datos: null,      // { motivo, detalle }
+      _mensaje: '',
       _notificacion: null,
-      _modoWhatsApp: '',
-      _indiceWhatsApp: 0,
-      _retornoWhatsApp: null,
+      _cancelada: false, // true cuando cancelarSesion ya ha respondido bien
 
       abrir: function(sesionId) {
         var sesion = this._sesion(sesionId);
         if (!sesion) return;
-        this._limpiarRetorno();
         this._notificacion = null;
-        this._modoWhatsApp = '';
-        this._indiceWhatsApp = 0;
+        this._cancelada = false;
         this._sesionId = sesionId;
-        this._datos = { motivo: '', detalle: '', canal: '' };
+        this._datos = { motivo: '', detalle: '' };
         this._mensaje = '';
         document.getElementById('cancelar-motivos').innerHTML = App.state.motivosCancelacion.map(function(m) {
           return '<button type="button" class="justif-chip" data-motivo="' + _esc(m) + '" aria-pressed="false" onclick="App.views.cancelarSesion.elegirMotivo(this.dataset.motivo)">' + _esc(m) + '</button>';
@@ -3503,16 +3500,14 @@ const App = {
         document.getElementById('cancelar-sesion-info').textContent = this._descripcion(sesion);
         this._irA('motivo', 0);
         document.getElementById('modal-cancelar-sesion').classList.remove('hidden');
-        // Foco dentro del diálogo: lectores de pantalla y Escape (onkeydown del overlay) funcionan desde el inicio.
         var foco = document.querySelector('#cancelar-steps .justif-step[data-step="motivo"] .justif-question');
         if (foco) foco.focus({ preventScroll: true });
       },
 
-      // Con evento solo cierra al tocar el fondo; sin él (X, Escape, «Entendido») cierra siempre. Antes de confirmar no cambia nada.
+      // Con evento solo cierra al tocar el fondo; sin él (X, Escape, «Entendido») cierra siempre.
       cerrar: function(e) {
         var modal = document.getElementById('modal-cancelar-sesion');
         if (e && e.target !== modal) return;
-        this._limpiarRetorno();
         modal.classList.add('hidden');
       },
 
@@ -3525,31 +3520,25 @@ const App = {
         return (equipo ? equipo.Nombre + ' \u00b7 ' : '') + f.dn + ' ' + f.d + ' ' + f.ml + ' \u00b7 ' + sesion.HoraInicio + (sesion.HoraFin ? '\u2013' + sesion.HoraFin : '');
       },
 
-      // Réplica de Notificaciones.contactosFamilia (recuento previo): los tutores y, si no hay ninguno registrado, el
-      // propio jugador; en correo, solo los tutores con los avisos por correo activados.
-      _contactos: function(j, canal) {
-        var valor = canal === 'whatsapp'
-          ? function(c) { return _statsTelefono(c.telefono); }
-          : function(c) { var email = String(c.email || '').trim(); return /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(email) ? email : ''; };
+      // Réplica de Notificaciones.contactosFamilia (solo correo, para el recuento previo).
+      _contactosCorreo: function(j) {
+        var email = function(valor) { var v = String(valor || '').trim(); return /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(v) ? v : ''; };
         var tutores = [1, 2].map(function(n) {
           var aviso = j['NotificarAusenciasPadre' + n];
-          return { telefono: j['TelefonoPadre' + n], email: j['EmailPadre' + n], activo: aviso !== false && aviso !== 'FALSE' };
+          return { email: j['EmailPadre' + n], activo: aviso !== false && aviso !== 'FALSE' };
         });
-        var deTutores = tutores.filter(valor);
-        var elegidos = deTutores.length ? deTutores.filter(function(c) { return canal === 'whatsapp' || c.activo; })
-          : [{ telefono: j.Telefono, email: j.Email }].filter(valor);
-        return elegidos.map(valor).filter(function(v, i, todos) { return todos.indexOf(v) === i; });
+        var conEmail = tutores.filter(function(c) { return email(c.email); });
+        var elegidos = conEmail.length ? conEmail.filter(function(c) { return c.activo; }) : [{ email: j.Email }].filter(function(c) { return email(c.email); });
+        return elegidos.map(function(c) { return email(c.email); }).filter(function(v, i, todos) { return todos.indexOf(v) === i; });
       },
 
-      // Convocados (la lista guardada del pase de lista, como Sesiones.convocados) y cuántas familias tienen cada contacto.
-      _familias: function() {
+      _familiasConCorreo: function() {
         var sesion = this._sesion(this._sesionId), self = this;
         var jugadores = sesion ? App.views.sesion._buildFromCache(sesion).jugadores.map(function(i) { return i.jugador; }) : [];
-        var con = function(canal) { return jugadores.filter(function(j) { return self._contactos(j, canal).length > 0; }).length; };
-        return { total: jugadores.length, whatsapp: con('whatsapp'), correo: con('correo') };
+        return { total: jugadores.length, correo: jugadores.filter(function(j) { return self._contactosCorreo(j).length > 0; }).length };
       },
 
-      // Réplica de Notificaciones.mensajeCancelacion: lo que se previsualiza y se copia es lo que reciben las familias.
+      // Réplica de Notificaciones.mensajeCancelacion.
       mensaje: function(sesion, equipo, motivo, detalle) {
         var partes = String(sesion.Fecha || '').split('-'), numeros = partes.map(Number);
         var valida = partes.length === 3 && numeros.every(function(n) { return Number.isInteger(n); });
@@ -3569,27 +3558,30 @@ const App = {
           App.cache.getEquipoById(sesion.ID_Equipo), datos.motivo, datos.detalle);
       },
 
-      // Detalle en una sola línea, como lo guarda el servidor.
       _detalle: function() {
         var campo = document.getElementById('cancelar-detalle');
         return String(campo.value || '').replace(/\s+/g, ' ').trim();
       },
 
-      // Muestra el paso indicado. direccion: 1 avanza, -1 retrocede, 0 sin animación.
+      _enlaceWhatsApp: function() {
+        var sesion = this._sesion(this._sesionId);
+        return sesion ? 'https://wa.me/?text=' + encodeURIComponent(this._mensajeActual(sesion, this._datos)) : 'https://wa.me/';
+      },
+
       _irA: function(paso, direccion) {
         App.wizardCards.salida('modal-cancelar-sesion', direccion);
         this._paso = paso;
-        var d = this._datos, indice = this.PASOS.indexOf(paso), final = paso === 'hecho';
+        var d = this._datos, indice = this.PASOS.indexOf(paso), final = paso === 'hecho' || paso === 'aviso';
         if (paso === 'aviso') this._pintarCanales();
-        if (paso === 'resumen') this._pintarResumen();
         document.querySelectorAll('#cancelar-steps .justif-step').forEach(function(step) { step.hidden = step.dataset.step !== paso; });
         document.querySelectorAll('#cancelar-steps [data-motivo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.motivo === d.motivo)); });
-        document.querySelectorAll('#cancelar-steps [data-canal]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.canal === d.canal)); });
         document.getElementById('cancelar-continuar-motivo').disabled = !d.motivo;
-        this._actualizarBotones();
+        document.getElementById('cancelar-titulo').textContent = paso === 'aviso' || paso === 'hecho' ? (paso === 'aviso' ? 'Avisar a las familias' : 'Entrenamiento cancelado') : 'Cancelar entrenamiento';
         document.getElementById('cancelar-progress').classList.toggle('hidden', final);
-        document.getElementById('cancelar-progress-text').textContent = 'Paso ' + (indice + 1) + ' de ' + this.PASOS.length;
-        document.getElementById('cancelar-progress-fill').style.width = Math.round((indice + 1) * 100 / this.PASOS.length) + '%';
+        if (!final) {
+          document.getElementById('cancelar-progress-text').textContent = 'Paso ' + (indice + 1) + ' de ' + this.PASOS.length;
+          document.getElementById('cancelar-progress-fill').style.width = Math.round((indice + 1) * 100 / this.PASOS.length) + '%';
+        }
         document.getElementById('cancelar-atras').style.visibility = indice > 0 && !final ? 'visible' : 'hidden';
         App.wizardCards.entrada('modal-cancelar-sesion', direccion, final ? 0 : this.PASOS.length - 1 - indice);
         var contenedor = document.getElementById('cancelar-steps');
@@ -3599,17 +3591,13 @@ const App = {
         if (foco) foco.focus({ preventScroll: true });
       },
 
-      // Detalle: paso omitible, «Continuar» solo con texto (App.wizardCards.actualizarBotones).
-      _actualizarBotones: function() {
-        App.wizardCards.actualizarBotones('cancelar', this._paso, this._paso === 'detalle', !!this._detalle());
-      },
-
       siguiente: function() {
         var i = this.PASOS.indexOf(this._paso);
         if (i >= 0 && i < this.PASOS.length - 1) this._irA(this.PASOS[i + 1], 1);
       },
 
       atras: function() {
+        if (this._cancelada) return;
         var i = this.PASOS.indexOf(this._paso);
         if (i > 0) this._irA(this.PASOS[i - 1], -1);
       },
@@ -3620,199 +3608,74 @@ const App = {
         this.siguiente();
       },
 
-      continuarDetalle: function() {
-        this._datos.detalle = this._detalle();
-        this.siguiente();
-      },
-
-      omitirDetalle: function() {
-        document.getElementById('cancelar-detalle').value = '';
-        this._datos.detalle = '';
-        this.siguiente();
-      },
-
       _pintarCanales: function() {
-        var f = this._familias();
-        document.getElementById('cancelar-aviso-hint').textContent = 'Jugadores convocados: ' + f.total;
-        document.getElementById('cancelar-canal-whatsapp-info').textContent = f.whatsapp + ' de ' + f.total + ' con tel\u00e9fono';
-        document.getElementById('cancelar-canal-correo-info').textContent = f.correo + ' de ' + f.total + ' con correo';
+        var f = this._familiasConCorreo();
+        var info = document.getElementById('cancelar-canal-correo-info');
+        if (info) info.textContent = f.correo + ' de ' + f.total + ' con correo';
+        var enlace = document.getElementById('cancelar-canal-whatsapp');
+        if (enlace) enlace.href = this._enlaceWhatsApp();
       },
 
-      elegirCanal: function(canal) {
-        if (!this.CANALES[canal]) return;
-        this._datos.canal = canal;
-        this.siguiente();
-      },
-
-      _pintarResumen: function() {
-        var d = this._datos, sesion = this._sesion(this._sesionId);
-        if (!sesion) return;
-        var filas = [['Entrenamiento', this._descripcion(sesion)], ['Motivo', d.motivo]];
-        if (d.detalle) filas.push(['Detalles', d.detalle]);
-        filas.push(['Aviso a las familias', this.CANALES[d.canal] || '']);
-        var notas = [], f = d.canal === 'whatsapp' || d.canal === 'correo' ? this._familias() : null;
-        var sinDatos = f ? f.total - f[d.canal] : 0;
-        if (d.canal === 'whatsapp') {
-          notas.push('Después de confirmar, podrás avisar desde tu WhatsApp mediante difusión o uno a uno. El envío es manual.');
-          if (sinDatos) notas.push(sinDatos === 1 ? '1 familia no tiene tel\u00e9fono: no recibir\u00e1 el aviso.' : sinDatos + ' familias no tienen tel\u00e9fono: no recibir\u00e1n el aviso.');
-        } else if (d.canal === 'correo') {
-          notas.push('Cada familia recibir\u00e1 su propio correo.');
-          if (sinDatos) notas.push(sinDatos === 1 ? '1 familia no tiene correo o tiene los avisos por correo desactivados: no recibir\u00e1 el aviso.' : sinDatos + ' familias no tienen correo o tienen los avisos por correo desactivados: no recibir\u00e1n el aviso.');
-        } else if (d.canal === 'copiar') {
-          notas.push('Al confirmar se copiar\u00e1 el mensaje para que lo pegues donde quieras.');
-        } else {
-          notas.push('No se avisar\u00e1 a las familias.');
-        }
-        document.getElementById('cancelar-resumen').innerHTML = '<dl>' + filas.map(function(fila) {
-          return '<dt>' + _esc(fila[0]) + '</dt><dd>' + _esc(fila[1]) + '</dd>';
-        }).join('') + '</dl>' + notas.map(function(n) { return '<p class="alta-aviso" role="note">' + _esc(n) + '</p>'; }).join('');
-        var conMensaje = d.canal !== 'ninguno';
-        document.getElementById('cancelar-preview-wrap').hidden = !conMensaje;
-        document.getElementById('cancelar-preview').textContent = conMensaje ? this._mensajeActual(sesion, d) : '';
-      },
-
+      // Cancela ya (detalle opcional, el texto actual o vacío). Después se elige el aviso.
       confirmar: function() {
-        var d = this._datos, id = this._sesionId, sesion = this._sesion(id), self = this;
-        if (!sesion || !d || !d.motivo || !this.CANALES[d.canal]) return Promise.resolve(false);
-        // «Copiar mensaje» copia dentro del toque: tras la respuesta del servidor el navegador puede negar el portapapeles.
-        var copia = d.canal === 'copiar' ? _copiarTexto(this._mensajeActual(sesion, d)) : Promise.resolve(false);
+        var self = this, d = this._datos, id = this._sesionId, sesion = this._sesion(id);
+        if (!sesion || !d.motivo || this._cancelada) return Promise.resolve(false);
+        d.detalle = this._detalle();
         var boton = document.getElementById('cancelar-confirmar');
         boton.disabled = true;
-        return App.operation.run('cancel-session:' + id, 'cancelarSesion', [id, d.motivo, { detalle: d.detalle, canal: d.canal }], function(res) {
+        return App.operation.run('cancel-session:' + id, 'cancelarSesion', [id, d.motivo, { detalle: d.detalle }], function(res) {
+          self._cancelada = true;
           App.cache.upsert('sesiones', res.sesion);
           App.stats.invalidar();
           App.views.sesion._trasCancelar(id);
-          return copia.then(function(copiado) {
-            self._pintarResultado(res.notificacion || { canal: d.canal }, copiado);
-            self._irA('hecho', 1);
-            return true;
-          });
+          self._irA('aviso', 1);
+          return true;
         }, null, { pending: 'Cancelando\u2026', success: 'Entrenamiento cancelado' })
-          .catch(function() { return false; /* App.operation ya muestra el error */ })
+          .catch(function() { return false; })
           .then(function(ok) { boton.disabled = false; return ok; });
       },
 
-      // WhatsApp prepara enlaces; enviar y comprobar cada mensaje corresponde al entrenador.
+      // Tras cancelar: guarda el canal. WhatsApp y copiar copian el mensaje en este toque (el enlace de WhatsApp abre wa.me).
+      elegirCanal: function(canal) {
+        if (!this.CANALES[canal] || !this._cancelada) return Promise.resolve(false);
+        var self = this, id = this._sesionId, sesion = this._sesion(id);
+        if (!sesion) return Promise.resolve(false);
+        this._mensaje = this._mensajeActual(sesion, this._datos);
+        var copia = (canal === 'whatsapp' || canal === 'copiar') ? _copiarTexto(this._mensaje) : Promise.resolve(false);
+        return App.operation.run('avisar-cancelacion:' + id, 'avisarCancelacion', [id, canal], function(res) {
+          if (res.sesion) App.cache.upsert('sesiones', res.sesion);
+          return copia.then(function(copiado) {
+            self._pintarResultado(res.notificacion || { canal: canal, mensaje: self._mensaje }, copiado);
+            self._irA('hecho', 1);
+            return true;
+          });
+        }, null, { pending: 'Guardando aviso\u2026', success: canal === 'correo' ? 'Aviso enviado' : 'Listo' })
+          .catch(function() { return false; });
+      },
+
       _pintarResultado: function(n, copiado) {
-        this._mensaje = n.mensaje || '';
+        this._mensaje = n.mensaje || this._mensaje;
         this._notificacion = n;
-        this._modoWhatsApp = '';
-        this._indiceWhatsApp = 0;
-        var filas = [], notas = [], html = '';
+        var notas = [], html = '', filas = [];
         if (n.error) notas.push(n.error);
         else if (n.canal === 'ninguno') notas.push('No se ha avisado a las familias.');
         else if (n.canal === 'copiar') notas.push(copiado ? 'Mensaje copiado. Pégalo donde quieras.' : 'Copia el mensaje y pégalo donde quieras.');
+        else if (n.canal === 'whatsapp') notas.push(copiado ? 'Mensaje copiado. WhatsApp se ha abierto con el texto listo para el chat o el grupo que elijas.' : 'WhatsApp se ha abierto con el mensaje. Si no se copió, cópialo de aquí.');
         else if (n.canal === 'correo') {
           filas.push(['Familias avisadas por correo', n.avisados], ['Omitidas por no tener correo', n.omitidos]);
           if (n.fallidos) filas.push(['No se pudo enviar', n.fallidos]);
-        } else if (n.canal === 'whatsapp') {
-          filas.push(['Familias con enlace preparado', n.avisados], ['Omitidas por no tener teléfono', n.omitidos]);
-          notas.push('La cancelación está guardada. Los mensajes aún no se han enviado.');
         }
         if (filas.length) html += '<div class="alta-resumen"><dl>' + filas.map(function(f) { return '<dt>' + _esc(f[0]) + '</dt><dd>' + _esc(String(f[1] || 0)) + '</dd>'; }).join('') + '</dl></div>';
-        html += notas.map(function(t) { return '<p class="justif-hint cancelar-nota">' + _esc(t) + '</p>'; }).join('');
-        if (n.canal === 'whatsapp' && !n.error) {
-          if ((n.omitidas || []).length) {
-            html += '<div><strong>Jugadores sin teléfono</strong><ul class="cancelar-omitidas" data-no-i18n>' +
-              n.omitidas.map(function(o) { return '<li>' + _esc(o.jugador) + '</li>'; }).join('') + '</ul></div>';
-          }
-          if ((n.enlaces || []).length) {
-            html += '<p class="justif-hint">Elige cómo enviar los avisos desde tu WhatsApp.</p>' +
-              '<div class="cancelar-modos" role="group" aria-label="Modo de envío"><button type="button" class="btn btn-secondary btn-full" data-modo="difusion" aria-pressed="false" onclick="App.views.cancelarSesion.elegirModoWhatsApp(\'difusion\')">Lista de difusión</button>' +
-              '<button type="button" class="btn btn-secondary btn-full" data-modo="secuencia" aria-pressed="false" onclick="App.views.cancelarSesion.elegirModoWhatsApp(\'secuencia\')">Uno a uno</button></div><div id="cancelar-whatsapp" aria-live="polite"></div>';
-          } else html += '<p class="justif-hint">No hay teléfonos disponibles para WhatsApp.</p>';
-        }
-        if (n.canal === 'copiar' && this._mensaje) {
+        html += notas.map(function(tx) { return '<p class="justif-hint cancelar-nota">' + _esc(tx) + '</p>'; }).join('');
+        if ((n.canal === 'copiar' || n.canal === 'whatsapp') && this._mensaje) {
           html += '<div class="justif-preview-wrap"><div class="justif-preview-label">Mensaje para las familias</div><div class="justif-preview" data-no-i18n>' + _esc(this._mensaje) + '</div></div>' +
             '<button type="button" class="btn btn-secondary btn-full" onclick="App.views.cancelarSesion.copiar()">Copiar mensaje</button>';
+          if (n.canal === 'whatsapp') {
+            html += '<a class="btn btn-whatsapp btn-full" href="' + _esc(this._enlaceWhatsApp()) + '" target="_blank" rel="noopener noreferrer">Abrir WhatsApp</a>';
+          }
         }
         document.getElementById('cancelar-resultado').innerHTML = html;
-        document.getElementById('cancelar-terminar').textContent = n.canal === 'whatsapp' ? 'Terminar' : 'Entendido';
-      },
-
-      elegirModoWhatsApp: function(modo) {
-        if (modo !== 'difusion' && modo !== 'secuencia') return;
-        this._limpiarRetorno();
-        this._modoWhatsApp = modo;
-        document.querySelectorAll('#cancelar-resultado [data-modo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.modo === modo)); });
-        if (modo === 'difusion') this.copiar();
-        this._pintarWhatsApp();
-      },
-
-      _pintarWhatsApp: function() {
-        var n = this._notificacion, enlaces = n.enlaces || [], html = '';
-        if (this._modoWhatsApp === 'difusion') {
-          html = '<p class="justif-hint">Guarda los teléfonos como contactos. En WhatsApp, crea una lista de difusión y selecciona esos contactos uno a uno.</p>' +
-            '<p class="justif-hint">Solo reciben la difusión los contactos que tengan guardado tu número. Pega el mensaje en la lista y envíalo.</p>' +
-            '<div class="justif-preview-wrap"><div class="justif-preview-label">Mensaje para las familias</div><div class="justif-preview" data-no-i18n>' + _esc(this._mensaje) + '</div></div>' +
-            '<button type="button" class="btn btn-secondary btn-full" onclick="App.views.cancelarSesion.copiar()">Copiar mensaje</button>' +
-            '<div class="justif-preview-wrap"><div class="justif-preview-label">Teléfonos</div><div class="justif-preview" data-no-i18n>' + _esc(enlaces.map(function(e) { return e.telefono; }).join('\n')) + '</div></div>' +
-            '<button type="button" class="btn btn-secondary btn-full" onclick="App.views.cancelarSesion.copiarTelefonos()">Copiar todos</button>' +
-            '<a class="cancelar-enlace" href="https://wa.me/?text=' + encodeURIComponent(this._mensaje) + '" target="_blank" rel="noopener noreferrer">Abrir WhatsApp</a>' +
-            '<p class="justif-hint">El enlace abre WhatsApp; vuelve a la lista de difusión para pegar y enviar el mensaje.</p>';
-        } else if (this._indiceWhatsApp < enlaces.length) {
-          var e = enlaces[this._indiceWhatsApp];
-          var nombre = e.nombre ? '<span data-no-i18n>' + _esc(e.nombre) + '</span>' : '<span>Familia de</span> <span data-no-i18n>' + _esc((e.jugadores || []).join(', ')) + '</span>';
-          html = '<p class="justif-hint">Contacto ' + (this._indiceWhatsApp + 1) + ' de ' + enlaces.length + '</p>' +
-            '<p class="justif-hint">Abre WhatsApp, envía el mensaje y vuelve aquí para continuar. Abrir el enlace no confirma el envío.</p>' +
-            '<a class="cancelar-enlace" href="' + _esc(e.url) + '" target="_blank" rel="noopener noreferrer" onclick="App.views.cancelarSesion.abrirContacto()">' +
-            '<span class="cancelar-enlace-texto"><strong>' + nombre + '</strong><small data-no-i18n>' + _esc((e.nombre ? (e.jugadores || []).join(', ') + ' · ' : '') + e.telefono) + '</small></span>' +
-            '<span class="cancelar-enlace-ir">WhatsApp</span></a>' +
-            '<button type="button" class="btn btn-secondary btn-full" onclick="App.views.cancelarSesion.omitirContacto()">Omitir contacto</button>';
-        } else {
-          html = '<p class="justif-hint">No quedan contactos pendientes. Comprueba en WhatsApp los mensajes enviados.</p>';
-        }
-        document.getElementById('cancelar-whatsapp').innerHTML = html;
-      },
-
-      abrirContacto: function() {
-        this._limpiarRetorno();
-        var self = this, fuera = false;
-        var alSalir = function() { fuera = true; };
-        var alVolver = function() {
-          if (!fuera || document.hidden || !self._retornoWhatsApp || self._retornoWhatsApp.alVolver !== alVolver) return;
-          self._limpiarRetorno();
-          self._indiceWhatsApp++;
-          self._pintarWhatsApp();
-          self._enfocarWhatsApp();
-        };
-        var visibilidad = function() { if (document.hidden) alSalir(); else alVolver(); };
-        this._retornoWhatsApp = { alSalir: alSalir, alVolver: alVolver, visibilidad: visibilidad };
-        document.addEventListener('visibilitychange', visibilidad);
-        window.addEventListener('blur', alSalir);
-        window.addEventListener('pagehide', alSalir);
-        window.addEventListener('focus', alVolver);
-        window.addEventListener('pageshow', alVolver);
-      },
-
-      _limpiarRetorno: function() {
-        var r = this._retornoWhatsApp;
-        if (!r) return;
-        document.removeEventListener('visibilitychange', r.visibilidad);
-        window.removeEventListener('blur', r.alSalir);
-        window.removeEventListener('pagehide', r.alSalir);
-        window.removeEventListener('focus', r.alVolver);
-        window.removeEventListener('pageshow', r.alVolver);
-        this._retornoWhatsApp = null;
-      },
-
-      omitirContacto: function() {
-        this._limpiarRetorno();
-        if (this._indiceWhatsApp < (this._notificacion.enlaces || []).length) this._indiceWhatsApp++;
-        this._pintarWhatsApp();
-        this._enfocarWhatsApp();
-      },
-
-      _enfocarWhatsApp: function() {
-        var foco = document.getElementById('cancelar-whatsapp').querySelector('.cancelar-enlace') || document.getElementById('cancelar-terminar');
-        if (foco) foco.focus({ preventScroll: true });
-      },
-
-      copiarTelefonos: function() {
-        return _copiarTexto((this._notificacion.enlaces || []).map(function(e) { return e.telefono; }).join('\n')).then(function(ok) {
-          showToast(ok ? 'Teléfonos copiados' : 'No se pudieron copiar los teléfonos', ok ? 'success' : 'error');
-          return ok;
-        });
+        document.getElementById('cancelar-terminar').textContent = 'Entendido';
       },
 
       copiar: function() {
@@ -8696,12 +8559,7 @@ App.i18n.patrones.push(
   [/^Paso (\d+) de (\d+)$/, 'Step $1 of $2'],
   [/^Hola, (.+) y familia$/, 'Hi, $1 and family'],
   [/^Te faltan (\d+) datos$/, '$1 details missing'],
-  [/^Jugadores convocados: (\d+)$/, 'Players called up: $1'],
-  [/^Contacto (\d+) de (\d+)$/, 'Contact $1 of $2'],
-  [/^(\d+) de (\d+) con teléfono$/, '$1 of $2 with a phone number'],
-  [/^(\d+) de (\d+) con correo$/, '$1 of $2 with an email'],
-  [/^(\d+) familias no tienen teléfono: no recibirán el aviso\.$/, '$1 families have no phone number and will not be notified.'],
-  [/^(\d+) familias no tienen correo o tienen los avisos por correo desactivados: no recibirán el aviso\.$/, '$1 families have no email or have email notices turned off and will not be notified.']
+  [/^(\d+) de (\d+) con correo$/, '$1 of $2 with an email']
 );
 Object.assign(App.i18n.diccionario, {
   'Cancelar entrenamiento':'Cancel training',
@@ -8709,51 +8567,31 @@ Object.assign(App.i18n.diccionario, {
   'Entrenamiento cancelado':'Training cancelled',
   '¿Por qué se cancela?':'Why is it cancelled?',
   '¿Quieres añadir un detalle?':'Do you want to add a detail?',
-  'Opcional. Lo leerán las familias si eliges avisarlas.':'Optional. Families will read it if you choose to notify them.',
+  'Opcional. Lo leerán las familias si luego las avisas.':'Optional. Families will read it if you notify them later.',
   'Por ejemplo: recuperamos el entrenamiento el jueves.':'For example: we will make up the session on Thursday.',
-  '¿Cómo avisamos a las familias?':'How should we notify families?',
+  'Avisar a las familias':'Notify families',
+  'El entrenamiento ya está cancelado. Elige cómo avisarlo.':'The session is already cancelled. Choose how to notify families.',
+  'Copia el mensaje y abre WhatsApp':'Copy the message and open WhatsApp',
+  'A las familias con correo':'To families with an email',
   'Copiar mensaje':'Copy message',
   'Pégalo donde quieras':'Paste it wherever you like',
-  'No notificar':'Do not notify',
-  'Solo se cancela':'Just cancel it',
-  'Revisa y confirma':'Review and confirm',
+  'No avisar':'Do not notify',
+  'No se envía nada':'Nothing will be sent',
   'Mensaje para las familias':'Message for families',
-  'Aviso a las familias':'Family notice',
-  'Después de confirmar, podrás avisar desde tu WhatsApp mediante difusión o uno a uno. El envío es manual.':'After confirming, you can notify families from your WhatsApp using a broadcast list or one by one. You must send the messages yourself.',
-  '1 familia no tiene teléfono: no recibirá el aviso.':'1 family has no phone number and will not be notified.',
-  'Cada familia recibirá su propio correo.':'Each family will receive its own email.',
-  '1 familia no tiene correo o tiene los avisos por correo desactivados: no recibirá el aviso.':'1 family has no email or has email notices turned off and will not be notified.',
-  'Al confirmar se copiará el mensaje para que lo pegues donde quieras.':'After confirming, the message will be copied so you can paste it wherever you like.',
-  'No se avisará a las familias.':'Families will not be notified.',
+  'Guardando aviso…':'Saving notice…',
+  'Aviso enviado':'Notice sent',
+  'Listo':'Done',
   'No se ha avisado a las familias.':'Families have not been notified.',
   'Mensaje copiado. Pégalo donde quieras.':'Message copied. Paste it wherever you like.',
   'Copia el mensaje y pégalo donde quieras.':'Copy the message and paste it wherever you like.',
   'Mensaje copiado':'Message copied',
+  'Mensaje copiado. WhatsApp se ha abierto con el texto listo para el chat o el grupo que elijas.':'Message copied. WhatsApp has opened with the text ready for the chat or group you choose.',
+  'WhatsApp se ha abierto con el mensaje. Si no se copió, cópialo de aquí.':'WhatsApp has opened with the message. If it was not copied, copy it from here.',
   'Familias avisadas por correo':'Families notified by email',
-  'Familias con enlace preparado':'Families with a link ready',
   'Omitidas por no tener correo':'Skipped: no email',
-  'Omitidas por no tener teléfono':'Skipped: no phone number',
   'No se pudo enviar':'Could not be sent',
-  'El entrenamiento se ha cancelado, pero no se pudieron preparar los avisos a las familias.':'The training session was cancelled, but the family notices could not be prepared.',
-  'La cancelación está guardada. Los mensajes aún no se han enviado.':'The cancellation is saved. The messages have not been sent yet.',
-  'Jugadores sin teléfono':'Players without a phone number',
-  'Modo de envío':'Sending mode',
-  'Familia de':'Family of',
-  'Elige cómo enviar los avisos desde tu WhatsApp.':'Choose how to send notices from your WhatsApp.',
-  'Lista de difusión':'Broadcast list',
-  'Uno a uno':'One by one',
-  'No hay teléfonos disponibles para WhatsApp.':'No phone numbers are available for WhatsApp.',
-  'Guarda los teléfonos como contactos. En WhatsApp, crea una lista de difusión y selecciona esos contactos uno a uno.':'Save the phone numbers as contacts. In WhatsApp, create a broadcast list and select those contacts one by one.',
-  'Solo reciben la difusión los contactos que tengan guardado tu número. Pega el mensaje en la lista y envíalo.':'Only contacts who have saved your number receive the broadcast. Paste the message into the list and send it.',
-  'Teléfonos':'Phone numbers',
-  'Copiar todos':'Copy all',
-  'Teléfonos copiados':'Phone numbers copied',
-  'No se pudieron copiar los teléfonos':'Could not copy phone numbers',
+  'La cancelación se ha guardado, pero no se pudieron completar los avisos a las familias.':'The cancellation was saved, but the family notices could not be completed.',
   'Abrir WhatsApp':'Open WhatsApp',
-  'El enlace abre WhatsApp; vuelve a la lista de difusión para pegar y enviar el mensaje.':'The link opens WhatsApp; go back to the broadcast list to paste and send the message.',
-  'Abre WhatsApp, envía el mensaje y vuelve aquí para continuar. Abrir el enlace no confirma el envío.':'Open WhatsApp, send the message and return here to continue. Opening the link does not confirm it was sent.',
-  'Omitir contacto':'Skip contact',
-  'No quedan contactos pendientes. Comprueba en WhatsApp los mensajes enviados.':'There are no contacts left. Check the sent messages in WhatsApp.',
 });
 Object.assign(App.i18n.diccionario, {
   'Estados del calendario':'Calendar statuses',

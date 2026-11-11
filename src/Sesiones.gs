@@ -145,26 +145,41 @@ const Sesiones = {
   },
 
   /**
-   * Cancela una sesión sin asistencia guardada.
+   * Cancela una sesión sin asistencia guardada. El canal de aviso se guarda después, con registrarAvisoCancelacion.
    * @param {string} sesionId
    * @param {string} motivo   - Uno de CONFIG.MOTIVOS_CANCELACION
    * @param {string} [detalle] - Texto libre opcional (se guarda en DetalleCancelacion)
    * @param {string} canceladoPor - Nombre de la identidad autenticada
-   * @param {string} canal - Canal de aviso elegido
    * @returns {Object} Sesión actualizada.
    */
-  cancelarSesion(sesionId, motivo, detalle, canceladoPor, canal) {
+  cancelarSesion(sesionId, motivo, detalle, canceladoPor) {
     if (!CONFIG.MOTIVOS_CANCELACION.includes(motivo)) throw new Error('Motivo de cancelación no válido.');
     const texto = Sesiones._detalleCancelacion_(detalle);
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
     if (!sesion) throw new Error('Sesión no encontrada.');
-    // Cancelar dos veces volvería a avisar a las familias.
     if (sesion.Cancelada === true || sesion.Cancelada === 'TRUE') throw new Error('La sesión ya está cancelada.');
     if (sesion.AsistenciaGuardada === true || sesion.AsistenciaGuardada === 'TRUE') {
       throw new Error('No se puede cancelar una sesión con asistencia guardada. Elimínala si fue un error.');
     }
     const cambios = { Cancelada: true, MotivoCancelacion: motivo, DetalleCancelacion: texto || null,
-      FechaCancelacion: Asistencia._timestamp_(), CanceladoPor: canceladoPor, CanalAvisoCancelacion: canal };
+      FechaCancelacion: Asistencia._timestamp_(), CanceladoPor: canceladoPor || 'CB Baeza', CanalAvisoCancelacion: null };
+    updateRow(CONFIG.SHEETS.SESIONES, sesionId, cambios);
+    return { ...sesion, ...cambios };
+  },
+
+  /**
+   * Guarda el canal de aviso de una sesión ya cancelada. Solo una vez; no reenvía si ya había un canal.
+   * @param {string} sesionId
+   * @param {string} canal - Uno de CONFIG.CANALES_AVISO_CANCELACION
+   * @returns {Object} Sesión actualizada.
+   */
+  registrarAvisoCancelacion(sesionId, canal) {
+    if (!CONFIG.CANALES_AVISO_CANCELACION.includes(canal)) throw new Error('Forma de aviso no válida.');
+    const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
+    if (!sesion) throw new Error('Sesión no encontrada.');
+    if (sesion.Cancelada !== true && sesion.Cancelada !== 'TRUE') throw new Error('La sesión no está cancelada.');
+    if (sesion.CanalAvisoCancelacion) throw new Error('El aviso a las familias ya está registrado.');
+    const cambios = { CanalAvisoCancelacion: canal };
     updateRow(CONFIG.SHEETS.SESIONES, sesionId, cambios);
     return { ...sesion, ...cambios };
   },

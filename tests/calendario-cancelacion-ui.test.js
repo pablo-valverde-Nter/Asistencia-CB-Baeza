@@ -64,7 +64,7 @@ test('sesiones antiguas y canales opcionales se muestran sin campos inventados',
   assert.match(html, /Entrenamiento cancelado/);
   assert.match(html, /Pista &lt;cerrada&gt;/);
   assert.doesNotMatch(html, /undefined|null|Cancelado por|Fecha de cancelación|Canal de aviso|cancelacion-ficha-detalle/);
-  for (const [valor, etiqueta] of [['correo', 'Correo'], ['copiar', 'Copiar mensaje'], ['ninguno', 'No notificar']]) {
+  for (const [valor, etiqueta] of [['correo', 'Correo'], ['copiar', 'Copiar mensaje'], ['ninguno', 'No avisar']]) {
     sesion.CanalAvisoCancelacion = valor;
     assert.ok(app.calendar.fichaCancelacion(sesion).includes(etiqueta));
   }

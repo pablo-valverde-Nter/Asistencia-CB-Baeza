@@ -772,30 +772,43 @@ function eliminarSesion(auth, sesionId) {
 }
 
 /**
- * Cancela una sesión y, si se pide, avisa a las familias de los convocados.
+ * Cancela una sesión (motivo + detalle opcional). No avisa aún: el canal se guarda después con avisarCancelacion.
  * @param {Object} auth
  * @param {string} sesionId
  * @param {string} motivo - Uno de CONFIG.MOTIVOS_CANCELACION
- * @param {{ detalle?: string, canal?: string }} [opciones] - canal: uno de CONFIG.CANALES_AVISO_CANCELACION
- *   (por defecto 'ninguno'); sin opciones se comporta como la firma anterior (motivo sin detalle ni avisos).
- * @returns {{ success: boolean, sesion?: Object, notificacion?: Object, error?: string }}
- *   La sesión queda cancelada aunque fallen los avisos; entonces notificacion.error lo explica.
+ * @param {{ detalle?: string }} [opciones]
+ * @returns {{ success: boolean, sesion?: Object, error?: string }}
  */
 function cancelarSesion(auth, sesionId, motivo, opciones) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
     const datos = opciones || {};
-    const canal = datos.canal || 'ninguno';
-    if (!CONFIG.CANALES_AVISO_CANCELACION.includes(canal)) throw new Error('Forma de aviso no válida.');
     const entrenador = Auth.getEntrenadorActual(auth);
     const nombre = entrenador ? [entrenador.Nombre, entrenador.Apellidos].filter(Boolean).join(' ').trim() : '';
-    const sesion = Sesiones.cancelarSesion(sesionId, motivo, datos.detalle, nombre || 'CB Baeza', canal);
+    const sesion = Sesiones.cancelarSesion(sesionId, motivo, datos.detalle, nombre || 'CB Baeza');
+    return { success: true, sesion: sesion };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Tras cancelar: guarda el canal y, si es correo, envía los avisos. WhatsApp y copiar solo devuelven el mensaje.
+ * @param {Object} auth
+ * @param {string} sesionId
+ * @param {string} canal - Uno de CONFIG.CANALES_AVISO_CANCELACION
+ * @returns {{ success: boolean, sesion?: Object, notificacion?: Object, error?: string }}
+ */
+function avisarCancelacion(auth, sesionId, canal) {
+  try {
+    Auth.requireEntrenadorOAdmin(auth);
+    const sesion = Sesiones.registrarAvisoCancelacion(sesionId, canal);
     let notificacion;
     try {
       notificacion = Notificaciones.avisarCancelacionAFamilias(sesion, canal);
     } catch (e) {
-      Logger.log('[cancelarSesion] No se pudieron preparar los avisos a las familias.');
-      notificacion = { canal: canal, error: 'El entrenamiento se ha cancelado, pero no se pudieron preparar los avisos a las familias.' };
+      Logger.log('[avisarCancelacion] No se pudieron completar los avisos a las familias.');
+      notificacion = { canal: canal, error: 'La cancelación se ha guardado, pero no se pudieron completar los avisos a las familias.' };
     }
     return { success: true, sesion: sesion, notificacion: notificacion };
   } catch (e) {
