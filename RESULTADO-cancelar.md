@@ -1,3 +1,56 @@
+# Resultado: Cancelar entrenamiento (iteración 2)
+
+Commit: `5d99f63` en `develop` (`feat(ui): ficha y calendario de cancelaciones, y WhatsApp personal`).
+Versión DEV: **@66** (`CBBAEZA DEV 5d99f63b72fda2b1fc5871052489578fde424e5f`).
+PRO no se ha tocado (sigue en @64, SHA `323f175`).
+Tests: `npm test` — 281 pasados, 0 fallos.
+
+OMP se lanzó con `github-copilot/gpt-6.1-terra` (`--thinking medium`) y perfil Alberto. El primer arranque creó subagentes en Opus (los roles del perfil Alberto apuntaban a Opus); se paró y se relanzó con un overlay que fija todos los roles a Terra. Por el salto de uso de la cuenta de Pablo (90,6 % → 98,3 %) y porque Alberto no se movía del 84 %, se detuvo OMP cuando el código ya estaba escrito y se cerraron tests, un fallo trivial de aserción, commit, push de `develop` y el despliegue a DEV sin gastar más Copilot.
+
+## Qué se ve ahora
+
+**Calendario.** Las sesiones canceladas quedan en ámbar atenuado, con el título tachado, un aspa en el estado y un punto/badge × ámbar en la celda del día. La leyenda incluye «Cancelada» junto a Próximo / Pendiente / Registrada (y los estados del perfil jugador). Funciona en los 3 temas.
+
+**Ficha al abrir una cancelada.** En lugar del modal pobre, una tarjeta «Entrenamiento cancelado» con icono, equipo, fecha/hora, chip de motivo, detalle opcional, quién lo canceló y cuándo, y el canal de aviso si está guardado. Las cancelaciones antiguas, sin autor ni canal, omiten esas líneas. La misma tarjeta la ven entrenador y familia; solo el entrenador puede reactivar.
+
+**Mensajes.** WhatsApp en texto plano con *negrita* y saltos:
+
+```
+❌ *Entrenamiento cancelado*
+🏀 Equipo …
+📅 día fecha a las hora
+📝 Motivo: …
+(detalle, si lo hay)
+
+Un saludo,
+<nombre del entrenador>
+```
+
+Correo: el mismo texto como cuerpo plano y un HTML sencillo (tarjeta blanca, borde morado del club, título en negrita). Un envío por familia, sin listar menores.
+
+## WhatsApp desde el móvil del entrenador (sin Business)
+
+Pablo no usará Meta Business. El flujo visible es personal:
+
+1. **Lista de difusión:** copia el mensaje, lista los teléfonos con «Copiar todos», pasos cortos para crear o reutilizar una lista de difusión en WhatsApp, y un botón que abre WhatsApp. Familias sin teléfono aparecen como omitidas.
+2. **Uno a uno:** envío secuencial con `wa.me` (mensaje ya escrito). Al volver a la app (`visibilitychange`) pasa al siguiente. Progreso X/N, omitir y terminar. Sin teléfono no entran en la secuencia.
+
+La Cloud API (`WHATSAPP_TOKEN` / `WHATSAPP_PHONE_ID`) sigue en `src/WhatsApp.gs`, intacta pero dormida: no es la opción que ve el entrenador.
+
+«No notificar», «Correo» y «Copiar mensaje» se mantienen.
+
+## Esquema (DEV sí, PRO no)
+
+Nueva migración `supabase/migrations/2026-11-11-cancelacion-identidad-canal.sql`: añade `Sesiones.CanceladoPor` y `Sesiones.CanalAvisoCancelacion` (texto, nullable, idempotente). **Ya está aplicada en DEV.** **No se ha aplicado en PRO.** Hay que ejecutarla en PRO, junto con la de `DetalleCancelacion` si aún no está, antes de promover este commit.
+
+## Limitaciones
+
+- El envío automático por Cloud API sigue pendiente (y Pablo no va a abrir cuenta Business).
+- No se ha cancelado ninguna sesión real en DEV ni se ha enviado ningún aviso real (tests con mocks).
+- PRO no tiene estas columnas ni este código.
+
+---
+
 # Resultado: Cancelar entrenamiento
 
 Commit: `12b8b8a` en `develop` (`feat(ui): asistente para cancelar un entrenamiento y avisar a las familias`).
