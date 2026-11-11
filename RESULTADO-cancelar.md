@@ -1,3 +1,40 @@
+# Resultado: Cancelar entrenamiento (iteración 3)
+
+Commit: `5b7e439` en `develop` (`feat(ui): cancelar primero y avisar después, WhatsApp solo con wa.me`).
+Versión DEV: **@67** (`CBBAEZA DEV 5b7e4394cb54abc1c2e5dfad81f105accd5a2652`).
+PRO no se ha tocado (sigue en @64, SHA `323f175`).
+Tests: `npm test` — 275 pasados, 0 fallos (antes 281; se retiraron los de Cloud API, difusión y uno a uno).
+
+No se lanzó OMP en esta iteración: había riesgo de facturar a la cuenta de Pablo (~69 peticiones premium restantes) y Alberto también iba alto. El alcance estaba bien acotado y se implementó aquí, sin gastar Copilot.
+
+## Qué se ve ahora
+
+1. Motivo (los mismos chips) y detalle opcional.
+2. El entrenador pulsa **Cancelar entrenamiento**. La sesión se cancela ya (`CanalAvisoCancelacion` queda vacío). No hay paso de resumen previo.
+3. Solo si la cancelación ha ido bien aparece **Avisar a las familias**, con:
+   - **Correo** — envía el correo HTML + texto plano a las familias con email, como hasta ahora (se ve cuántas de las convocadas tienen correo).
+   - **WhatsApp** — copia el mensaje y abre `https://wa.me/?text=<mensaje>` (sin número) para que el entrenador elija el chat o el grupo. Nada más.
+   - **Copiar mensaje** — lo deja en el portapapeles.
+   - **No avisar** — no se envía nada.
+4. Al elegir una opción se guarda `CanalAvisoCancelacion` en una segunda llamada (`avisarCancelacion`).
+
+Se mantienen el mensaje con emojis y *negrita*, la tarjeta HTML del correo, el marcado ámbar del calendario y la ficha de sesión cancelada.
+
+## Qué se ha quitado
+
+- El ayudante de lista de difusión (pasos, «Copiar todos», lista de teléfonos).
+- El modo «Uno a uno» (enlaces `wa.me/<número>` por familia, secuencia con `visibilitychange`).
+- El módulo dormido de WhatsApp Cloud API: se ha borrado `src/WhatsApp.gs` y ya no se leen `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_ID` ni plantillas.
+- Tests, i18n y CSS asociados a todo lo anterior.
+
+## Limitaciones
+
+- Si el entrenador cierra el asistente justo después de cancelar, sin elegir canal, `CanalAvisoCancelacion` queda vacío y hoy no hay un botón en la ficha para avisar más tarde (habría que reactivar y volver a cancelar, o añadir ese atajo).
+- No se ha cancelado ninguna sesión real en DEV ni se ha enviado ningún aviso real (tests con mocks).
+- PRO sigue sin las migraciones de `DetalleCancelacion`, `CanceladoPor` y `CanalAvisoCancelacion`. Hay que aplicarlas en PRO antes de promover este código.
+
+---
+
 # Resultado: Cancelar entrenamiento (iteración 2)
 
 Commit: `5d99f63` en `develop` (`feat(ui): ficha y calendario de cancelaciones, y WhatsApp personal`).
