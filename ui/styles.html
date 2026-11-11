@@ -327,6 +327,14 @@ input, select, textarea { font-family: inherit; }
 .btn-primary   { background: var(--brand-bg); color: var(--on-accent); }
 .btn-secondary { background: var(--morado-s); color: var(--morado); }
 .btn-danger    { background: var(--rojo-s); color: var(--rojo); }
+/* Aviso (ámbar, contorno): acción que conviene pensar pero no borra nada, como «Cancelar entrenamiento». Se distingue de
+   la primaria (Guardar) y de peligro (Eliminar). La versión llena confirma esa acción al final de su asistente. */
+.btn-aviso       { background: transparent; color: var(--ambar); box-shadow: inset 0 0 0 1.5px var(--ambar); }
+.btn-aviso:hover, .btn-aviso:focus-visible { background: var(--ambar-s); }
+.btn-aviso-lleno { background: var(--ambar); color: var(--button-ink); }
+.btn-ico { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* Pase de lista: cancelar y eliminar, separados de Guardar asistencia. */
+.sesion-otras-acciones { display: grid; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--borde); }
 .btn-full      { width: 100%; }
 .btn-sm        { padding: 7px 14px; font-size: .8rem; }
 .btn-icon {
@@ -1878,6 +1886,33 @@ body:has(.operation-status.pending:not(.hidden)):has(#toast-container > .toast) 
 .aviso-club .justif-question { margin: 0 0 12px; font-size: 1.2rem; text-wrap: balance; }
 .aviso-club-linea { margin: 0 0 12px; padding: 10px 14px; border-radius: var(--r); background: var(--morado-xs); color: var(--texto); font-size: 1rem; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
 .aviso-club-accion { margin: 0; color: var(--texto-sec); font-size: .92rem; line-height: 1.45; }
+/* ── Asistente «Cancelar entrenamiento»: tarjetas de canal (como Ausencia/Retraso), resumen y enlaces de WhatsApp. ── */
+.cancelar-canales .justif-choice { min-height: 128px; padding: 14px 8px; }
+.cancelar-canales .justif-choice-icon svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.justif-choice[data-canal="whatsapp"] .justif-choice-icon { background: var(--verde-s); color: var(--verde); }
+.justif-choice[data-canal="correo"] .justif-choice-icon { background: var(--morado-s); color: var(--morado); }
+.justif-choice[data-canal="copiar"] .justif-choice-icon { background: var(--ambar-s); color: var(--ambar); }
+.justif-choice[data-canal="ninguno"] .justif-choice-icon { background: var(--fondo); color: var(--texto-sec); }
+.cancelar-wizard .justif-step .cancelar-preview { margin-top: 12px; border-left-color: var(--ambar); }
+.cancelar-wizard .cancelar-preview[hidden] { display: none; }
+.cancelar-hecho .aviso-club-icono { background: var(--ambar-s); }
+.cancelar-hecho .aviso-club-icono svg { stroke: var(--ambar); }
+.cancelar-resultado { display: flex; flex-direction: column; gap: 12px; }
+.cancelar-resultado .justif-preview-wrap { margin: 0; }
+.cancelar-nota { margin: 0; }
+.cancelar-enlaces { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cancelar-enlace {
+  display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px 12px;
+  border: 1.5px solid var(--borde); border-radius: 14px; background: var(--blanco); color: var(--texto); text-decoration: none;
+}
+.cancelar-enlace:focus-visible { outline: 2px solid var(--morado); outline-offset: 2px; }
+.cancelar-enlace-texto { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.cancelar-enlace-texto strong { font-size: .9rem; overflow-wrap: anywhere; }
+.cancelar-enlace-texto small { font-size: .76rem; color: var(--texto-sec); overflow-wrap: anywhere; }
+.cancelar-enlace-ir { flex-shrink: 0; padding: 6px 12px; border-radius: 999px; background: var(--verde); color: var(--button-ink); font-size: .78rem; font-weight: 700; }
+/* Enlace ya abierto: solo una marca visual para seguir la lista. */
+.cancelar-enlace.is-done { border-color: var(--verde); background: var(--verde-s); }
+.cancelar-enlace.is-done .cancelar-enlace-ir::before { content: '\2713\00a0'; }
 .justif-detalle { margin: 12px 0 0; }
 .justif-detalle label { margin-bottom: 4px; }
 .justif-detalle textarea { min-height: 60px; font-size: .88rem; }

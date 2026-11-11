@@ -159,6 +159,124 @@ CB Baeza — Gestión de Asistencia`;
   },
 
   // ══════════════════════════════════════════════════════════════════════════════
+  // AVISO A FAMILIAS — cuando un entrenador cancela un entrenamiento
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Texto del aviso de cancelación. El cliente replica este texto en App.views.cancelarSesion.mensaje
+   * para el resumen previo y para «Copiar mensaje».
+   */
+  mensajeCancelacion(sesion, equipo, motivo, detalle) {
+    const partes = Notificaciones._partesCancelacion_(sesion, equipo, motivo, detalle);
+    return `CB Baeza: se cancela el entrenamiento de ${partes[0]} del ${partes[1]}. Motivo: ${partes[2]}`;
+  },
+
+  // [equipo, cuándo, motivo con detalle]: las variables {{1}}–{{3}} de la plantilla de WhatsApp y las piezas del mensaje.
+  // El motivo lleva su punto final; el detalle no se cierra con otro si ya termina en puntuación.
+  _partesCancelacion_(sesion, equipo, motivo, detalle) {
+    const dia = Notificaciones._diaSemana(sesion.Fecha).toLowerCase();
+    const cuando = (dia ? dia + ' ' : '') + Notificaciones._formatFecha(sesion.Fecha) + ' a las ' + sesion.HoraInicio;
+    const extra = detalle ? ` Información adicional: ${detalle}${/[.!?…]$/.test(detalle) ? '' : '.'}` : '';
+    return [equipo ? equipo.Nombre : 'tu equipo', cuando, `${motivo}.${extra}`];
+  },
+
+  /**
+   * Contactos de la familia de un jugador para un canal: los de los tutores y, si no hay ninguno registrado,
+   * los del propio jugador (adultos). En correo se respeta «Avisos por correo desactivados» de cada tutor.
+   * El cliente replica esta regla en App.views.cancelarSesion._contactos para el recuento previo.
+   * @returns {{ valor: string, nombre: string }[]}
+   */
+  contactosFamilia(jugador, canal) {
+    const tutores = [1, 2].map(n => ({
+      nombre: [jugador['NombrePadre' + n], jugador['ApellidosPadre' + n]].filter(Boolean).join(' '),
+      telefono: jugador['TelefonoPadre' + n],
+      email: jugador['EmailPadre' + n],
+      activo: jugador['NotificarAusenciasPadre' + n] !== false && jugador['NotificarAusenciasPadre' + n] !== 'FALSE',
+    }));
+    const propio = { nombre: [jugador.Nombre, jugador.Apellidos].filter(Boolean).join(' '), telefono: jugador.Telefono, email: jugador.Email, activo: true };
+    const valor = canal === 'whatsapp' ? c => WhatsApp.numero(c.telefono) : c => Notificaciones._email_(c.email);
+    const deTutores = tutores.filter(c => valor(c));
+    const elegidos = deTutores.length ? deTutores.filter(c => canal === 'whatsapp' || c.activo) : [propio].filter(c => valor(c));
+    const vistos = new Set();
+    return elegidos.map(c => ({ valor: valor(c), nombre: c.nombre }))
+      .filter(c => !vistos.has(c.valor) && vistos.add(c.valor));
+  },
+
+  _email_(valor) {
+    const email = String(valor || '').trim();
+    return /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(email) ? email : '';
+  },
+
+  /**
+   * Avisa a las familias de los convocados de una sesión ya cancelada por el canal elegido.
+   * Quien no tiene teléfono (WhatsApp) o correo (Correo) se omite sin afectar al resto. 'copiar' no envía nada:
+   * devuelve el mensaje para que el entrenador lo pegue donde quiera.
+   * @param {Object} sesion - Sesión cancelada (con MotivoCancelacion y DetalleCancelacion)
+   * @param {string} canal  - Uno de CONFIG.CANALES_AVISO_CANCELACION
+   * @returns {{ canal: string, mensaje?: string, convocados?: number, avisados?: number, omitidos?: number,
+   *   fallidos?: number, modo?: string, enlaces?: Object[] }}
+   */
+  avisarCancelacionAFamilias(sesion, canal) {
+    if (canal === 'ninguno') return { canal: canal };
+    const equipo = findById(CONFIG.SHEETS.EQUIPOS, sesion.ID_Equipo);
+    const mensaje = Notificaciones.mensajeCancelacion(sesion, equipo, sesion.MotivoCancelacion, sesion.DetalleCancelacion);
+    const jugadores = Sesiones.convocados(sesion);
+    const resultado = { canal: canal, mensaje: mensaje, convocados: jugadores.length, avisados: 0, omitidos: 0, fallidos: 0 };
+    if (canal === 'copiar') return resultado;
+
+    const familias = jugadores.map(j => ({
+      jugador: [j.Nombre, j.Apellidos].filter(Boolean).join(' '),
+      contactos: Notificaciones.contactosFamilia(j, canal),
+    }));
+    resultado.omitidos = familias.filter(f => !f.contactos.length).length;
+    const conContacto = familias.filter(f => f.contactos.length);
+    if (canal === 'correo') return Object.assign(resultado, Notificaciones._avisarCancelacionPorCorreo_(conContacto, sesion, equipo, mensaje));
+
+    // WhatsApp: un aviso por número; los hermanos con el mismo número comparten aviso.
+    const destinos = [], porNumero = {};
+    conContacto.forEach((f, i) => f.contactos.forEach(c => {
+      if (!porNumero[c.valor]) destinos.push(porNumero[c.valor] = { telefono: c.valor, nombre: c.nombre, jugadores: [], familias: [] });
+      porNumero[c.valor].jugadores.push(f.jugador);
+      porNumero[c.valor].familias.push(i);
+    }));
+    const parametros = Notificaciones._partesCancelacion_(sesion, equipo, sesion.MotivoCancelacion, sesion.DetalleCancelacion);
+    const envio = WhatsApp.avisar(destinos, mensaje, parametros);
+    // Una familia cuenta como avisada si al menos uno de sus números recibió el aviso (o tiene su enlace).
+    const avisadas = new Set();
+    envio.enviados.forEach(d => d.familias.forEach(i => avisadas.add(i)));
+    const sinAviso = new Set();
+    envio.fallidos.forEach(d => d.familias.forEach(i => { if (!avisadas.has(i)) sinAviso.add(i); }));
+    const enlace = d => ({ nombre: d.nombre, jugadores: d.jugadores, telefono: d.telefono, url: d.url });
+    return Object.assign(resultado, {
+      modo: envio.modo,
+      avisados: avisadas.size,
+      fallidos: sinAviso.size,
+      enlaces: (envio.modo === 'enlaces' ? envio.enviados : envio.fallidos).map(enlace),
+    });
+  },
+
+  // Un correo por familia (sus direcciones en «Para»): ninguna familia ve las direcciones de las demás.
+  _avisarCancelacionPorCorreo_(familias, sesion, equipo, mensaje) {
+    const enviados = new Set();
+    let avisados = 0, fallidos = 0;
+    const asunto = `CB Baeza — Entrenamiento cancelado: ${equipo ? equipo.Nombre : 'tu equipo'} (${Notificaciones._formatFecha(sesion.Fecha)})`;
+    const cuerpo = `Hola,\n\n${mensaje}\n\nUn saludo,\nCB Baeza — Gestión de Asistencia`;
+    familias.forEach(f => {
+      const pendientes = f.contactos.map(c => c.valor).filter(email => !enviados.has(email));
+      if (!pendientes.length) { avisados++; return; } // un hermano ya lo envió a estas direcciones
+      try {
+        MailApp.sendEmail({ to: pendientes.join(','), subject: asunto, body: cuerpo });
+        pendientes.forEach(email => enviados.add(email));
+        avisados++;
+      } catch (e) {
+        Logger.log('[Notificaciones] No se pudo enviar un aviso de cancelación por correo.');
+        fallidos++;
+      }
+    });
+    return { avisados: avisados, fallidos: fallidos };
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════
   // GENERADOR DE MENSAJE AUTOMÁTICO
   // ══════════════════════════════════════════════════════════════════════════════
 

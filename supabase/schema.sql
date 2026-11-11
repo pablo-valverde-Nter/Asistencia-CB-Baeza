@@ -101,7 +101,8 @@ CREATE TABLE IF NOT EXISTS public."Sesiones" (
   "Cancelada" boolean DEFAULT false,
   "MotivoCancelacion" text,
   "FechaCancelacion" text,
-  "FechaPrimerRegistro" text
+  "FechaPrimerRegistro" text,
+  "DetalleCancelacion" text
 );
 
 CREATE TABLE IF NOT EXISTS public."Asist_Jugadores" (

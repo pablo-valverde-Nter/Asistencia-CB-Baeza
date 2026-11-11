@@ -237,6 +237,7 @@ function cargarDatos(auth) {
       asistEntrenadores:   asistEntFinal,
       programacionesJustificaciones: programacionesR.data.map(justificacionLegible_),
       motivosJustificacion: CONFIG.MOTIVOS_JUSTIFICACION,
+      motivosCancelacion:  CONFIG.MOTIVOS_CANCELACION,
       estadisticas:        estadisticas,
       estadisticasError:   estadisticasError,
       alertasAusencias:    alertasAusencias,
@@ -770,10 +771,31 @@ function eliminarSesion(auth, sesionId) {
   }
 }
 
-function cancelarSesion(auth, sesionId, motivo) {
+/**
+ * Cancela una sesión y, si se pide, avisa a las familias de los convocados.
+ * @param {Object} auth
+ * @param {string} sesionId
+ * @param {string} motivo - Uno de CONFIG.MOTIVOS_CANCELACION
+ * @param {{ detalle?: string, canal?: string }} [opciones] - canal: uno de CONFIG.CANALES_AVISO_CANCELACION
+ *   (por defecto 'ninguno'); sin opciones se comporta como la firma anterior (motivo sin detalle ni avisos).
+ * @returns {{ success: boolean, sesion?: Object, notificacion?: Object, error?: string }}
+ *   La sesión queda cancelada aunque fallen los avisos; entonces notificacion.error lo explica.
+ */
+function cancelarSesion(auth, sesionId, motivo, opciones) {
   try {
     Auth.requireEntrenadorOAdmin(auth);
-    return { success: true, sesion: Sesiones.cancelarSesion(sesionId, motivo) };
+    const datos = opciones || {};
+    const canal = datos.canal || 'ninguno';
+    if (!CONFIG.CANALES_AVISO_CANCELACION.includes(canal)) throw new Error('Forma de aviso no válida.');
+    const sesion = Sesiones.cancelarSesion(sesionId, motivo, datos.detalle);
+    let notificacion;
+    try {
+      notificacion = Notificaciones.avisarCancelacionAFamilias(sesion, canal);
+    } catch (e) {
+      Logger.log('[cancelarSesion] No se pudieron preparar los avisos a las familias.');
+      notificacion = { canal: canal, error: 'El entrenamiento se ha cancelado, pero no se pudieron preparar los avisos a las familias.' };
+    }
+    return { success: true, sesion: sesion, notificacion: notificacion };
   } catch (e) {
     return { success: false, error: e.message };
   }

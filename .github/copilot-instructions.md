@@ -33,6 +33,7 @@ src/
   Sesiones.gs        → Generación automática de sesiones + sesiones extra
   Asistencia.gs      → Registro y consulta de asistencia de jugadores y entrenadores
   Estadisticas.gs    → Motor puro de métricas (única fuente de P/A/R agregados; la UI lee App.stats, nunca recalcula)
+  Notificaciones.gs  → Correos (MailApp) y textos de avisos; WhatsApp.gs → Cloud API o enlaces wa.me
   Code.gs            → doGet(), endpoints públicos (funciones llamadas por google.script.run)
 ui/
   Index.html         → Shell SPA: navegación + contenedor de vistas
@@ -87,6 +88,7 @@ Los IDs son strings únicos generados con `Utilities.getUuid()`. `CONFIG.SHEETS`
 - Al inicio de cada semana (o bajo demanda) se **auto-generan** las sesiones correspondientes al patrón.
 - Se pueden añadir **sesiones extra** con fecha y hora personalizadas.
 - Las sesiones existentes se pueden **modificar** (fecha, hora) o **eliminar** (borra asistencias en cascada).
+- **Cancelar entrenamiento** (solo sin asistencia guardada): botón ámbar `.btn-aviso` del pase de lista → asistente `App.views.cancelarSesion` (`.wizard-cards`): motivo (`CONFIG.MOTIVOS_CANCELACION`), detalle opcional (`DetalleCancelacion`), canal (`CONFIG.CANALES_AVISO_CANCELACION`) y resumen. `cancelarSesion(auth, id, motivo, { detalle, canal })` cancela y luego avisa a las familias de `Sesiones.convocados` (`Notificaciones.avisarCancelacionAFamilias`); un fallo de avisos no deshace la cancelación. WhatsApp usa la Cloud API solo con `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_ID` y si no devuelve enlaces `wa.me` que el entrenador pulsa. El cliente replica el mensaje (`mensaje` ↔ `Notificaciones.mensajeCancelacion`) y los contactos (`_contactos` ↔ `contactosFamilia`). Detalle en `docs/modelo-datos.md`.
 
 ### Asistencia de jugadores
 - Estados: `P` (Presente → verde), `A` (Ausente → rojo), `R` (Retraso → amarillo).

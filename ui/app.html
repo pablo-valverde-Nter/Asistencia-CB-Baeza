@@ -51,6 +51,7 @@ const App = {
     rol:                  null,
     jugador:              null,
     motivosJustificacion: [],
+    motivosCancelacion:   [],
     avisosJugador:        [],
     _loginTipo:           'entrenador',
     sesionJugadorId:      null,
@@ -1089,6 +1090,7 @@ const App = {
     App.state.rol = null;
     App.state.jugador = null;
     App.state.motivosJustificacion = [];
+    App.state.motivosCancelacion = [];
     App.state.avisosJugador = [];
     App.views.avisoClub.ocultar();
     document.getElementById('user-badge-avatar').textContent = '?';
@@ -1132,6 +1134,7 @@ const App = {
     App.state.esAdmin      = !!ctx.esAdmin;
     App.state.equipos      = ctx.equipos      || [];
     App.state.motivosJustificacion = res.motivosJustificacion || [];
+    App.state.motivosCancelacion = res.motivosCancelacion || [];
     App.state.avisosJugador = res.avisosJugador || [];
 
     if (ctx.rol === 'jugador') {
@@ -1480,7 +1483,8 @@ const App = {
       abrirSesion: function(sesionId) {
         var sesion = App.cache.sesiones.find(function(s) { return s.ID === sesionId; });
         if (sesion && (sesion.Cancelada === true || sesion.Cancelada === 'TRUE')) {
-          App.openModal('Sesión cancelada', '<div style="padding:16px"><p>' + _esc(sesion.MotivoCancelacion || '') + '</p><p>' + _esc(sesion.FechaCancelacion || '—') + '</p>' +
+          App.openModal('Sesión cancelada', '<div style="padding:16px"><p>' + _esc(sesion.MotivoCancelacion || '') + '</p>' +
+            (sesion.DetalleCancelacion ? '<p data-no-i18n>' + _esc(sesion.DetalleCancelacion) + '</p>' : '') + '<p>' + _esc(sesion.FechaCancelacion || '—') + '</p>' +
             '<button class="btn btn-primary btn-full mt-8" onclick="App.views.sesiones.reactivar(\'' + sesionId + '\')">Reactivar</button></div>');
           return;
         }
@@ -2217,27 +2221,20 @@ const App = {
         if (!tipoRestaurado) showToast(item.Nombre + ' a\u00f1adido a la sesi\u00f3n', 'success');
       },
 
+      // «Cancelar entrenamiento» abre el asistente App.views.cancelarSesion; al confirmarse vuelve aquí con _trasCancelar.
       cancelar: function() {
-        var motivos = ['Instalación no disponible', 'Festivo o vacaciones', 'Climatología', 'Falta de jugadores', 'Partido o torneo', 'Otro'];
-        App.openModal('Cancelar sesión', '<div style="padding:16px"><div class="form-group"><label for="cancelacion-motivo">Motivo</label><select id="cancelacion-motivo">' +
-          motivos.map(function(m) { return '<option value="' + _esc(m) + '">' + _esc(m) + '</option>'; }).join('') +
-          '</select></div><button class="btn btn-primary btn-full" onclick="App.views.sesion._confirmarCancelar()">Confirmar cancelación</button></div>');
+        if (App.state.sesionId) App.views.cancelarSesion.abrir(App.state.sesionId);
       },
 
-      _confirmarCancelar: function() {
-        var id = App.state.sesionId;
-        var motivo = document.getElementById('cancelacion-motivo').value;
-        return App.operation.run('cancel-session:' + id, 'cancelarSesion', [id, motivo], function(res) {
-          App.cache.upsert('sesiones', res.sesion);
-          App.stats.invalidar();
-          App.closeModal();
-          App.views.sesion._stopAutoSave();
-          App.state._formIsDirty = false;
-          App.state.sesionId = null;
-          var hIdx = App.state.viewHistory.lastIndexOf('sesiones');
-          App.state.viewHistory = hIdx >= 0 ? App.state.viewHistory.slice(0, hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'sesion'; });
-          App.navigate('sesiones', null, false);
-        }).catch(function() {});
+      // La sesión ya está cancelada: deja el pase de lista y vuelve al calendario del equipo.
+      _trasCancelar: function(sesionId) {
+        if (App.state.sesionId !== sesionId) return;
+        App.views.sesion._stopAutoSave();
+        App.state._formIsDirty = false;
+        App.state.sesionId = null;
+        var hIdx = App.state.viewHistory.lastIndexOf('sesiones');
+        App.state.viewHistory = hIdx >= 0 ? App.state.viewHistory.slice(0, hIdx) : App.state.viewHistory.filter(function(v) { return v !== 'sesion'; });
+        App.navigate('sesiones', null, false);
       },
 
       eliminar: function() {
@@ -3443,6 +3440,259 @@ const App = {
       },
     },
 
+    // -- Cancelar entrenamiento (entrenador/admin): asistente paso a paso -------
+    // Mismas tarjetas que la justificación: motivo (obligatorio), detalle (opcional), cómo avisar a las familias de los
+    // convocados y resumen. Solo «Cancelar entrenamiento» del resumen llama a cancelarSesion; el paso final muestra lo
+    // hecho y, con WhatsApp sin Cloud API configurada, un enlace wa.me por familia para enviarlo con un toque.
+    cancelarSesion: {
+      PASOS: ['motivo', 'detalle', 'aviso', 'resumen'],
+      CANALES: { whatsapp: 'WhatsApp', correo: 'Correo', copiar: 'Copiar mensaje', ninguno: 'No notificar' },
+      _paso: 'motivo',
+      _sesionId: null,
+      _datos: null,      // { motivo, detalle, canal }
+      _mensaje: '',      // mensaje enviado o copiado (paso final)
+
+      abrir: function(sesionId) {
+        var sesion = this._sesion(sesionId);
+        if (!sesion) return;
+        this._sesionId = sesionId;
+        this._datos = { motivo: '', detalle: '', canal: '' };
+        this._mensaje = '';
+        document.getElementById('cancelar-motivos').innerHTML = App.state.motivosCancelacion.map(function(m) {
+          return '<button type="button" class="justif-chip" data-motivo="' + _esc(m) + '" aria-pressed="false" onclick="App.views.cancelarSesion.elegirMotivo(this.dataset.motivo)">' + _esc(m) + '</button>';
+        }).join('');
+        document.getElementById('cancelar-detalle').value = '';
+        document.getElementById('cancelar-resultado').innerHTML = '';
+        document.getElementById('cancelar-sesion-info').textContent = this._descripcion(sesion);
+        this._irA('motivo', 0);
+        document.getElementById('modal-cancelar-sesion').classList.remove('hidden');
+        // Foco dentro del diálogo: lectores de pantalla y Escape (onkeydown del overlay) funcionan desde el inicio.
+        var foco = document.querySelector('#cancelar-steps .justif-step[data-step="motivo"] .justif-question');
+        if (foco) foco.focus({ preventScroll: true });
+      },
+
+      // Con evento solo cierra al tocar el fondo; sin él (X, Escape, «Entendido») cierra siempre. Antes de confirmar no cambia nada.
+      cerrar: function(e) {
+        var modal = document.getElementById('modal-cancelar-sesion');
+        if (e && e.target !== modal) return;
+        modal.classList.add('hidden');
+      },
+
+      _sesion: function(id) {
+        return App.cache.sesiones.find(function(s) { return s.ID === id; }) || null;
+      },
+
+      _descripcion: function(sesion) {
+        var f = _fmtFecha(sesion.Fecha), equipo = App.cache.getEquipoById(sesion.ID_Equipo);
+        return (equipo ? equipo.Nombre + ' \u00b7 ' : '') + f.dn + ' ' + f.d + ' ' + f.ml + ' \u00b7 ' + sesion.HoraInicio + (sesion.HoraFin ? '\u2013' + sesion.HoraFin : '');
+      },
+
+      // Réplica de Notificaciones.contactosFamilia (recuento previo): los tutores y, si no hay ninguno registrado, el
+      // propio jugador; en correo, solo los tutores con los avisos por correo activados.
+      _contactos: function(j, canal) {
+        var valor = canal === 'whatsapp'
+          ? function(c) { return _statsTelefono(c.telefono); }
+          : function(c) { var email = String(c.email || '').trim(); return /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(email) ? email : ''; };
+        var tutores = [1, 2].map(function(n) {
+          var aviso = j['NotificarAusenciasPadre' + n];
+          return { telefono: j['TelefonoPadre' + n], email: j['EmailPadre' + n], activo: aviso !== false && aviso !== 'FALSE' };
+        });
+        var deTutores = tutores.filter(valor);
+        var elegidos = deTutores.length ? deTutores.filter(function(c) { return canal === 'whatsapp' || c.activo; })
+          : [{ telefono: j.Telefono, email: j.Email }].filter(valor);
+        return elegidos.map(valor).filter(function(v, i, todos) { return todos.indexOf(v) === i; });
+      },
+
+      // Convocados (la lista guardada del pase de lista, como Sesiones.convocados) y cuántas familias tienen cada contacto.
+      _familias: function() {
+        var sesion = this._sesion(this._sesionId), self = this;
+        var jugadores = sesion ? App.views.sesion._buildFromCache(sesion).jugadores.map(function(i) { return i.jugador; }) : [];
+        var con = function(canal) { return jugadores.filter(function(j) { return self._contactos(j, canal).length > 0; }).length; };
+        return { total: jugadores.length, whatsapp: con('whatsapp'), correo: con('correo') };
+      },
+
+      // Réplica de Notificaciones.mensajeCancelacion: lo que se previsualiza y se copia es lo que reciben las familias.
+      mensaje: function(sesion, equipo, motivo, detalle) {
+        var partes = String(sesion.Fecha || '').split('-'), numeros = partes.map(Number);
+        var valida = partes.length === 3 && numeros.every(function(n) { return Number.isInteger(n); });
+        var dias = ['domingo', 'lunes', 'martes', 'mi\u00e9rcoles', 'jueves', 'viernes', 's\u00e1bado'];
+        var dia = valida ? dias[new Date(Date.UTC(numeros[0], numeros[1] - 1, numeros[2])).getUTCDay()] : '';
+        var fecha = partes.length === 3 ? partes[2] + '/' + partes[1] + '/' + partes[0] : String(sesion.Fecha || '');
+        var extra = detalle ? ' Informaci\u00f3n adicional: ' + detalle + (/[.!?\u2026]$/.test(detalle) ? '' : '.') : '';
+        return 'CB Baeza: se cancela el entrenamiento de ' + (equipo ? equipo.Nombre : 'tu equipo') + ' del ' + (dia ? dia + ' ' : '') + fecha +
+          ' a las ' + sesion.HoraInicio + '. Motivo: ' + motivo + '.' + extra;
+      },
+
+      // Detalle en una sola línea, como lo guarda el servidor.
+      _detalle: function() {
+        var campo = document.getElementById('cancelar-detalle');
+        return String(campo.value || '').replace(/\s+/g, ' ').trim();
+      },
+
+      // Muestra el paso indicado. direccion: 1 avanza, -1 retrocede, 0 sin animación.
+      _irA: function(paso, direccion) {
+        App.wizardCards.salida('modal-cancelar-sesion', direccion);
+        this._paso = paso;
+        var d = this._datos, indice = this.PASOS.indexOf(paso), final = paso === 'hecho';
+        if (paso === 'aviso') this._pintarCanales();
+        if (paso === 'resumen') this._pintarResumen();
+        document.querySelectorAll('#cancelar-steps .justif-step').forEach(function(step) { step.hidden = step.dataset.step !== paso; });
+        document.querySelectorAll('#cancelar-steps [data-motivo]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.motivo === d.motivo)); });
+        document.querySelectorAll('#cancelar-steps [data-canal]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.canal === d.canal)); });
+        document.getElementById('cancelar-continuar-motivo').disabled = !d.motivo;
+        this._actualizarBotones();
+        document.getElementById('cancelar-progress').classList.toggle('hidden', final);
+        document.getElementById('cancelar-progress-text').textContent = 'Paso ' + (indice + 1) + ' de ' + this.PASOS.length;
+        document.getElementById('cancelar-progress-fill').style.width = Math.round((indice + 1) * 100 / this.PASOS.length) + '%';
+        document.getElementById('cancelar-atras').style.visibility = indice > 0 && !final ? 'visible' : 'hidden';
+        App.wizardCards.entrada('modal-cancelar-sesion', direccion, final ? 0 : this.PASOS.length - 1 - indice);
+        var contenedor = document.getElementById('cancelar-steps');
+        contenedor.scrollTop = 0;
+        if (!direccion || !contenedor.querySelector) return;
+        var foco = contenedor.querySelector('.justif-step[data-step="' + paso + '"] .justif-question');
+        if (foco) foco.focus({ preventScroll: true });
+      },
+
+      // Detalle: paso omitible, «Continuar» solo con texto (App.wizardCards.actualizarBotones).
+      _actualizarBotones: function() {
+        App.wizardCards.actualizarBotones('cancelar', this._paso, this._paso === 'detalle', !!this._detalle());
+      },
+
+      siguiente: function() {
+        var i = this.PASOS.indexOf(this._paso);
+        if (i >= 0 && i < this.PASOS.length - 1) this._irA(this.PASOS[i + 1], 1);
+      },
+
+      atras: function() {
+        var i = this.PASOS.indexOf(this._paso);
+        if (i > 0) this._irA(this.PASOS[i - 1], -1);
+      },
+
+      elegirMotivo: function(motivo) {
+        if (App.state.motivosCancelacion.indexOf(motivo) < 0) return;
+        this._datos.motivo = motivo;
+        this.siguiente();
+      },
+
+      continuarDetalle: function() {
+        this._datos.detalle = this._detalle();
+        this.siguiente();
+      },
+
+      omitirDetalle: function() {
+        document.getElementById('cancelar-detalle').value = '';
+        this._datos.detalle = '';
+        this.siguiente();
+      },
+
+      _pintarCanales: function() {
+        var f = this._familias();
+        document.getElementById('cancelar-aviso-hint').textContent = 'Jugadores convocados: ' + f.total;
+        document.getElementById('cancelar-canal-whatsapp-info').textContent = f.whatsapp + ' de ' + f.total + ' con tel\u00e9fono';
+        document.getElementById('cancelar-canal-correo-info').textContent = f.correo + ' de ' + f.total + ' con correo';
+      },
+
+      elegirCanal: function(canal) {
+        if (!this.CANALES[canal]) return;
+        this._datos.canal = canal;
+        this.siguiente();
+      },
+
+      _pintarResumen: function() {
+        var d = this._datos, sesion = this._sesion(this._sesionId);
+        if (!sesion) return;
+        var filas = [['Entrenamiento', this._descripcion(sesion)], ['Motivo', d.motivo]];
+        if (d.detalle) filas.push(['Detalles', d.detalle]);
+        filas.push(['Aviso a las familias', this.CANALES[d.canal] || '']);
+        var notas = [], f = d.canal === 'whatsapp' || d.canal === 'correo' ? this._familias() : null;
+        var sinDatos = f ? f.total - f[d.canal] : 0;
+        if (d.canal === 'whatsapp') {
+          notas.push('Si el env\u00edo autom\u00e1tico no est\u00e1 configurado, al confirmar ver\u00e1s un enlace de WhatsApp por familia con el mensaje ya escrito.');
+          if (sinDatos) notas.push(sinDatos === 1 ? '1 familia no tiene tel\u00e9fono: no recibir\u00e1 el aviso.' : sinDatos + ' familias no tienen tel\u00e9fono: no recibir\u00e1n el aviso.');
+        } else if (d.canal === 'correo') {
+          notas.push('Cada familia recibir\u00e1 su propio correo.');
+          if (sinDatos) notas.push(sinDatos === 1 ? '1 familia no tiene correo o tiene los avisos por correo desactivados: no recibir\u00e1 el aviso.' : sinDatos + ' familias no tienen correo o tienen los avisos por correo desactivados: no recibir\u00e1n el aviso.');
+        } else if (d.canal === 'copiar') {
+          notas.push('Al confirmar se copiar\u00e1 el mensaje para que lo pegues donde quieras.');
+        } else {
+          notas.push('No se avisar\u00e1 a las familias.');
+        }
+        document.getElementById('cancelar-resumen').innerHTML = '<dl>' + filas.map(function(fila) {
+          return '<dt>' + _esc(fila[0]) + '</dt><dd>' + _esc(fila[1]) + '</dd>';
+        }).join('') + '</dl>' + notas.map(function(n) { return '<p class="alta-aviso" role="note">' + _esc(n) + '</p>'; }).join('');
+        var conMensaje = d.canal !== 'ninguno';
+        document.getElementById('cancelar-preview-wrap').hidden = !conMensaje;
+        document.getElementById('cancelar-preview').textContent = conMensaje ? this.mensaje(sesion, App.cache.getEquipoById(sesion.ID_Equipo), d.motivo, d.detalle) : '';
+      },
+
+      confirmar: function() {
+        var d = this._datos, id = this._sesionId, sesion = this._sesion(id), self = this;
+        if (!sesion || !d || !d.motivo || !this.CANALES[d.canal]) return Promise.resolve(false);
+        // «Copiar mensaje» copia dentro del toque: tras la respuesta del servidor el navegador puede negar el portapapeles.
+        var copia = d.canal === 'copiar' ? _copiarTexto(this.mensaje(sesion, App.cache.getEquipoById(sesion.ID_Equipo), d.motivo, d.detalle)) : Promise.resolve(false);
+        var boton = document.getElementById('cancelar-confirmar');
+        boton.disabled = true;
+        return App.operation.run('cancel-session:' + id, 'cancelarSesion', [id, d.motivo, { detalle: d.detalle, canal: d.canal }], function(res) {
+          App.cache.upsert('sesiones', res.sesion);
+          App.stats.invalidar();
+          App.views.sesion._trasCancelar(id);
+          return copia.then(function(copiado) {
+            self._pintarResultado(res.notificacion || { canal: d.canal }, copiado);
+            self._irA('hecho', 1);
+            return true;
+          });
+        }, null, { pending: 'Cancelando\u2026', success: 'Entrenamiento cancelado' })
+          .catch(function() { return false; /* App.operation ya muestra el error */ })
+          .then(function(ok) { boton.disabled = false; return ok; });
+      },
+
+      // Paso final: qué se hizo con los avisos y, en WhatsApp sin Cloud API (o con envíos fallidos), un enlace por familia.
+      _pintarResultado: function(n, copiado) {
+        this._mensaje = n.mensaje || '';
+        var filas = [], notas = [], html = '';
+        if (n.error) notas.push(n.error);
+        else if (n.canal === 'ninguno') notas.push('No se ha avisado a las familias.');
+        else if (n.canal === 'copiar') notas.push(copiado ? 'Mensaje copiado. P\u00e9galo donde quieras.' : 'Copia el mensaje y p\u00e9galo donde quieras.');
+        else if (n.canal === 'correo') {
+          filas.push(['Familias avisadas por correo', n.avisados], ['Omitidas por no tener correo', n.omitidos]);
+          if (n.fallidos) filas.push(['No se pudo enviar', n.fallidos]);
+        } else if (n.canal === 'whatsapp') {
+          var enlaces = n.modo === 'enlaces';
+          filas.push([enlaces ? 'Familias con enlace preparado' : 'Familias avisadas por WhatsApp', n.avisados], ['Omitidas por no tener tel\u00e9fono', n.omitidos]);
+          if (n.fallidos) filas.push(['No se pudo enviar', n.fallidos]);
+          if ((n.enlaces || []).length) notas.push(enlaces ? 'Toca cada familia para abrir WhatsApp con el mensaje ya escrito y env\u00edalo.' : 'Estos avisos no se pudieron enviar autom\u00e1ticamente: toca cada familia para enviarlo t\u00fa.');
+        }
+        if (filas.length) html += '<div class="alta-resumen"><dl>' + filas.map(function(f) { return '<dt>' + _esc(f[0]) + '</dt><dd>' + _esc(String(f[1] || 0)) + '</dd>'; }).join('') + '</dl></div>';
+        html += notas.map(function(t) { return '<p class="justif-hint cancelar-nota">' + _esc(t) + '</p>'; }).join('');
+        if (n.canal === 'whatsapp' && (n.enlaces || []).length) {
+          html += '<ul class="cancelar-enlaces">' + n.enlaces.map(function(e) {
+            var nombre = e.nombre || 'Familia de ' + (e.jugadores || []).join(', ');
+            // Enlace real que pulsa el entrenador (como en Contacto): window.open queda bloqueado en el iframe de Apps Script.
+            return '<li><a class="cancelar-enlace" href="' + _esc(e.url) + '" target="_blank" rel="noopener noreferrer" onclick="App.views.cancelarSesion.marcarEnviado(this)">' +
+              '<span class="cancelar-enlace-texto" data-no-i18n><strong>' + _esc(nombre) + '</strong><small>' + _esc((e.nombre ? (e.jugadores || []).join(', ') + ' \u00b7 ' : '') + e.telefono) + '</small></span>' +
+              '<span class="cancelar-enlace-ir">WhatsApp</span></a></li>';
+          }).join('') + '</ul>';
+        }
+        if (n.canal === 'copiar' && this._mensaje) {
+          html += '<div class="justif-preview-wrap"><div class="justif-preview-label">Mensaje para las familias</div><div class="justif-preview" data-no-i18n>' + _esc(this._mensaje) + '</div></div>' +
+            '<button type="button" class="btn btn-secondary btn-full" onclick="App.views.cancelarSesion.copiar()">Copiar mensaje</button>';
+        }
+        document.getElementById('cancelar-resultado').innerHTML = html;
+      },
+
+      // Marca la familia ya abierta en WhatsApp (solo visual, para seguir la lista); no cancela la navegación.
+      marcarEnviado: function(enlace) {
+        enlace.classList.add('is-done');
+      },
+
+      copiar: function() {
+        return _copiarTexto(this._mensaje).then(function(ok) {
+          showToast(ok ? 'Mensaje copiado' : 'No se pudo copiar; mant\u00e9n pulsado el texto para copiarlo', ok ? 'success' : 'error');
+          return ok;
+        });
+      },
+    },
+
     // -- Bienvenida (primera entrada de jugador/familia): asistente paso a paso ---
     // Mismos componentes que altaJugador. Se abre mientras Jugadores.BienvenidaVista es NULL y se marca con
     // marcarBienvenidaVista al guardar, al terminar sin cambios o al cerrar con la X. Guarda con actualizarMiPerfil:
@@ -4174,7 +4424,8 @@ const App = {
           '<h2>' + f.dn + ', ' + f.d + ' de ' + f.ml + '</h2>' +
           '<div class="vh-sub">' + s.HoraInicio + '\u2013' + s.HoraFin + (eq ? ' \u00b7 ' + _esc(eq.Nombre) : '') + '</div>';
         if (s.Cancelada === true || s.Cancelada === 'TRUE') {
-          document.getElementById('detalle-sesion-jug-estado').innerHTML = '<div class="sesion-estado-texto">Entrenamiento cancelado: ' + _esc(s.MotivoCancelacion || '') + '</div>';
+          document.getElementById('detalle-sesion-jug-estado').innerHTML = '<div class="sesion-estado-texto">Entrenamiento cancelado: ' + _esc(s.MotivoCancelacion || '') + '</div>' +
+            (s.DetalleCancelacion ? '<div class="sesion-estado-texto" data-no-i18n>' + _esc(s.DetalleCancelacion) + '</div>' : '');
           document.getElementById('detalle-sesion-jug-actions').innerHTML = '';
           return;
         }
@@ -7466,7 +7717,6 @@ App.i18n = {
 "Crear":"Create",
 "Sin jugadores asignados":"No assigned players",
 "Sin entrenadores asignados":"No assigned coaches",
-"Confirmar cancelación":"Confirm cancellation",
 "Sin entrenadores":"No coaches",
 "Guardar como PDF":"Save as PDF",
 "jugadores activos":"active players",
@@ -7763,7 +8013,6 @@ App.i18n = {
   "Sesión cancelada": "Cancelled session",
   "Reactivar": "Reactivate",
   "Reactivar sesión": "Reactivate session",
-  "Cancelar sesión": "Cancel session",
   "Eliminar sesión": "Delete session",
   "Guardar asistencia": "Save attendance",
   "Asistencia guardada": "Attendance saved",
@@ -8317,8 +8566,49 @@ App.i18n.patrones.push(
   [/^de (\d+) jugadores$/, 'of $1 players'],
   [/^Paso (\d+) de (\d+)$/, 'Step $1 of $2'],
   [/^Hola, (.+) y familia$/, 'Hi, $1 and family'],
-  [/^Te faltan (\d+) datos$/, '$1 details missing']
+  [/^Te faltan (\d+) datos$/, '$1 details missing'],
+  [/^Jugadores convocados: (\d+)$/, 'Players called up: $1'],
+  [/^(\d+) de (\d+) con teléfono$/, '$1 of $2 with a phone number'],
+  [/^(\d+) de (\d+) con correo$/, '$1 of $2 with an email'],
+  [/^(\d+) familias no tienen teléfono: no recibirán el aviso\.$/, '$1 families have no phone number and will not be notified.'],
+  [/^(\d+) familias no tienen correo o tienen los avisos por correo desactivados: no recibirán el aviso\.$/, '$1 families have no email or have email notices turned off and will not be notified.']
 );
+Object.assign(App.i18n.diccionario, {
+  'Cancelar entrenamiento':'Cancel training',
+  'Cancelando…':'Cancelling…',
+  'Entrenamiento cancelado':'Training cancelled',
+  '¿Por qué se cancela?':'Why is it cancelled?',
+  '¿Quieres añadir un detalle?':'Do you want to add a detail?',
+  'Opcional. Lo leerán las familias si eliges avisarlas.':'Optional. Families will read it if you choose to notify them.',
+  'Por ejemplo: recuperamos el entrenamiento el jueves.':'For example: we will make up the session on Thursday.',
+  '¿Cómo avisamos a las familias?':'How should we notify families?',
+  'Copiar mensaje':'Copy message',
+  'Pégalo donde quieras':'Paste it wherever you like',
+  'No notificar':'Do not notify',
+  'Solo se cancela':'Just cancel it',
+  'Revisa y confirma':'Review and confirm',
+  'Mensaje para las familias':'Message for families',
+  'Aviso a las familias':'Family notice',
+  'Si el envío automático no está configurado, al confirmar verás un enlace de WhatsApp por familia con el mensaje ya escrito.':'If automatic sending is not set up, after confirming you will see one WhatsApp link per family with the message already written.',
+  '1 familia no tiene teléfono: no recibirá el aviso.':'1 family has no phone number and will not be notified.',
+  'Cada familia recibirá su propio correo.':'Each family will receive its own email.',
+  '1 familia no tiene correo o tiene los avisos por correo desactivados: no recibirá el aviso.':'1 family has no email or has email notices turned off and will not be notified.',
+  'Al confirmar se copiará el mensaje para que lo pegues donde quieras.':'After confirming, the message will be copied so you can paste it wherever you like.',
+  'No se avisará a las familias.':'Families will not be notified.',
+  'No se ha avisado a las familias.':'Families have not been notified.',
+  'Mensaje copiado. Pégalo donde quieras.':'Message copied. Paste it wherever you like.',
+  'Copia el mensaje y pégalo donde quieras.':'Copy the message and paste it wherever you like.',
+  'Mensaje copiado':'Message copied',
+  'Familias avisadas por correo':'Families notified by email',
+  'Familias avisadas por WhatsApp':'Families notified on WhatsApp',
+  'Familias con enlace preparado':'Families with a link ready',
+  'Omitidas por no tener correo':'Skipped: no email',
+  'Omitidas por no tener teléfono':'Skipped: no phone number',
+  'No se pudo enviar':'Could not be sent',
+  'Toca cada familia para abrir WhatsApp con el mensaje ya escrito y envíalo.':'Tap each family to open WhatsApp with the message already written, then send it.',
+  'Estos avisos no se pudieron enviar automáticamente: toca cada familia para enviarlo tú.':'These notices could not be sent automatically: tap each family to send it yourself.',
+  'El entrenamiento se ha cancelado, pero no se pudieron preparar los avisos a las familias.':'The training session was cancelled, but the family notices could not be prepared.',
+});
 document.addEventListener('DOMContentLoaded',function() { App.i18n.iniciar(); });
 
 </script>

@@ -20,6 +20,7 @@ function servidor() {
       generarMensajeJustificacion: () => 'Aviso',
       notificarJustificacionAEntrenadores: () => false,
       notificarAusenciaAFamilia() {},
+      avisarCancelacionAFamilias: (sesion, canal) => ({ canal }),
     },
     getSheetData: table => rows[table] || [],
     findById: (table, id) => (rows[table] || []).find(row => row.ID === id),
@@ -134,15 +135,18 @@ test('cancelación valida motivo, existencia y asistencia guardada antes de escr
 test('cancelar y reactivar devuelven la sesión actualizada y los endpoints exigen personal', () => {
   const s = servidor();
   s.context.motivo = s.CONFIG.MOTIVOS_CANCELACION[0];
-  const result = vm.runInContext("cancelarSesion({}, 's1', motivo)", s.context);
+  const result = vm.runInContext("cancelarSesion({}, 's1', motivo, { detalle: 'Pista mojada' })", s.context);
   assert.equal(result.success, true);
   assert.equal(result.sesion.Cancelada, true);
   assert.equal(result.sesion.FechaCancelacion, AHORA);
   assert.equal(result.sesion.MotivoCancelacion, s.context.motivo);
+  assert.equal(result.sesion.DetalleCancelacion, 'Pista mojada');
+  assert.equal(result.notificacion.canal, 'ninguno');
   const reactivada = vm.runInContext("reactivarSesion({}, 's1')", s.context);
   assert.equal(reactivada.success, true);
   assert.equal(reactivada.sesion.Cancelada, false);
   assert.equal(reactivada.sesion.MotivoCancelacion, null);
+  assert.equal(reactivada.sesion.DetalleCancelacion, null);
   assert.equal(reactivada.sesion.FechaCancelacion, null);
   s.denegar();
   assert.equal(vm.runInContext("cancelarSesion({}, 's1', motivo)", s.context).error, 'No autorizado.');

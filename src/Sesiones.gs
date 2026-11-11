@@ -144,14 +144,24 @@ const Sesiones = {
     return deleteRow(CONFIG.SHEETS.SESIONES, sesionId);
   },
 
-  cancelarSesion(sesionId, motivo) {
+  /**
+   * Cancela una sesión sin asistencia guardada.
+   * @param {string} sesionId
+   * @param {string} motivo   - Uno de CONFIG.MOTIVOS_CANCELACION
+   * @param {string} [detalle] - Texto libre opcional (se guarda en DetalleCancelacion)
+   * @returns {Object} Sesión actualizada.
+   */
+  cancelarSesion(sesionId, motivo, detalle) {
     if (!CONFIG.MOTIVOS_CANCELACION.includes(motivo)) throw new Error('Motivo de cancelación no válido.');
+    const texto = Sesiones._detalleCancelacion_(detalle);
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
     if (!sesion) throw new Error('Sesión no encontrada.');
+    // Cancelar dos veces volvería a avisar a las familias.
+    if (sesion.Cancelada === true || sesion.Cancelada === 'TRUE') throw new Error('La sesión ya está cancelada.');
     if (sesion.AsistenciaGuardada === true || sesion.AsistenciaGuardada === 'TRUE') {
       throw new Error('No se puede cancelar una sesión con asistencia guardada. Elimínala si fue un error.');
     }
-    const cambios = { Cancelada: true, MotivoCancelacion: motivo, FechaCancelacion: Asistencia._timestamp_() };
+    const cambios = { Cancelada: true, MotivoCancelacion: motivo, DetalleCancelacion: texto || null, FechaCancelacion: Asistencia._timestamp_() };
     updateRow(CONFIG.SHEETS.SESIONES, sesionId, cambios);
     return { ...sesion, ...cambios };
   },
@@ -159,9 +169,36 @@ const Sesiones = {
   reactivarSesion(sesionId) {
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
     if (!sesion) throw new Error('Sesión no encontrada.');
-    const cambios = { Cancelada: false, MotivoCancelacion: null, FechaCancelacion: null };
+    const cambios = { Cancelada: false, MotivoCancelacion: null, DetalleCancelacion: null, FechaCancelacion: null };
     updateRow(CONFIG.SHEETS.SESIONES, sesionId, cambios);
     return { ...sesion, ...cambios };
+  },
+
+  /**
+   * Jugadores previstos en una sesión, como los pinta el pase de lista: la plantilla activa del equipo
+   * (principales y secundarios) y los invitados guardados en ella, sin los quitados de la lista (Excluido).
+   * @param {Object} sesion
+   * @returns {Object[]} Registros de Jugadores.
+   */
+  convocados(sesion) {
+    const esVerdadero = valor => valor === true || valor === 'TRUE';
+    const registros = findWhere(CONFIG.SHEETS.ASIST_JUGADORES, 'ID_Sesion', sesion.ID);
+    const ids = new Set(findWhere(CONFIG.SHEETS.JUGADORES_EQUIPOS, 'ID_Equipo', sesion.ID_Equipo)
+      .filter(r => esVerdadero(r.Activo)).map(r => String(r.ID_Jugador)));
+    registros.filter(r => esVerdadero(r.EsInvitado)).forEach(r => ids.add(String(r.ID_Jugador)));
+    registros.filter(r => esVerdadero(r.Excluido)).forEach(r => ids.delete(String(r.ID_Jugador)));
+    return ids.size ? findWhereIn(CONFIG.SHEETS.JUGADORES, 'ID', [...ids]) : [];
+  },
+
+  // Detalle opcional de la cancelación en una sola línea (también va en la plantilla de WhatsApp, que no admite saltos).
+  _detalleCancelacion_(detalle) {
+    if (detalle === undefined || detalle === null) return '';
+    if (typeof detalle !== 'string') throw new Error('Detalle de cancelación no válido.');
+    const texto = detalle.replace(/\s+/g, ' ').trim();
+    if (texto.length > CONFIG.MAX_DETALLE_CANCELACION) {
+      throw new Error(`El detalle de la cancelación admite como máximo ${CONFIG.MAX_DETALLE_CANCELACION} caracteres.`);
+    }
+    return texto;
   },
 
   // ══════════════════════════════════════════════════════════════════════════════

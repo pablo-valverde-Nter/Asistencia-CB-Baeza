@@ -32,7 +32,7 @@ const SCHEMA = {
   ],
   Sesiones: [
     'ID', 'ID_Equipo', 'ID_Temporada', 'ID_Horario', 'Fecha', 'HoraInicio', 'HoraFin', 'EsExtra', 'Notas', 'AsistenciaGuardada',
-    'Cancelada', 'MotivoCancelacion', 'FechaCancelacion', 'FechaPrimerRegistro'
+    'Cancelada', 'MotivoCancelacion', 'FechaCancelacion', 'FechaPrimerRegistro', 'DetalleCancelacion'
   ],
   Asist_Jugadores: [
     'ID', 'ID_Sesion', 'ID_Jugador', 'Estado', 'EsInvitado', 'Excluido', 'FechaRegistro',

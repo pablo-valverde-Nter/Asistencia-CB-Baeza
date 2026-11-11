@@ -90,11 +90,15 @@ const CONFIG = {
     MAX_SESIONES_DETALLE: 60,
   },
 
-  // ── Motivos de cancelación de sesiones ────────────────────────────────────────
+  // ── Cancelación de sesiones ───────────────────────────────────────────────────
   MOTIVOS_CANCELACION: [
     'Instalación no disponible', 'Festivo o vacaciones', 'Climatología',
     'Falta de jugadores', 'Partido o torneo', 'Otro',
   ],
+  // Texto libre opcional que acompaña al motivo (DetalleCancelacion) y llega a las familias en el aviso.
+  MAX_DETALLE_CANCELACION: 300,
+  // Cómo avisar a las familias de los convocados: 'copiar' solo devuelve el mensaje al entrenador.
+  CANALES_AVISO_CANCELACION: ['ninguno', 'whatsapp', 'correo', 'copiar'],
 
   // ── Días de la semana ─────────────────────────────────────────────────────────
   DIAS_SEMANA: {
