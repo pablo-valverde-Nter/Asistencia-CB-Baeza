@@ -149,9 +149,11 @@ const Sesiones = {
    * @param {string} sesionId
    * @param {string} motivo   - Uno de CONFIG.MOTIVOS_CANCELACION
    * @param {string} [detalle] - Texto libre opcional (se guarda en DetalleCancelacion)
+   * @param {string} canceladoPor - Nombre de la identidad autenticada
+   * @param {string} canal - Canal de aviso elegido
    * @returns {Object} Sesión actualizada.
    */
-  cancelarSesion(sesionId, motivo, detalle) {
+  cancelarSesion(sesionId, motivo, detalle, canceladoPor, canal) {
     if (!CONFIG.MOTIVOS_CANCELACION.includes(motivo)) throw new Error('Motivo de cancelación no válido.');
     const texto = Sesiones._detalleCancelacion_(detalle);
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
@@ -161,7 +163,8 @@ const Sesiones = {
     if (sesion.AsistenciaGuardada === true || sesion.AsistenciaGuardada === 'TRUE') {
       throw new Error('No se puede cancelar una sesión con asistencia guardada. Elimínala si fue un error.');
     }
-    const cambios = { Cancelada: true, MotivoCancelacion: motivo, DetalleCancelacion: texto || null, FechaCancelacion: Asistencia._timestamp_() };
+    const cambios = { Cancelada: true, MotivoCancelacion: motivo, DetalleCancelacion: texto || null,
+      FechaCancelacion: Asistencia._timestamp_(), CanceladoPor: canceladoPor, CanalAvisoCancelacion: canal };
     updateRow(CONFIG.SHEETS.SESIONES, sesionId, cambios);
     return { ...sesion, ...cambios };
   },
@@ -169,7 +172,8 @@ const Sesiones = {
   reactivarSesion(sesionId) {
     const sesion = findById(CONFIG.SHEETS.SESIONES, sesionId);
     if (!sesion) throw new Error('Sesión no encontrada.');
-    const cambios = { Cancelada: false, MotivoCancelacion: null, DetalleCancelacion: null, FechaCancelacion: null };
+    const cambios = { Cancelada: false, MotivoCancelacion: null, DetalleCancelacion: null, FechaCancelacion: null,
+      CanceladoPor: null, CanalAvisoCancelacion: null };
     updateRow(CONFIG.SHEETS.SESIONES, sesionId, cambios);
     return { ...sesion, ...cambios };
   },

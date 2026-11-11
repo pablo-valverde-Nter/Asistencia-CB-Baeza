@@ -1019,6 +1019,8 @@ test('el detalle del jugador muestra el aviso sin registrarlo y las canceladas n
   app.cache.sesiones[0].Cancelada = true;
   app.cache.sesiones[0].MotivoCancelacion = 'Festivo o vacaciones';
   app.views['detalle-sesion-jugador'].render();
-  assert.match(elements.get('detalle-sesion-jug-estado').innerHTML, /Entrenamiento cancelado: Festivo o vacaciones/);
+  assert.match(elements.get('detalle-sesion-jug-estado').innerHTML, /Entrenamiento cancelado/);
+  assert.match(elements.get('detalle-sesion-jug-estado').innerHTML, /Festivo o vacaciones/);
+  assert.match(elements.get('detalle-sesion-jug-estado').innerHTML, /cancelacion-ficha/);
   assert.equal(elements.get('detalle-sesion-jug-actions').innerHTML, '');
 });

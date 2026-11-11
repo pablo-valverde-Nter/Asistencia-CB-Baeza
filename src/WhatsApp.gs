@@ -1,11 +1,10 @@
 /**
  * WhatsApp.gs
- * Avisos por WhatsApp a las familias. Dos modos:
- *  - Cloud API (WhatsApp Business): solo si existen las Script Properties WHATSAPP_TOKEN y WHATSAPP_PHONE_ID.
- *    Los mensajes iniciados por el club exigen una plantilla aprobada por Meta (WHATSAPP_TEMPLATE, por defecto
- *    PLANTILLA_CANCELACION, idioma WHATSAPP_TEMPLATE_LANG, por defecto 'es').
- *  - Enlaces (sin configuración): devuelve un enlace https://wa.me por número con el mensaje precargado para que
- *    el entrenador lo envíe con un toque. No se envía nada automáticamente.
+ * Utilidades internas de WhatsApp. La cancelación prepara enlaces para WhatsApp personal
+ * directamente con enlace(), sin usar avisar() ni enviar mensajes automáticamente.
+ * avisar() conserva la Cloud API si existen WHATSAPP_TOKEN y WHATSAPP_PHONE_ID, o devuelve
+ * enlaces sin configuración. La plantilla requiere aprobación en Meta y debe actualizarse
+ * antes de utilizarla con el mensaje actual de cancelación.
  * Todas las funciones son internas. Nunca se registran números ni mensajes en los logs.
  */
 

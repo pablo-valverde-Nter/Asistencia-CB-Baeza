@@ -16,7 +16,7 @@ function servidor({ propiedades = {}, correoFalla = () => false, whatsappCodigo 
   const logs = [];
   const igual = (a, b) => String(a) === String(b);
   const context = vm.createContext({
-    Auth: { requireEntrenadorOAdmin() {} },
+    Auth: { requireEntrenadorOAdmin() {}, getEntrenadorActual: () => ({ Nombre: 'Ana', Apellidos: 'Pérez' }) },
     Logger: { log: mensaje => logs.push(String(mensaje)) },
     MailApp: {
       sendEmail(opciones) {
@@ -86,7 +86,7 @@ test('el detalle se guarda en una línea y se borra al reactivar; sin detalle qu
   const res = s.cancelar(MOTIVO, { detalle: '  Pista\n  mojada,   recuperamos el jueves  ' });
   assert.equal(res.success, true);
   assert.equal(res.sesion.DetalleCancelacion, 'Pista mojada, recuperamos el jueves');
-  assert.deepEqual({ ...s.writes[0].changes }, { Cancelada: true, MotivoCancelacion: MOTIVO, DetalleCancelacion: 'Pista mojada, recuperamos el jueves', FechaCancelacion: AHORA });
+  assert.deepEqual({ ...s.writes[0].changes }, { Cancelada: true, MotivoCancelacion: MOTIVO, DetalleCancelacion: 'Pista mojada, recuperamos el jueves', FechaCancelacion: AHORA, CanceladoPor: 'Ana Pérez', CanalAvisoCancelacion: 'ninguno' });
   const reactivada = s.Sesiones.reactivarSesion('s1');
   assert.equal(reactivada.DetalleCancelacion, null);
   assert.equal(reactivada.MotivoCancelacion, null);
@@ -132,22 +132,25 @@ test('convocados: plantilla activa (principal y secundaria) e invitados guardado
   assert.deepEqual(ids, ['invitado', 'principal', 'secundario']);
 });
 
-test('el mensaje lleva equipo, día, fecha, hora, motivo y detalle; el cliente muestra y copia el mismo texto', () => {
+test('el mensaje exacto lleva equipo, fecha, motivo y firma; cliente y servidor coinciden', () => {
   const s = servidor();
   const sesion = s.rows[s.CONFIG.SHEETS.SESIONES][0];
   const equipo = s.rows[s.CONFIG.SHEETS.EQUIPOS][0];
+  sesion.CanceladoPor = 'Ana Pérez';
   const conDetalle = s.Notificaciones.mensajeCancelacion(sesion, equipo, MOTIVO, 'Pista mojada');
-  assert.equal(conDetalle, 'CB Baeza: se cancela el entrenamiento de Cadete Masculino del lunes 16/11/2026 a las 19:00. Motivo: Climatología. Información adicional: Pista mojada.');
-  assert.equal(s.Notificaciones.mensajeCancelacion(sesion, equipo, MOTIVO, '¿Recuperamos el jueves?'),
-    'CB Baeza: se cancela el entrenamiento de Cadete Masculino del lunes 16/11/2026 a las 19:00. Motivo: Climatología. Información adicional: ¿Recuperamos el jueves?', 'sin punto doble');
-  assert.equal(s.Notificaciones.mensajeCancelacion(sesion, equipo, 'Otro', ''), 'CB Baeza: se cancela el entrenamiento de Cadete Masculino del lunes 16/11/2026 a las 19:00. Motivo: Otro.');
+  assert.equal(conDetalle, '❌ *Entrenamiento cancelado*\n🏀 Equipo Cadete Masculino\n📅 lunes 16/11/2026 a las 19:00\n📝 Motivo: Climatología\nPista mojada\n\nUn saludo,\nAna Pérez');
+  assert.equal(s.Notificaciones.mensajeCancelacion(sesion, equipo, 'Otro', ''),
+    '❌ *Entrenamiento cancelado*\n🏀 Equipo Cadete Masculino\n📅 lunes 16/11/2026 a las 19:00\n📝 Motivo: Otro\n\nUn saludo,\nAna Pérez');
+  for (const firma of [null, '   ']) {
+    assert.ok(s.Notificaciones.mensajeCancelacion({ ...sesion, CanceladoPor: firma }, equipo, MOTIVO, '').endsWith('\nUn saludo,\nCB Baeza'));
+  }
 
   const document = { addEventListener() {}, querySelectorAll: () => [], getElementById: () => ({ style: {}, classList: { add() {}, remove() {}, toggle() {} } }) };
   const cliente = vm.createContext({ document, window: { addEventListener() {} }, localStorage: { getItem: () => null, setItem() {} }, navigator: {} });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../ui/app.html'), 'utf8').replace(/^<script[^>]*>|<\/script>\s*$/g, ''), cliente);
   const app = vm.runInContext('App', cliente);
-  for (const [fecha, detalle] of [['2026-11-16', 'Pista mojada'], ['2026-11-16', 'Recuperamos el jueves.'], ['2026-11-18', ''], ['fecha-rara', '']]) {
-    const otra = { ...sesion, Fecha: fecha };
+  for (const [fecha, detalle, firma] of [['2026-11-16', 'Pista mojada', 'Ana Pérez'], ['2026-11-16', 'Recuperamos el jueves.', ' Ana Pérez '], ['2026-11-18', '', null], ['fecha-rara', '', '  ']]) {
+    const otra = { ...sesion, Fecha: fecha, CanceladoPor: firma };
     assert.equal(app.views.cancelarSesion.mensaje(otra, equipo, MOTIVO, detalle), s.Notificaciones.mensajeCancelacion(otra, equipo, MOTIVO, detalle));
   }
 });
@@ -157,7 +160,7 @@ test('copiar devuelve el mensaje sin enviar nada', () => {
   s.jugador('j1', { TelefonoPadre1: '600111222', EmailPadre1: 'familia1@example.test' });
   const n = s.cancelar(MOTIVO, { canal: 'copiar', detalle: 'Pista mojada' }).notificacion;
   assert.equal(n.canal, 'copiar');
-  assert.match(n.mensaje, /Información adicional: Pista mojada\.$/);
+  assert.ok(n.mensaje.endsWith('\nPista mojada\n\nUn saludo,\nAna Pérez'));
   assert.equal(n.convocados, 1);
   assert.equal(s.correos.length + s.peticiones.length, 0);
 });
@@ -172,11 +175,30 @@ test('correo: uno por familia a sus tutores, omite sin correo o con avisos desac
   s.jugador('invalido', { EmailPadre1: 'no-es-un-correo' });
   const n = s.cancelar(MOTIVO, { canal: 'correo' }).notificacion;
   assert.deepEqual(s.correos.map(c => c.to), ['madre@example.test,padre@example.test', 'adulto@example.test']);
-  assert.ok(s.correos.every(c => c.subject === 'CB Baeza — Entrenamiento cancelado: Cadete Masculino (16/11/2026)' && c.body.includes(n.mensaje)));
+  assert.ok(s.correos.every(c => c.subject === 'CB Baeza — Entrenamiento cancelado: Cadete Masculino (16/11/2026)' && c.body === n.mensaje && c.htmlBody.includes('<strong>Entrenamiento cancelado</strong>')));
+  assert.ok(s.correos.every(c => !c.body.includes('@') && !c.htmlBody.includes('@')));
   assert.equal(n.convocados, 6);
   assert.equal(n.avisados, 3, 'el hermano cuenta como avisado: su familia ya recibió el correo');
   assert.equal(n.omitidos, 3);
   assert.equal(n.fallidos, 0);
+});
+
+test('correo HTML escapa equipo, detalle y firma, manteniendo los mismos datos en texto plano', () => {
+  const s = servidor();
+  s.jugador('j1', { EmailPadre1: 'familia@example.test' });
+  s.rows[s.CONFIG.SHEETS.EQUIPOS][0].Nombre = 'Equipo <A> & "B"';
+  const sesion = s.rows[s.CONFIG.SHEETS.SESIONES][0];
+  Object.assign(sesion, { MotivoCancelacion: MOTIVO, DetalleCancelacion: 'Texto <script> & "algo"', CanceladoPor: "Ana O'Neil" });
+  const n = s.Notificaciones.avisarCancelacionAFamilias(sesion, 'correo');
+  const correo = s.correos[0];
+  assert.equal(correo.body, n.mensaje);
+  assert.ok(correo.body.includes('Equipo <A> & "B"'));
+  assert.ok(correo.body.includes('Texto <script> & "algo"'));
+  assert.ok(correo.body.endsWith("Un saludo,\nAna O'Neil"));
+  assert.ok(correo.htmlBody.includes('Equipo &lt;A&gt; &amp; &quot;B&quot;'));
+  assert.ok(correo.htmlBody.includes('Texto &lt;script&gt; &amp; &quot;algo&quot;'));
+  assert.ok(correo.htmlBody.includes('Ana O&#39;Neil'));
+  assert.ok(!correo.htmlBody.includes('<script>'));
 });
 
 test('correo: un envío fallido no impide el resto ni deja datos personales en el log', () => {
@@ -204,6 +226,7 @@ test('WhatsApp sin Cloud API: un enlace wa.me por número con el mensaje, sin en
   assert.equal(s.peticiones.length + s.correos.length, 0);
   assert.equal(n.avisados, 3);
   assert.equal(n.omitidos, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(n.omitidas)), [{ jugador: 'Nombre sin-telefono Apellido' }, { jugador: 'Nombre invalido Apellido' }]);
   assert.equal(n.fallidos, 0);
   const texto = encodeURIComponent(n.mensaje);
   assert.deepEqual(JSON.parse(JSON.stringify(n.enlaces)), [
@@ -213,15 +236,28 @@ test('WhatsApp sin Cloud API: un enlace wa.me por número con el mensaje, sin en
   ]);
 });
 
-test('WhatsApp con Cloud API: plantilla por número; un fallo vuelve como enlace y no cuenta como avisado', () => {
+test('WhatsApp personal prepara enlaces sin Cloud API incluso con properties configuradas', () => {
+  const s = servidor({ propiedades: { WHATSAPP_TOKEN: 'token-de-prueba', WHATSAPP_PHONE_ID: '1234567890' } });
+  s.jugador('ok', { TelefonoPadre1: '600111222' });
+  s.jugador('sin-telefono');
+  const n = s.cancelar(MOTIVO, { canal: 'whatsapp', detalle: 'Pista mojada' }).notificacion;
+  assert.equal(n.modo, 'enlaces');
+  assert.equal(s.peticiones.length, 0);
+  assert.equal(n.avisados, 1);
+  assert.equal(n.omitidos, 1);
+  assert.equal(n.fallidos, 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(n.omitidas)), [{ jugador: 'Nombre sin-telefono Apellido' }]);
+  assert.equal(n.enlaces[0].url, 'https://wa.me/34600111222?text=' + encodeURIComponent(n.mensaje));
+});
+
+test('WhatsApp interno conserva Cloud API y enlaces de respaldo en errores', () => {
   const s = servidor({
     propiedades: { WHATSAPP_TOKEN: 'token-de-prueba', WHATSAPP_PHONE_ID: '1234567890' },
     whatsappCodigo: to => (to === '34600999888' ? 400 : 200),
   });
-  s.jugador('ok', { TelefonoPadre1: '600111222' });
-  s.jugador('falla', { TelefonoPadre1: '600999888' });
-  s.jugador('sin-telefono');
-  const n = s.cancelar(MOTIVO, { canal: 'whatsapp', detalle: 'Pista mojada' }).notificacion;
+  const destinos = [{ telefono: '+34600111222' }, { telefono: '+34600999888' }];
+  const parametros = ['Cadete Masculino', 'lunes 16/11/2026 a las 19:00', 'Climatología'];
+  const n = s.WhatsApp.avisar(destinos, 'Texto de prueba', parametros);
   assert.equal(n.modo, 'cloud-api');
   assert.equal(s.peticiones.length, 2);
   const [primera] = s.peticiones;
@@ -233,27 +269,29 @@ test('WhatsApp con Cloud API: plantilla por número; un fallo vuelve como enlace
     template: { name: 'cancelacion_entrenamiento', language: { code: 'es' }, components: [{ type: 'body', parameters: [
       { type: 'text', text: 'Cadete Masculino' },
       { type: 'text', text: 'lunes 16/11/2026 a las 19:00' },
-      { type: 'text', text: 'Climatología. Información adicional: Pista mojada.' },
+      { type: 'text', text: 'Climatología' },
     ] }] },
   });
-  assert.equal(n.avisados, 1);
-  assert.equal(n.fallidos, 1);
-  assert.equal(n.omitidos, 1);
-  assert.deepEqual([...n.enlaces.map(e => e.telefono)], ['+34600999888']);
+  assert.equal(n.enviados.length, 1);
+  assert.equal(n.fallidos.length, 1);
+  assert.equal(n.fallidos[0].url, 'https://wa.me/34600999888?text=Texto%20de%20prueba');
   assert.ok(s.logs.every(l => !l.includes('600') && !l.includes('token')));
 });
 
-test('WhatsApp: plantilla e idioma configurables; sin teléfono o sin ID de número se usa el modo enlaces', () => {
+test('WhatsApp interno: plantilla configurable y sin properties no llama a la Cloud API', () => {
+  const destino = [{ telefono: '+34600111222' }];
   const conPlantilla = servidor({ propiedades: { WHATSAPP_TOKEN: 't', WHATSAPP_PHONE_ID: '1', WHATSAPP_TEMPLATE: 'aviso_club', WHATSAPP_TEMPLATE_LANG: 'es_ES' } });
-  conPlantilla.jugador('j1', { TelefonoPadre1: '600111222' });
-  conPlantilla.cancelar(MOTIVO, { canal: 'whatsapp' });
-  assert.deepEqual(conPlantilla.peticiones[0].cuerpo.template.name, 'aviso_club');
+  conPlantilla.WhatsApp.avisar(destino, 'Mensaje', ['dato']);
+  assert.equal(conPlantilla.peticiones[0].cuerpo.template.name, 'aviso_club');
   assert.deepEqual(conPlantilla.peticiones[0].cuerpo.template.language, { code: 'es_ES' });
 
-  const incompleta = servidor({ propiedades: { WHATSAPP_TOKEN: 't' } });
-  incompleta.jugador('j1', { TelefonoPadre1: '600111222' });
-  assert.equal(incompleta.cancelar(MOTIVO, { canal: 'whatsapp' }).notificacion.modo, 'enlaces');
-  assert.equal(incompleta.peticiones.length, 0);
+  for (const propiedades of [{}, { WHATSAPP_TOKEN: 't' }]) {
+    const incompleta = servidor({ propiedades });
+    const resultado = incompleta.WhatsApp.avisar(destino, 'Mensaje', ['dato']);
+    assert.equal(resultado.modo, 'enlaces');
+    assert.equal(resultado.enviados[0].url, 'https://wa.me/34600111222?text=Mensaje');
+    assert.equal(incompleta.peticiones.length, 0);
+  }
 });
 
 test('si fallan los avisos la sesión queda cancelada y la respuesta lo explica', () => {

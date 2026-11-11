@@ -14,6 +14,7 @@ function servidor() {
     Auth: {
       verificarCodigoPadres: () => true,
       requireEntrenadorOAdmin() { if (!autorizado) throw new Error('No autorizado.'); },
+      getEntrenadorActual: () => ({ Nombre: 'Ana', Apellidos: 'Pérez' }),
     },
     Logger: { log() {} },
     Notificaciones: {

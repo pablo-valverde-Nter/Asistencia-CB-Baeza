@@ -787,7 +787,9 @@ function cancelarSesion(auth, sesionId, motivo, opciones) {
     const datos = opciones || {};
     const canal = datos.canal || 'ninguno';
     if (!CONFIG.CANALES_AVISO_CANCELACION.includes(canal)) throw new Error('Forma de aviso no válida.');
-    const sesion = Sesiones.cancelarSesion(sesionId, motivo, datos.detalle);
+    const entrenador = Auth.getEntrenadorActual(auth);
+    const nombre = entrenador ? [entrenador.Nombre, entrenador.Apellidos].filter(Boolean).join(' ').trim() : '';
+    const sesion = Sesiones.cancelarSesion(sesionId, motivo, datos.detalle, nombre || 'CB Baeza', canal);
     let notificacion;
     try {
       notificacion = Notificaciones.avisarCancelacionAFamilias(sesion, canal);
